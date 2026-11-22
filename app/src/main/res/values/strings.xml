@@ -2283,6 +2283,18 @@
     <string name="mem_review_stale">This suggestion or a selected memory changed. Nothing was applied — please review again.</string>
     <string name="mem_review_gone">This suggestion is no longer pending. Nothing was applied.</string>
     <string name="mem_review_no_matches">No possible matches remain for this suggestion.</string>
+    <!-- Stage 6C: related-memory preview and match details (owner-approved, 2026-11-22). -->
+    <string name="mem_match_related_header">Related Memory</string>
+    <string name="mem_match_additional_header">Additional Matches</string>
+    <string name="mem_match_additional_count">Additional Matches: %1$d</string>
+    <string name="mem_match_method_exact">Exact Match</string>
+    <string name="mem_match_method_similarity">Similarity Match</string>
+    <string name="mem_match_method_scanner">Linked by the Scanner</string>
+    <string name="mem_match_method_alternative">Alternative Suggestion</string>
+    <string name="mem_match_score">%1$.2f Similarity</string>
+    <string name="mem_match_detail">%1$s · %2$s</string>
+    <string name="mem_match_detail_score">%1$s · %2$s · %3$s</string>
+    <string name="mem_review_related_changed">That related memory changed or was removed. The current matches are shown.</string>
 
     <!-- Memory Filters slide-out panel (owner-approved wording, July 8 2026).
          Category labels reuse the existing "Sort/Scope/Type/Status/Source"

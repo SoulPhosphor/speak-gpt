@@ -2147,6 +2147,20 @@ by the stylesheet, with dimensions in `dimens.xml`. The trailing icon/chevron
 uses a vertical spread-inside constraint chain: top/bottom with the hint shown,
 centered with the hint gone. Kotlin only changes content and visibility.
 
+### Related-memory preview and match details
+
+A Pending card with Possible Matches shows its closest related memory below
+the memory text and vibe, above the action row (`view_pending_related_match.xml`).
+`Widget.App.MemoryMatch.Related` is the tappable block (theme ripple, a gap
+above it); `MemoryMatch.Heading` (inherits `Field.Label`) is the Related Memory
+heading; `MemoryMatch.Preview` (inherits `Field.Hint`) is the related memory's
+text, two lines then an ellipsis; `MemoryMatch.Detail` (inherits `Field.Hint`
+at the small detail size) is the status and match line, e.g. "Active ·
+Similarity Match · 0.91 Similarity"; `MemoryMatch.Additional` (inherits
+`Field.Label`, with a minimum touch height) is the tappable Additional Matches
+count. Possible Match Review cards use `MemoryMatch.Detail` for the same line
+above the memory's full text. Sizes live in `memory_match_*` dimensions.
+
 ### Model-rule cards
 
 `view_model_rule_row.xml` uses `MemoryBrowser.Card` for the Quick Settings

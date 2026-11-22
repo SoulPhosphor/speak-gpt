@@ -49,7 +49,9 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.memory.PossibleMatchFinder
+import org.teslasoft.assistant.preferences.memory.PendingMatchLoader
+import org.teslasoft.assistant.preferences.memory.PendingMatchPresentation
+import org.teslasoft.assistant.ui.adapters.memory.PendingMatchText
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.theme.ThemeManager
 
@@ -59,8 +61,11 @@ import org.teslasoft.assistant.theme.ThemeManager
  * it may overlap, and one of the three atomic resolutions is applied.
  *
  * The proposed memory is the first card and scrolls normally (never pinned);
- * each existing possible match follows in the normal memory-card format with a
- * checkbox (top-left, pre-checked) and an Info control (top-right). Resolutions
+ * the Related Memory (the match opened from the Pending card, or the closest
+ * one) follows, then the Additional Matches (Stage 6C), each in the normal
+ * memory-card format with its status and match method, a checkbox (top-left;
+ * only the opened match starts ticked, and Pending matches have none until
+ * Stage 6D) and an Info control (top-right). Resolutions
  * live in their own section after the last match:
  *   - Save & Edit Old Memory — one selection only; activates the proposal, keeps
  *     the old memory active, and applies inline title/content edits to it;
@@ -71,9 +76,17 @@ import org.teslasoft.assistant.theme.ThemeManager
  *
  * Every resolution is revalidated against the live store and applied through the
  * store's atomic operations — never partially. If the proposal or a selected
- * memory changed or vanished, nothing is applied and the user stays here.
+ * memory changed or vanished since it was shown (checked inside the store
+ * transaction), nothing is applied and the user stays here.
  */
 class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
+
+    companion object {
+        /** Stage 6C: the related memory tapped on the Pending card. */
+        const val EXTRA_RELATED_ID = "relatedMemoryId"
+        /** Stage 6C: open at the Additional Matches section. */
+        const val EXTRA_TO_ADDITIONAL = "toAdditionalMatches"
+    }
 
     private var preferences: Preferences? = null
     private var chatId: String = ""
@@ -99,6 +112,24 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
 
     private val matchHolders = ArrayList<MatchHolder>()
 
+    /** Stage 6C: the related memory the user tapped on the Pending card (null
+     *  when Review was opened from its button; then the match shown first),
+     *  kept selected across reloads, and whether the first load opens at the
+     *  additional matches. */
+    private var requestedRelatedId: String? = null
+    private var scrollToAdditional = false
+    private var firstLoad = true
+
+    /** Set once the tapped memory was found missing and another match was shown
+     *  in its place: that match was not explicitly opened, so it is never
+     *  preselected, on this load or a reload. */
+    private var substituted = false
+
+    /** What the user is looking at: the proposal's and every shown match's
+     *  [PendingMatchPresentation.reviewFingerprint]. A resolution applies only
+     *  while these still hold (checked inside the store transaction). */
+    private var shownFingerprints: Map<String, String> = emptyMap()
+
     /** The card currently in inline-edit mode (Save & Edit Old Memory), or null. */
     private var editingCardId: String? = null
 
@@ -112,6 +143,8 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
 
         chatId = intent.extras?.getString("chatId", "") ?: ""
         draftId = intent.extras?.getString("draftId", "") ?: ""
+        requestedRelatedId = intent.extras?.getString(EXTRA_RELATED_ID)
+        scrollToAdditional = intent.extras?.getBoolean(EXTRA_TO_ADDITIONAL, false) ?: false
         preferences = Preferences.getPreferences(this, chatId)
 
         actionBar = findViewById(R.id.action_bar)
@@ -152,35 +185,88 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             }
             // Fresh detection — the same finder the browser used, recomputed here
             // so Review always reflects the current library.
-            val matchIds = PossibleMatchFinder.find(this, draftId).matches.map { it.memoryId }
-            val matches = matchIds.mapNotNull { store.getMemory(it) }
+            val loaded = PendingMatchLoader.load(this, draftId)
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
-                if (matches.isEmpty()) {
+                // The opened match stays the selected one across reloads (an
+                // importance change or a stale decision) while it is still a match.
+                val opened = PendingMatchPresentation.open(loaded.ordered, requestedRelatedId)
+                if (opened == null) {
                     // The overlap is gone; nothing to resolve. The browser will
                     // show this suggestion as conflict-free after it re-checks.
                     Toast.makeText(this, R.string.mem_review_no_matches, Toast.LENGTH_LONG).show()
                     finish()
                     return@runOnUiThread
                 }
-                buildUi(proposal, matches)
+                if (opened.requestedMissing) {
+                    Toast.makeText(this, R.string.mem_review_related_changed, Toast.LENGTH_LONG).show()
+                    substituted = true
+                }
+                requestedRelatedId = opened.selected.memoryId
+                val scrollAdditional = firstLoad && scrollToAdditional
+                firstLoad = false
+                buildUi(proposal, opened, loaded.records, scrollAdditional)
             }
         }
     }
 
-    private fun buildUi(proposal: MemoryRecord, matches: List<MemoryRecord>) {
+    private fun buildUi(
+        proposal: MemoryRecord,
+        opened: PendingMatchPresentation.Opened,
+        records: Map<String, MemoryRecord>,
+        scrollAdditional: Boolean
+    ) {
         val c = container ?: return
         c.removeAllViews()
         matchHolders.clear()
 
+        // Stage 6C order (owner design): the full proposal, the match the user
+        // opened, then the additional matches.
         addIntro(c)
         addHeader(c, getString(R.string.mem_review_proposed_header))
-        addMemoryCard(c, proposal, withCheckbox = false)
-        addHeader(c, getString(R.string.mem_review_existing_header))
-        for (m in matches) matchHolders.add(addMemoryCard(c, m, withCheckbox = true))
+        addMemoryCard(c, proposal, match = null, checked = false)
+        addHeader(c, getString(R.string.mem_match_related_header))
+        val preselected = if (substituted) emptySet() else opened.preselected
+        addMatch(c, opened.selected, records, preselected)
+        var additionalHeader: View? = null
+        if (opened.additional.isNotEmpty()) {
+            additionalHeader = addHeader(c, getString(R.string.mem_match_additional_header))
+            for (m in opened.additional) addMatch(c, m, records, preselected)
+        }
+        shownFingerprints = (listOf(proposal) + (listOf(opened.selected) + opened.additional)
+            .mapNotNull { records[it.memoryId] })
+            .associate { it.memoryId to PendingMatchPresentation.reviewFingerprint(it) }
 
         resolution?.visibility = View.VISIBLE
         refreshResolutionButtons()
+        if (scrollAdditional && additionalHeader != null) {
+            val header = additionalHeader
+            findViewById<ScrollView>(R.id.scroll)?.let { scroll ->
+                scroll.post {
+                    // The header's offset within the scrolled content.
+                    var y = header.top
+                    var parent = header.parent
+                    while (parent is View && parent !== scroll) {
+                        if (parent.parent !== scroll) y += parent.top
+                        parent = parent.parent
+                    }
+                    scroll.smoothScrollTo(0, y)
+                }
+            }
+        }
+    }
+
+    private fun addMatch(
+        parent: LinearLayout,
+        match: PendingMatchPresentation.Presented,
+        records: Map<String, MemoryRecord>,
+        preselected: Set<String>
+    ) {
+        val record = records[match.memoryId] ?: return
+        val holder = addMemoryCard(parent, record, match, checked = match.memoryId in preselected)
+        // Pending matches stay review-only until Stage 6D: no checkbox, so no
+        // resolution can ever be applied to them.
+        if (!match.reviewOnly) matchHolders.add(holder)
     }
 
     private fun addIntro(parent: LinearLayout) {
@@ -193,7 +279,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         parent.addView(tv)
     }
 
-    private fun addHeader(parent: LinearLayout, text: String) {
+    private fun addHeader(parent: LinearLayout, text: String): View {
         val tv = TextView(this).apply {
             this.text = text
             setTextColor(com.google.android.material.color.MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary))
@@ -202,9 +288,16 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             setPadding(dp(20), dp(12), dp(20), dp(4))
         }
         parent.addView(tv)
+        return tv
     }
 
-    private fun addMemoryCard(parent: LinearLayout, record: MemoryRecord, withCheckbox: Boolean): MatchHolder {
+    private fun addMemoryCard(
+        parent: LinearLayout,
+        record: MemoryRecord,
+        match: PendingMatchPresentation.Presented?,
+        checked: Boolean
+    ): MatchHolder {
+        val withCheckbox = match != null && !match.reviewOnly
         val card = layoutInflater.inflate(R.layout.view_review_memory_card, parent, false)
         val meter = card.findViewById<MemoryTokenMeter>(R.id.memory_length_meter)
         meter.bind(record)
@@ -221,6 +314,10 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             else { visibility = View.VISIBLE; text = formatTags(tags) }
         }
         card.findViewById<TextView>(R.id.review_content).text = record.content
+        card.findViewById<TextView>(R.id.review_match_detail).apply {
+            if (match == null) visibility = View.GONE
+            else { visibility = View.VISIBLE; text = PendingMatchText.detail(this@MemoryPossibleMatchReviewActivity, match) }
+        }
         card.findViewById<MaterialButton>(R.id.review_importance).apply {
             if (preferences?.getUseImportanceRatings() ?: true) {
                 visibility = View.VISIBLE
@@ -237,7 +334,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         val check = card.findViewById<MaterialCheckBox>(R.id.review_check)
         if (withCheckbox) {
             check.visibility = View.VISIBLE
-            check.isChecked = true
+            check.isChecked = checked
             check.setOnCheckedChangeListener { _, _ -> onSelectionChanged() }
         } else {
             check.visibility = View.GONE
@@ -355,6 +452,9 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             editedOld = holder.record.copy(content = content)
         }
         val checkedIds = checked.map { it.record.memoryId }
+        // Every checked memory and the proposal must still be exactly what the
+        // user saw; the store rechecks this inside its transaction.
+        val expected = shownFingerprints.filterKeys { it == draftId || it in checkedIds }
 
         applying = true
         setButtonsEnabled(false)
@@ -387,9 +487,9 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             }
 
             val result = when (kind) {
-                ResolutionKind.EDIT_OLD -> store.resolveSaveAndEditOld(draftId, editedOld)
-                ResolutionKind.SUPERSEDE -> store.resolveSupersede(draftId, checkedIds)
-                ResolutionKind.REPLACE -> store.resolveReplace(draftId, checkedIds)
+                ResolutionKind.EDIT_OLD -> store.resolveSaveAndEditOld(draftId, editedOld, expected)
+                ResolutionKind.SUPERSEDE -> store.resolveSupersede(draftId, checkedIds, expected)
+                ResolutionKind.REPLACE -> store.resolveReplace(draftId, checkedIds, expected)
             }
             when (result) {
                 is MemoryStore.ResolutionResult.Applied -> {
@@ -404,6 +504,9 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
                 }
                 is MemoryStore.ResolutionResult.StaleProposal -> {
                     runOnUiThread { applying = false; toastAndReload(R.string.mem_review_gone, reload = false); finishGone() }
+                }
+                is MemoryStore.ResolutionResult.StaleSelection -> {
+                    runOnUiThread { applying = false; toastAndReload(R.string.mem_review_stale, reload = true) }
                 }
             }
         }

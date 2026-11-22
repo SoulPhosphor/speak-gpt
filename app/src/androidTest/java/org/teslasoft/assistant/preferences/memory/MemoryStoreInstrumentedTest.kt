@@ -1016,6 +1016,62 @@ class MemoryStoreInstrumentedTest {
             rowExists(store, "generated_pending_drafts", "memory_id", "m-res"))
     }
 
+    /* Stage 6C: a review decision applies only to what the user saw. */
+
+    private fun reviewPair(store: MemoryStore): Map<String, String> {
+        store.insertMemory(mem("old", scope = "global", typeId = "mtype-fact"))
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "review proposal", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        store.insertPendingMemory(PendingMemoryRecordFactory.build(candidate, "proposal", "2026-11-22T00:00:00Z"))
+        return listOf("proposal", "old").associateWith {
+            PendingMatchPresentation.reviewFingerprint(store.getMemory(it)!!)
+        }
+    }
+
+    @Test
+    fun reviewResolutionAppliesWhileWhatTheUserSawIsUnchanged() {
+        val store = open(freshDbName())
+        val shown = reviewPair(store)
+        val result = store.resolveSupersede("proposal", listOf("old"), shown)
+        assertTrue(result is MemoryStore.ResolutionResult.Applied)
+        assertEquals("active", store.getMemory("proposal")!!.status)
+        assertEquals("superseded", store.getMemory("old")!!.status)
+    }
+
+    @Test
+    fun reviewResolutionIsRefusedWhenTheMatchWasEditedAfterItWasShown() {
+        val store = open(freshDbName())
+        val shown = reviewPair(store)
+        val old = store.getMemory("old")!!
+        store.updateMemory(old.copy(content = "edited elsewhere"), "edited")
+
+        assertEquals(MemoryStore.ResolutionResult.StaleSelection, store.resolveReplace("proposal", listOf("old"), shown))
+        assertEquals(MemoryStore.ResolutionResult.StaleSelection,
+            store.resolveSaveAndEditOld("proposal", old.copy(content = "stale edit"), shown))
+        assertEquals("draft", store.getMemory("proposal")!!.status)
+        assertEquals("edited elsewhere", store.getMemory("old")!!.content)
+    }
+
+    @Test
+    fun reviewResolutionIsRefusedWhenTheMatchWasRemovedOrTheProposalChanged() {
+        val store = open(freshDbName())
+        val shown = reviewPair(store)
+        store.setMemoryStatus("old", "archived", null)
+        assertEquals(MemoryStore.ResolutionResult.StaleSelection, store.resolveSupersede("proposal", listOf("old"), shown))
+        assertEquals("archived", store.getMemory("old")!!.status)
+
+        val store2 = open(freshDbName())
+        val shown2 = reviewPair(store2)
+        store2.deleteMemory("old")
+        assertEquals(MemoryStore.ResolutionResult.StaleSelection, store2.resolveSupersede("proposal", listOf("old"), shown2))
+        val proposal = store2.getMemory("proposal")!!
+        store2.updateMemory(proposal.copy(content = "proposal edited"), "edited")
+        assertEquals(MemoryStore.ResolutionResult.StaleSelection,
+            store2.resolveSupersede("proposal", emptyList(), shown2.filterKeys { it == "proposal" }))
+        assertEquals("draft", store2.getMemory("proposal")!!.status)
+    }
+
     @Test
     fun manualPendingMemoryIsNeverMarkedGenerated() {
         val store = open(freshDbName())

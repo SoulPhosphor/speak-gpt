@@ -30,7 +30,9 @@ import org.teslasoft.assistant.preferences.memory.MemoryScopeGrouping
 import org.teslasoft.assistant.preferences.memory.MemoryDeleteAction
 import org.teslasoft.assistant.preferences.memory.MemoryDeleteRules
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.memory.PossibleMatchFinder
+import org.teslasoft.assistant.preferences.memory.PendingMatchLoader
+import org.teslasoft.assistant.preferences.memory.PendingMatchPresentation
+import org.teslasoft.assistant.ui.adapters.memory.PendingMatchText
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
@@ -93,6 +95,18 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
      *  stale. Keyed by draft id — never by view — so a recycled card is always
      *  re-bound from current data and a late result can't touch the wrong card. */
     private val matchState = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /** Stage 6C: the closest related memory for each conflicting pending card,
+     *  cached and cleared with [matchState]. */
+    private val relatedPreviews = java.util.concurrent.ConcurrentHashMap<String, PendingMatchText.CardPreview>()
+
+    /** Bumped whenever the match cache is cleared, so a check that started
+     *  before a library change can never write its stale result back. */
+    @Volatile private var matchGeneration = 0
+
+    /** Stage 6C: the list position saved when Review was opened, restored
+     *  once when the list is shown again (first visible row, its top offset). */
+    private var returnPosition: Pair<Int, Int>? = null
     private var currentAdapter: MemoryRowAdapter? = null
 
     /** Set when launching a screen that may change the library (the editor, the
@@ -161,6 +175,13 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // The filter icon sits after the view dropdown while any filter
         // narrows the current view (sort order is not a filter).
         setFilteredMarker(isFiltered())
+        returnPosition?.let { (index, top) ->
+            returnPosition = null
+            memoryListView()?.let { list ->
+                val count = list.adapter?.count ?: 0
+                if (count > 0) list.setSelectionFromTop(index.coerceIn(0, count - 1), top)
+            }
+        }
     }
 
     private fun pendingCountLine(): String? = when {
@@ -240,7 +261,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // Refresh the match cache after a screen that may have changed the
         // library, so a returning pending card re-checks against current state.
         if (invalidateMatchesOnResume) {
-            matchState.clear()
+            clearMatchCache()
             invalidateMatchesOnResume = false
         }
         super.onResume()
@@ -554,7 +575,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     private fun setStatus(memoryId: String, status: String, onDone: (() -> Unit)? = null) {
         // The library is changing, so any cached Possible Match results may now
         // be stale — drop them; the pending cards re-check on the next bind.
-        matchState.clear()
+        clearMatchCache()
         runOffThread {
             val store = MemoryStore.getInstance(this)
             if (status == "active") {
@@ -584,7 +605,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             .setTitle(if (discard) R.string.memory_discard_confirm_title else R.string.memory_delete_confirm_title)
             .setMessage(getString(R.string.memory_delete_confirm_msg, preview))
             .setPositiveButton(if (discard) R.string.memory_discard_confirm_button else R.string.btn_delete) { _, _ ->
-                matchState.clear()
+                clearMatchCache()
                 runOffThread {
                     MemoryStore.getInstance(this).deleteMemory(m.memoryId)
                     runOnUiThread {
@@ -644,12 +665,25 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         return MemoryRowAdapter.MATCH_LOADING
     }
 
+    private fun clearMatchCache() {
+        matchGeneration++
+        matchState.clear()
+        relatedPreviews.clear()
+    }
+
     private fun detectMatches(draftId: String) {
+        val generation = matchGeneration
         Thread {
+            var preview: PendingMatchText.CardPreview? = null
             val state = try {
                 // A failure must never read as "no possible match": only an empty
                 // result from a successful check is MATCH_NONE.
-                if (PossibleMatchFinder.find(this, draftId).matches.isNotEmpty()) {
+                val loaded = PendingMatchLoader.load(this, draftId)
+                val summary = PendingMatchPresentation.summary(loaded.ordered)
+                if (summary != null) {
+                    preview = PendingMatchText.CardPreview(
+                        summary, loaded.records.getValue(summary.closest.memoryId).content
+                    )
                     MemoryRowAdapter.MATCH_CONFLICT
                 } else {
                     MemoryRowAdapter.MATCH_NONE
@@ -657,9 +691,21 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             } catch (e: Exception) {
                 MemoryRowAdapter.MATCH_FAILED
             }
+            if (generation != matchGeneration) return@Thread
+            preview?.let { relatedPreviews[draftId] = it } ?: relatedPreviews.remove(draftId)
             matchState[draftId] = state
             runOnUiThread { currentAdapter?.notifyDataSetChanged() }
         }.start()
+    }
+
+    override fun pendingRelatedPreview(row: MemoryRow): PendingMatchText.CardPreview? = relatedPreviews[row.id]
+
+    override fun onRelatedMatch(row: MemoryRow, memoryId: String) {
+        openReview(row.id, memoryId, toAdditional = false)
+    }
+
+    override fun onAdditionalMatches(row: MemoryRow, relatedId: String) {
+        openReview(row.id, relatedId, toAdditional = true)
     }
 
     override fun onInfo(row: MemoryRow) {
@@ -684,11 +730,22 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     }
 
     override fun onReview(row: MemoryRow) {
+        openReview(row.id, relatedId = null, toAdditional = false)
+    }
+
+    /** Opens Possible Match Review for [draftId] (with the exact related memory
+     *  the user tapped, if any) and remembers the list position for the return. */
+    private fun openReview(draftId: String, relatedId: String?, toAdditional: Boolean) {
         invalidateMatchesOnResume = true
+        memoryListView()?.let { list ->
+            returnPosition = list.firstVisiblePosition to (list.getChildAt(0)?.top ?: 0)
+        }
         startActivity(
             Intent(this, MemoryPossibleMatchReviewActivity::class.java)
                 .putExtra("chatId", chatId)
-                .putExtra("draftId", row.id)
+                .putExtra("draftId", draftId)
+                .putExtra(MemoryPossibleMatchReviewActivity.EXTRA_RELATED_ID, relatedId)
+                .putExtra(MemoryPossibleMatchReviewActivity.EXTRA_TO_ADDITIONAL, toAdditional)
         )
     }
 

@@ -116,6 +116,12 @@
                 android:text="@string/mem_importance_value_neutral"
                 android:visibility="gone" />
 
+            <!-- Stage 6C: status and how the match was found (matches only). -->
+            <TextView
+                android:id="@+id/review_match_detail"
+                style="@style/Widget.App.MemoryMatch.Detail"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/review_content"
                 android:layout_width="match_parent"

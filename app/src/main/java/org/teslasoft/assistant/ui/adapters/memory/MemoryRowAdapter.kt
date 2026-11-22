@@ -134,6 +134,16 @@ class MemoryRowAdapter(
 
         /** Importance control tapped on an associative Pending card. */
         fun onImportance(row: MemoryRow) {}
+
+        /** Stage 6C: the closest related memory for a pending card in the
+         *  conflict state, or null to hide the preview. */
+        fun pendingRelatedPreview(row: MemoryRow): PendingMatchText.CardPreview? = null
+
+        /** Stage 6C: the related-memory preview was tapped: open that exact pair. */
+        fun onRelatedMatch(row: MemoryRow, memoryId: String) {}
+
+        /** Stage 6C: Additional Matches was tapped. */
+        fun onAdditionalMatches(row: MemoryRow, relatedId: String) {}
     }
 
     companion object {
@@ -375,12 +385,14 @@ class MemoryRowAdapter(
         review.visibility = View.GONE
         retry.visibility = View.GONE
 
+        var relatedPreview: PendingMatchText.CardPreview? = null
         when (listener?.pendingMatchState(row) ?: MATCH_NONE) {
             MATCH_LOADING -> loading.visibility = View.VISIBLE
             MATCH_CONFLICT -> {
                 caution.visibility = View.VISIBLE
                 review.visibility = View.VISIBLE
                 review.setOnClickListener { listener?.onReview(row) }
+                relatedPreview = listener?.pendingRelatedPreview(row)
             }
             MATCH_FAILED -> {
                 retry.visibility = View.VISIBLE
@@ -393,6 +405,11 @@ class MemoryRowAdapter(
                 save.setOnClickListener { listener?.onSave(row) }
             }
         }
+        PendingMatchText.bindCard(
+            view, relatedPreview,
+            onRelated = { id -> listener?.onRelatedMatch(row, id) },
+            onAdditional = { id -> listener?.onAdditionalMatches(row, id) }
+        )
         return view
     }
 
