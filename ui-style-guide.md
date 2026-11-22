@@ -1686,7 +1686,12 @@ Sizes live in `segmented_pill_*` and the slide time in
 `segmented_pill_animation_ms`. Layouts declare the words; code only calls
 `select(word, animate)` and shows or hides words. Each word is announced as a
 radio choice. Current user: the full model list's All / New / Free filter
-(`Widget.App.ModelPicker.FilterPill`, `view_model_browser_controls.xml`).
+(`Widget.App.ModelPicker.FilterPill`, `view_model_browser_controls.xml`). On
+the model picker the capsule and chosen word match the chosen Favorites /
+Recent / View All tab (owner direction): `FilterPill` sets `segmentThumbColor`
+to `colorPrimaryContainer`, and its words use `Widget.App.ModelPicker.FilterOption`
+(`color/model_picker_filter_text`: chosen `colorOnPrimaryContainer`, others
+`colorOnSurfaceVariant`).
 
 ## Text link
 

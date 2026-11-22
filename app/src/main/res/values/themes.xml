@@ -4053,8 +4053,14 @@
     </style>
 
     <!-- The full model list's All / New / Free filter. -->
+    <!-- All / New / Free: the capsule and chosen word match the chosen
+         Favorites / Recent / View All tab (colorPrimaryContainer). -->
     <style name="Widget.App.ModelPicker.FilterPill" parent="Widget.App.SegmentedPill">
         <item name="android:layout_marginTop">@dimen/model_picker_section_gap</item>
+        <item name="segmentThumbColor">?attr/colorPrimaryContainer</item>
+    </style>
+    <style name="Widget.App.ModelPicker.FilterOption" parent="Widget.App.SegmentedPill.Option">
+        <item name="android:textColor">@color/model_picker_filter_text</item>
     </style>
 
     <style name="Widget.App.ModelPicker.ControlRow" parent="Widget.App.Page.ControlRow">
