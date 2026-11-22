@@ -10,6 +10,7 @@ import android.database.Cursor
 import net.zetetic.database.sqlcipher.SQLiteDatabase
 import org.json.JSONArray
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.memory.matching.ScannerComparisonCache
 
 enum class MemoryPortableGroup { MEMORIES, MODEL_RULES }
 
@@ -297,6 +298,7 @@ object MemoryPortableRowFormat {
         db.delete("analysis_candidates", null, null)
         db.delete("analysis_run_state", null, null)
         db.delete("scan_ranges", null, null)
+        if (tableExists(db, ScannerComparisonCache.DRAFT_TABLE)) ScannerComparisonCache.clearAllDrafts(db)
         db.execSQL("UPDATE scan_chat_progress SET claim_run_id = NULL")
         db.execSQL(
             "UPDATE archivist_runs SET status = 'failed', suspended = NULL, " +

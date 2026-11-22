@@ -29,6 +29,7 @@ import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
 import com.aallam.openai.client.OpenAIHost
 import com.aallam.openai.client.RetryStrategy
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
@@ -53,6 +54,8 @@ import org.teslasoft.assistant.preferences.memory.SCOPE_COMPANION
 import org.teslasoft.assistant.preferences.memory.StagedAnalysisCandidate
 import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
+import org.teslasoft.assistant.preferences.memory.matching.ScannerClues
+import org.teslasoft.assistant.preferences.memory.matching.ScannerMatching
 import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import org.teslasoft.assistant.preferences.damaged.DamagedChatRepair
 import org.teslasoft.assistant.preferences.memory.ScanRangeRecord
@@ -1256,6 +1259,14 @@ object Archivist {
         )
         val resolveScope = scopeResolver(store)
 
+        // Scoped match evidence for 6B.3 (Stage 6B.2); never sent to the AI.
+        val matching = if (lorebookMode) null else ScannerMatching(
+            store, Librarian.getInstance(context), range.rangeId,
+            scopeFor = { scene -> reconciliationScope(store, prefs, scene) }
+        )
+        val scanJob = currentCoroutineContext()[Job]
+        val stillActive: () -> Unit = { scanJob?.ensureActive() }
+
         var restarts = 0
         var checkpoint = ScanCheckpoint.decode(range.checkpointJson)
         var messages = readRangeSource(context, store, chatId)
@@ -1299,6 +1310,9 @@ object Archivist {
             val chunk = chunks.first().let { it.copy(rows = labelAt(it.rows, scannerMaximumTokens)) }
             val earlierRules = staged.flatMap { it.rules }
             val workingBefore = working
+            val sectionEvidence = matching?.let { m ->
+                matchingEvidence { m.beforeSection(chunk.rows, workingBefore, stillActive) }
+            }
             val chatNow = messages
             val earlierFor: (ScanSourceRow, Int, Int) -> List<ScanSourceRow> = { first, average, maximum ->
                 ScanContext.earlierExcerpts(chatNow, first, resolveScope, average, maximum)
@@ -1360,7 +1374,10 @@ object Archivist {
                 rules = retried.flatMap { it.rules },
                 loreEntries = retried.flatMap { it.loreEntries }
             )
-            val workingAfter = retried.fold(workingBefore) { w, p -> w.applying(p.drafts) }
+            val workingApplied = retried.fold(workingBefore) { w, p -> w.applying(p.drafts) }
+            val workingAfter = matching?.let { m ->
+                matchingEvidence { m.afterSection(workingBefore, workingApplied, sectionEvidence, stillActive) }
+            } ?: workingApplied
             val failedEdits = retried.sumOf { it.drafts.failedEdits }
             // Changes made while the request was in flight: an outdated reply
             // is discarded, never saved.
@@ -1461,6 +1478,16 @@ object Archivist {
         return commit
     }
 
+    /** Match evidence is never allowed to stop a scan: a lookup that fails
+     *  leaves its drafts' evidence missing, which marks it deferred. */
+    private inline fun <T> matchingEvidence(lookup: () -> T): T? = try {
+        lookup()
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
+    }
+
     /** Recorded scope as the scanner applies it: the companion resolved to
      *  its memory record, and a companion whose memory participation is
      *  "none" not read at all. Unknown scope reads as general. */
@@ -1546,14 +1573,24 @@ object Archivist {
             }
             val targetNames = store.activeMemoryTargetNames()
             val typeNames = memoryTypes.associate { it.first to it.second }
-            val retrievedRecords = retrieved.mapNotNull { hit -> store.getMemory(hit.memory.memoryId) }
-            val existingContext = retrieved.map { hit ->
+            // Memories this section's replies actually used are clues (Stage
+            // 6B.2): those still Active and eligible here join the results.
+            val clueIds = rows.flatMap { it.usedMemoryIds }.distinct()
+            val clues = if (clueIds.isEmpty()) emptyList() else {
+                val eligible = store.activeMemoriesForScope(retrievalScope).associateBy { it.memoryId }
+                clueIds.mapNotNull { eligible[it] }
+            }
+            val promptMemories = ScannerClues.forPrompt(
+                retrieved.map { it.memory }, clues, ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT
+            ) { it.memoryId }
+            val retrievedRecords = promptMemories.mapNotNull { memory -> store.getMemory(memory.memoryId) }
+            val existingContext = promptMemories.map { memory ->
                 ArchivistExistingMemory(
-                    stableId = hit.memory.memoryId,
-                    content = hit.memory.content,
-                    scope = hit.memory.scope,
-                    targetNames = targetNames[hit.memory.memoryId].orEmpty(),
-                    typeName = hit.memory.typeId?.let { typeNames[it] }
+                    stableId = memory.memoryId,
+                    content = memory.content,
+                    scope = memory.scope,
+                    targetNames = targetNames[memory.memoryId].orEmpty(),
+                    typeName = memory.typeId?.let { typeNames[it] }
                 )
             }
             val earlierMemoryCandidates = working.drafts

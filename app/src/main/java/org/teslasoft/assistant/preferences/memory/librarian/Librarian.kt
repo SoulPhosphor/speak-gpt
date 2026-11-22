@@ -561,6 +561,32 @@ class Librarian private constructor(private val appContext: Context) {
         return vec
     }
 
+    /** Memory scanner comparison reads (Stage 6B.2). Background priority
+     *  only, so a live send always goes first; a failed read is null and the
+     *  scanner counts that record as not compared by meaning. */
+    interface ScannerEmbedder {
+        /** The embeddings-table key: model tag plus document version. */
+        val modelKey: String
+        val queryTokenLimit: Int
+        fun countQueryTokens(text: String): Int
+        fun embedQuery(text: String): FloatArray?
+        fun embedDocument(document: String): FloatArray?
+    }
+
+    /** The scanner's embedding access, or null when no model is usable. */
+    fun scannerEmbedder(): ScannerEmbedder? {
+        val m = ensureModel() ?: return null
+        return object : ScannerEmbedder {
+            override val modelKey: String = RetrievalDocument.effectiveKey(m.tag)
+            override val queryTokenLimit: Int = m.messageTokenLimit
+            override fun countQueryTokens(text: String): Int = m.countTokens(text, isQuery = true)
+            override fun embedQuery(text: String): FloatArray? =
+                try { embedBackgroundQuery(m, text) } catch (e: Exception) { null }
+            override fun embedDocument(document: String): FloatArray? =
+                try { embedStoredText(m, document) } catch (e: Exception) { null }
+        }
+    }
+
     /**
      * Re-embed a single memory after a hand edit so the librarian matches on
      * its current text, not a stale (or missing) vector. Best-effort: a no-op

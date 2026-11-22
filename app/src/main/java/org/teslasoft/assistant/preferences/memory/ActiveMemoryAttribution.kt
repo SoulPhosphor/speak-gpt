@@ -26,6 +26,9 @@ data class ActiveMemoryReference(
 }
 
 object ActiveMemoryAttribution {
+    /** The chat message field holding a reply's encoded record. */
+    const val MESSAGE_KEY = "activeMemoryAttribution"
+
     fun encode(references: List<ActiveMemoryReference>): String? {
         val valid = references.filter {
             it.id.isNotBlank() &&
