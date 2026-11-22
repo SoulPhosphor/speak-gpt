@@ -199,6 +199,61 @@ class ParallelControllerInstrumentedTest {
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
+    @Test fun stopAllSignalsEverySlotBeforeWaitingForTheFirstSlotsCleanup() = fixture { activity, host ->
+        val started = Channel<Unit>(Channel.UNLIMITED)
+        val cancelled = List(4) { CompletableDeferred<Unit>() }
+        val releaseFirst = CompletableDeferred<Unit>()
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { request, out ->
+                    val index = request.assignment.modelId.substringAfterLast('-').toInt()
+                    out.text("partial-$index")
+                    started.send(Unit)
+                    try { awaitCancellation() }
+                    finally {
+                        cancelled[index].complete(Unit)
+                        if (index == 0) withContext(NonCancellable) { releaseFirst.await() }
+                    }
+                } }, { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            repeat(4) { started.receive() }
+            withContext(Dispatchers.Main.immediate) { controller.stop(1, null) }
+            cancelled.forEach { it.await() }
+            assertFalse(host.finished.isCompleted)
+            releaseFirst.complete(Unit)
+            host.finished.await()
+            assertTrue(host.stored().slots.all { it.versions.single().fields["state"] == "stopped" })
+            assertEquals(4, ResponseGroupEdits.usage(host.stored()).size)
+        } finally {
+            releaseFirst.complete(Unit)
+            withContext(Dispatchers.Main.immediate) { controller.close() }
+        }
+    }
+
+    @Test fun stoppingPreparationPreservesTheDraftAndNeverDispatches() = fixture { activity, host ->
+        host.preparationGate = CompletableDeferred()
+        var calls = 0
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { _, _ -> calls++ } },
+                    { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            withContext(Dispatchers.Main.immediate) {
+                assertTrue(controller.busy)
+                controller.stopAll()
+            }
+            host.finished.await()
+            assertEquals(0, calls)
+            assertEquals("current message", host.rawInput)
+            assertTrue(host.messages.isEmpty())
+            assertFalse(withContext(Dispatchers.Main.immediate) { controller.busy })
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
+    }
+
     @Test fun failedInitialCommitLeavesTheDraftAndLaunchesNoProviderRequests() = fixture { activity, host ->
         host.failCommit = true
         var calls = 0
@@ -357,6 +412,7 @@ class ParallelControllerInstrumentedTest {
         override val manualMemoryIds = emptyList<String>()
         override val unavailable = false
         var preparations = 0
+        var preparationGate: CompletableDeferred<Unit>? = null
         var contextCommits = 0
         var failCommit = false
         var canonicalEdits = 0
@@ -365,6 +421,7 @@ class ParallelControllerInstrumentedTest {
         var finished = CompletableDeferred<Unit>()
         override suspend fun prepareBase(raw: String, setup: ExperimentalSetup): ParallelTurnBase {
             preparations++
+            preparationGate?.await()
             return ParallelTurnBase(FrozenChatPayload("fixture-0", listOf(
                 FrozenPayloadMessage("system", "shared instructions and memory"), FrozenPayloadMessage("user", raw)
             ), 0, null, null, null, null, null, null), emptyList(), emptyList(), 1, emptyMap()) { contextCommits++ }

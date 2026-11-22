@@ -131,13 +131,16 @@ internal class ParallelRequestCoordinator(
         launch(prepared)
     }
 
-    /** Stops also cover the interval between durable reservation and live job registration. */
+    /** Nonblocking signal, also retained across the durable-reservation/registration interval. */
+    fun signalCancel(requestId: String) {
+        pendingStops.add(requestId)
+        requests[requestId]?.job?.cancel(ParallelUserStop())
+    }
+
+    /** Single-request callers may also wait until the complete owned chain has drained. */
     suspend fun cancel(requestId: String) {
-        val running = requests[requestId] ?: run {
-            pendingStops.add(requestId)
-            // Registration may have raced the first lookup.
-            requests[requestId] ?: return
-        }
+        signalCancel(requestId)
+        val running = requests[requestId] ?: return
         val job = running.registered.await()
         job.cancel(ParallelUserStop())
         pendingStops.remove(requestId)

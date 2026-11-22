@@ -49,7 +49,8 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     private var operationJob: Job? = null
     private var branchJob: Job? = null
     private var mutating = false
-    val busy get() = active || pendingSave || mutating
+    private var stopping = false
+    val busy get() = active || pendingSave || mutating || stopping
     private val prefs get() = Preferences.getPreferences(activity, host.chatId)
     private val chatScope by lazy { ParallelChatScope(host.chatId) }
     private val detachedPersistence by lazy { StoredParallelGroups(activity.applicationContext, chatScope) {} }
@@ -160,7 +161,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 pendingTurn = null
                 preparing = false
                 active = false
-                if (!closed) { host.busy(busy); if (!mutating) host.settled() }
+                if (!closed) { host.busy(busy); if (!mutating && !stopping) host.settled() }
             }
         }
         return true
@@ -193,15 +194,32 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     }
 
     fun stopAll() {
-        if (preparing) operationJob?.cancel(ParallelUserStop())
-        else host.messages.indices.toList().forEach { stop(it, null) }
+        if (!preparing) { host.messages.indices.toList().forEach { stop(it, null) }; return }
+        if (stopping || closed) return
+        stopping = true
+        host.busy(true)
+        val preparingJob = operationJob
+        preparingJob?.cancel(ParallelUserStop())
+        scope.launch {
+            try {
+                // A blocking durable commit may finish while preparation is being cancelled.
+                // Drain that owner before finding every newly registered request chain.
+                preparingJob?.join()
+                coordinator.cancelOwned()
+                coordinator.flush()
+                refreshSaveState()
+            } finally {
+                stopping = false
+                if (!closed) { host.busy(busy); if (!busy) host.settled() }
+            }
+        }
     }
 
     fun stop(position: Int, slotId: String?) {
         val group = (host.messages.getOrNull(position)?.let(ResponseGroupCodec::read) as? ResponseGroupRead.Valid)?.group ?: return
         scope.launch {
             group.slots.filter { slotId == null || it.slotId == slotId }.flatMap { it.versions }.flatMap { it.attempts }
-                .filter { it.state == MessageCompletionState.STREAMING }.map { it.requestId }.forEach { coordinator.cancel(it) }
+                .filter { it.state == MessageCompletionState.STREAMING }.map { it.requestId }.forEach(coordinator::signalCancel)
             // A terminal tool response can still own a live continuation/usage chain.
             coordinator.cancelOwned(ResponseGroupTarget(host.chatId, group.assistantMessageId, group.groupId), slotId)
         }
@@ -226,7 +244,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                     offerSaveRetry()
                 } catch (e: CancellationException) { throw e }
                 catch (_: Exception) { notice(activity.getString(R.string.parallel_prepare_failed)) }
-                finally { active = false; if (!closed) { host.busy(busy); if (!mutating) host.settled() } }
+                finally { active = false; if (!closed) { host.busy(busy); if (!mutating && !stopping) host.settled() } }
             } } finally { selectingBranch = false }
         }
         return true
@@ -234,7 +252,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
 
     /** Keep requests' final evidence durable before deletion or usage reconciliation. */
     suspend fun withRequestsStopped(action: suspend () -> Unit): Boolean {
-        if (closed || mutating) return false
+        if (closed || mutating || stopping) return false
         mutating = true
         host.busy(true)
         try {
@@ -253,7 +271,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     }
 
     fun editReply(target: ParallelReplyEditTarget, text: String) {
-        if (closed || mutating || host.unavailable) return
+        if (closed || mutating || stopping || host.unavailable) return
         mutating = true
         host.busy(true)
         scope.launch {
@@ -278,7 +296,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 host.changed(index, canonical)
             } finally {
                 mutating = false
-                if (!closed) { host.busy(busy); if (!active && !pendingSave) host.settled() }
+                if (!closed) { host.busy(busy); if (!busy) host.settled() }
             }
         }
     }
@@ -298,11 +316,11 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     }
 
     fun retrySave() {
-        if (active || closed || mutating || !pendingSave) return
+        if (active || closed || mutating || stopping || !pendingSave) return
         scope.launch {
             active = true; host.busy(true)
             try { coordinator.flush(); refreshSaveState() }
-            finally { active = false; host.busy(false); if (!pendingSave) host.settled() }
+            finally { active = false; host.busy(busy); if (!busy) host.settled() }
         }
     }
 
