@@ -408,6 +408,14 @@ class ScanFilingPlanner(
         internal val decisions = HashMap<Triple<String, String, String>, Boolean>()
         internal var rankingSent = false
         internal var ranking: Pair<List<List<Int>>, List<Int>>? = null
+
+        /** After the chat changed and the scan restarted: earlier answers
+         *  no longer apply, and no request is sent again, so affected
+         *  proposals are filed for review and ranked on the device. */
+        fun forgetAnswers() {
+            decisions.clear()
+            ranking = null
+        }
     }
 
     suspend fun plan(drafts: List<FilingDraft>, cap: Int): FilingPlan {
@@ -451,7 +459,13 @@ class ScanFilingPlanner(
                 // A match the AI saw while writing, or already linked, was judged.
                 if (memoryId in d.shownMemoryIds || memoryId in d.relatedMemoryIds) continue
                 link(d.draftId, memoryId)
-                val key = Triple(Hash.hash(d.content), memoryId, MemoryDependencies.fingerprint(current.record))
+                // An answer is about this proposal, these source words and
+                // this memory version; a change to any of them asks again.
+                val sourceWording = wordingOf(d.draftId, ScanComparisonRequest.MAX_WORDING_TOKENS_PER_PROPOSAL)
+                val key = Triple(
+                    Hash.hash(d.content + "\u0000" + sourceWording), memoryId,
+                    MemoryDependencies.fingerprint(current.record)
+                )
                 val known = memo.decisions[key]
                 if (known != null) {
                     if (known) {

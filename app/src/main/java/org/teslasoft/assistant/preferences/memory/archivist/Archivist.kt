@@ -1320,7 +1320,12 @@ object Archivist {
             checkpoint = ScanCheckpoint()
         }
 
+        // Requests already made for this conversation's filing, so a retry
+        // after a saved memory changed never repeats them (Stage 6B.3).
+        val filingMemo = ScanFilingPlanner.Memo()
+
         fun restart() {
+            filingMemo.forgetAnswers()
             restarts++
             if (restarts > MAX_SOURCE_RESTARTS) throw SourceKeepsChangingException()
             store.restartScanRange(range.rangeId)
@@ -1397,9 +1402,6 @@ object Archivist {
             )
         }
 
-        // Requests already made for this conversation's filing, so a retry
-        // after a saved memory changed never repeats them (Stage 6B.3).
-        val filingMemo = ScanFilingPlanner.Memo()
         var coveredRereads = 0
         var filingAttempts = 0
         publish@ while (true) {
@@ -1735,12 +1737,12 @@ object Archivist {
             // memories, Archived ones only fill places left over. Each is
             // reread so its current status is the one shown.
             val selected = ScannerPromptMatches.select(sectionMatches)
-            // Only memories this scene may still be compared with are shown:
-            // one moved to another world or campaign since the lookup is
+            // Only memories this scene may still be compared with are shown
+            // (Active, Pending and Archived alike): one moved to another
+            // world or campaign since retrieval or the lookup is
             // left out, so it can never be named as covering anything here.
             val stillEligible: Set<String> =
-                if (selected.pendingIds.isEmpty() && selected.archivedIds.isEmpty()) emptySet()
-                else store.scannerComparableMemories(retrievalScope).mapTo(HashSet()) { it.first.memoryId }
+                store.scannerComparableMemories(retrievalScope).mapTo(HashSet()) { it.first.memoryId }
             val pendingRecords = selected.pendingIds.filter { it in stillEligible }.mapNotNull { id ->
                 store.getMemory(id)?.takeIf { it.status == "draft" }
             }
@@ -1749,7 +1751,7 @@ object Archivist {
                 ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT - pendingRecords.size
             ) { it.memoryId }
             val activeRecords = promptMemories.mapNotNull { memory -> store.getMemory(memory.memoryId) }
-                .filter { it.status == "active" }
+                .filter { it.status == "active" && it.memoryId in stillEligible }
             val archivedRecords = selected.archivedIds.filter { it in stillEligible }.mapNotNull { id ->
                 store.getMemory(id)?.takeIf { it.status == "archived" }
             }.take(

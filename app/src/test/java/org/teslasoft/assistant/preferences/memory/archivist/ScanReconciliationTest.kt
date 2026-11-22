@@ -288,6 +288,32 @@ class ScanReconciliationTest {
         assertEquals(listOf("m1"), after.memoryLinks[1])
     }
 
+    @Test fun anEarlierAnswerIsNotReusedWhenTheSourceWordingChanged() {
+        val memo = ScanFilingPlanner.Memo()
+        val calls = Calls()
+        val saved = memory("m1", "Worked as a night-shift nurse.", status = "archived")
+        val proposal = draft(1, "Works night shifts as a nurse.", listOf(meaning("m1", status = MatchStatus.ARCHIVED)))
+        fun plannerWith(wording: String) = ScanFilingPlanner(
+            currentMemory = { id -> if (id == "m1") CurrentMemory(saved, "h") else null },
+            wordingOf = { _, _ -> wording },
+            compare = { pairs -> calls.comparisons.add(pairs); pairs.map { it.draftId to it.memoryId }.toSet() },
+            rank = { _, _ -> emptyList() },
+            memo = memo
+        )
+        val first = runBlocking { plannerWith("I used to work nights as a nurse.").plan(listOf(proposal), 0) }
+        assertEquals(setOf(1), first.covered)
+        // The chat was edited: same proposal text, different meaning.
+        val after = runBlocking { plannerWith("I went back to night shifts this week.").plan(listOf(proposal), 0) }
+        assertEquals(1, calls.comparisons.size)
+        assertTrue(after.covered.isEmpty())
+        assertEquals(listOf("m1"), after.memoryLinks[1])
+        // A restart forgets every answer; still no second request.
+        memo.forgetAnswers()
+        val restarted = runBlocking { plannerWith("I used to work nights as a nurse.").plan(listOf(proposal), 0) }
+        assertEquals(1, calls.comparisons.size)
+        assertTrue(restarted.covered.isEmpty())
+    }
+
     // ---- Cap, ranking and linked pairs ----
 
     @Test fun withinTheCapNothingIsRanked() {
