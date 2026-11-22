@@ -357,6 +357,11 @@ class ChooseProviderActivity : SettingsPageActivity() {
 
         setupDropdowns()
         btnViewAllModels?.setOnClickListener { openFullModelPicker() }
+        supportFragmentManager.setFragmentResultListener(
+            AdvancedModelSelectorDialogFragment.PROVIDER_SCREEN_SELECTION_RESULT, this
+        ) { _, result ->
+            onModelChanged(result.getString(AdvancedModelSelectorDialogFragment.SELECTED_MODEL).orEmpty())
+        }
         btnProviderFilters?.setOnClickListener { openFilterPanel() }
 
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
@@ -418,14 +423,8 @@ class ChooseProviderActivity : SettingsPageActivity() {
             ?: emptyList()
 
     private fun openFullModelPicker() {
-        val modelDialog = AdvancedModelSelectorDialogFragment.newAllModelsInstance(
-            selectedModel,
-            "",
-            endpointId,
-            scope
-        )
-        modelDialog.setModelSelectedListener { model -> onModelChanged(model) }
-        modelDialog.show(supportFragmentManager, "ChooseProviderModelSelector")
+        AdvancedModelSelectorDialogFragment.newProviderScreenModelPicker(selectedModel, endpointId, scope)
+            .show(supportFragmentManager, "ChooseProviderModelSelector")
     }
 
     /** New model chosen (quick-pick or full picker): reload that model's saved

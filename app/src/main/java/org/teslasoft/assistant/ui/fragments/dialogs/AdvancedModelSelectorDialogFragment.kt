@@ -182,6 +182,24 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 requireArguments().putString(ARG_SCOPE, scope.name)
             }
 
+        private const val ARG_PROVIDER_SCREEN_PICKER = "providerScreenPicker"
+        /** Fragment result of the provider screen's picker: the chosen model only. */
+        const val PROVIDER_SCREEN_SELECTION_RESULT = "providerScreenModelSelection"
+
+        /**
+         * The provider screen's View All Models: Favorites / Recent / View All
+         * for [endpointId] only, opening on View All. Picking a model only
+         * returns it; nothing is saved and no chat changes. Provider controls
+         * are hidden because providers are set on the calling screen.
+         */
+        fun newProviderScreenModelPicker(currentModel: String, endpointId: String, scope: ModelPickerScope) =
+            newInstance(currentModel, "", endpointId).apply {
+                requireArguments().putBoolean(ARG_CHAT_MODEL_PICKER, true)
+                requireArguments().putBoolean(ARG_PROVIDER_SCREEN_PICKER, true)
+                requireArguments().putString(ARG_SCOPE, scope.name)
+                requireArguments().putString(ARG_START_TAB, PickerTab.VIEW_ALL.name)
+            }
+
         /** Reuse Favorites / Recent / View All, returning an exact target without changing chat. */
         fun newModelRuleTargetInstance(chatId: String): AdvancedModelSelectorDialogFragment =
             newInstance(name = "", chatId = chatId).apply {
@@ -214,12 +232,19 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         get() = requireArguments().getBoolean(ARG_MODEL_RULE_PICKER)
     private val chatPicker: Boolean
         get() = requireArguments().getBoolean(ARG_CHAT_MODEL_PICKER)
+    /** Opened from the provider screen: one endpoint, model choice only. */
+    private val providerScreenPicker: Boolean
+        get() = requireArguments().getBoolean(ARG_PROVIDER_SCREEN_PICKER)
+    /** Model rules and the provider screen choose a model only; provider
+     *  choices on the rows would have no effect there. */
+    private val showsProviderControls: Boolean
+        get() = !modelRulePicker && !providerScreenPicker
     private val scope: ModelPickerScope
         get() = ModelPickerScope.from(requireArguments().getString(ARG_SCOPE))
     /** Select Summarizer / Memory Scanner Model (the Favorites / Recent /
      *  View All picker in a background job's scope). */
     private val dedicatedPicker: Boolean
-        get() = chatPicker && scope.isDedicated
+        get() = chatPicker && scope.isDedicated && !providerScreenPicker
     private var pickerTab = PickerTab.FAVORITES
     private var savedModelAdapter: SavedModelPickerAdapter? = null
     private var catalog: ModelPickerCatalog? = null
@@ -468,6 +493,11 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         } else if (modelRulePicker) {
             parentFragmentManager.setFragmentResult(
                 MODEL_RULE_SELECTION_RESULT,
+                bundleOf(SELECTED_MODEL to model, SELECTED_ENDPOINT to endpointId)
+            )
+        } else if (providerScreenPicker) {
+            parentFragmentManager.setFragmentResult(
+                PROVIDER_SCREEN_SELECTION_RESULT,
                 bundleOf(SELECTED_MODEL to model, SELECTED_ENDPOINT to endpointId)
             )
         } else if (dedicatedPicker) {
@@ -1052,9 +1082,11 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     }
 
     private fun configureSavedModelAdapter(context: Context, chatId: String) {
-        val selectedModel = if (dedicatedPicker) {
-            DedicatedModelRouting.of(scope).modelId(context)
-        } else preferences?.getModel().orEmpty()
+        val selectedModel = when {
+            providerScreenPicker -> requireArguments().getString("name").orEmpty()
+            dedicatedPicker -> DedicatedModelRouting.of(scope).modelId(context)
+            else -> preferences?.getModel().orEmpty()
+        }
         savedModelAdapter = SavedModelPickerAdapter(
             context,
             chatId,
@@ -1095,7 +1127,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             scope = scope,
             isSelected = if (parallelPicker) ({ identity -> parallelSelection?.contains(identity) == true }) else null,
             onParameters = if (parallelPicker) ({ target -> openParallelModelConfiguration(target, "parameters") }) else null,
-            onReasoning = if (parallelPicker) ({ target -> openParallelModelConfiguration(target, "reasoning") }) else null
+            onReasoning = if (parallelPicker) ({ target -> openParallelModelConfiguration(target, "reasoning") }) else null,
+            providerControls = showsProviderControls
         )
         modelList?.adapter = savedModelAdapter
         reloadSavedModelRows()
@@ -1105,6 +1138,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         val list = modelList ?: return
         val context = requireContext()
         val profiles = apiEndpointPreferences?.getApiEndpointsList(context).orEmpty()
+            .filter { !providerScreenPicker || it.id == resolvedEndpointId }
         catalog = ModelPickerCatalog(
             LayoutInflater.from(context).inflate(R.layout.view_model_browser_controls, list, false),
             profiles,
@@ -1262,6 +1296,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         val reasoningByEndpoint = mutableMapOf<String, EndpointReasoningCapabilityIndex>()
 
         fun row(settings: FavoriteModelObject): SavedModelPickerAdapter.Row? {
+            if (providerScreenPicker && settings.endpointId != resolvedEndpointId) return null
             val endpoint = endpoints[settings.endpointId] ?: return null
             val entry = saved[ModelIdentity(settings.endpointId, settings.modelId)]
             val route = when (settings.routingType) {
