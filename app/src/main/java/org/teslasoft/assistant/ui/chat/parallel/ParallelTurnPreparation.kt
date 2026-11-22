@@ -117,13 +117,12 @@ internal object ParallelTurnPreparation {
                 val ref = descriptor("pdf", file, "application/pdf")
                 val useNative = PdfDeliveryPolicy.useNative(pdfRouting.provider, pdfCapability, file.length())
                 val replacement = if (useNative) {
-                    val filePart = JsonObject()
-                    if (PdfDeliveryPolicy.usesUploadedFile(pdfRouting.provider)) {
-                        filePart.addProperty("file_id", XaiPdfFiles.fileIdFor(context, chatId, endpoint, include, file))
-                    } else {
-                        attachmentParts += ParallelInputPart.Attachment(ref)
-                        filePart.addProperty("filename", pdf.fileName)
-                        filePart.addProperty("file_data", ParallelChatSnapshot.attachmentReference(ref))
+                    attachmentParts += ParallelInputPart.Attachment(ref)
+                    val filePart = if (PdfDeliveryPolicy.usesUploadedFile(pdfRouting.provider)) {
+                        ParallelChatSnapshot.uploadedFile(XaiPdfFiles.fileIdFor(context, chatId, endpoint, include, file), ref)
+                    } else JsonObject().apply {
+                        addProperty("filename", pdf.fileName)
+                        addProperty("file_data", ParallelChatSnapshot.attachmentReference(ref))
                     }
                     JsonObject().apply { addProperty("type", "file"); add("file", filePart) }
                 } else JsonObject().apply {

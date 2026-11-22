@@ -17,7 +17,8 @@ import java.util.UUID
 import kotlin.coroutines.resume
 
 /** Screen glue only: coordinator owns requests; this controller owns composer and branch interaction. */
-internal class ParallelChatController(private val activity: FragmentActivity, private val host: Host) {
+internal class ParallelChatController(private val activity: FragmentActivity, private val host: Host,
+    private val coordinatorFactory: ((CoroutineScope, ParallelGroupPersistence) -> ParallelRequestCoordinator)? = null) {
     interface Host {
         val chatId: String
         val messages: MutableList<HashMap<String, Any>>
@@ -27,7 +28,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         val unavailable: Boolean
         suspend fun prepareBase(raw: String, setup: ExperimentalSetup): ParallelTurnBase
         /** Persist both message rows before composer/attachment transfer. */
-        fun commitTurn(raw: String, userId: String, assistantId: String): Boolean
+        fun commitTurn(raw: String, group: ResponseGroup): Boolean
         fun save(): Boolean
         fun changed(position: Int, canonical: Boolean)
         fun busy(value: Boolean)
@@ -39,6 +40,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     private var active = false
     private var selectingBranch = false
     private var closed = false
+    private var pendingTurn: Pair<String, String>? = null
     val busy get() = active
     private val prefs get() = Preferences.getPreferences(activity, host.chatId)
     private val chatScope by lazy { ParallelChatScope(host.chatId) }
@@ -52,7 +54,16 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 if (closed) return@runBlocking detachedPersistence.update(target, transform)
                 val actual = chatScope.target(target)
                 val index = host.messages.indexOfFirst { it["message_id"] == actual.assistantMessageId }
-                check(index >= 0 && actual.chatId == host.chatId)
+                check(actual.chatId == host.chatId)
+                if (index < 0) {
+                    val pending = requireNotNull(pendingTurn)
+                    check(pending.second == target.groupId)
+                    val group = transform(null)
+                    check(host.messages.none { it["message_id"] == group.userMessageId || it["message_id"] == group.assistantMessageId })
+                    if (!host.commitTurn(pending.first, group)) throw ParallelPersistenceException("turn_commit_failed")
+                    pendingTurn = null
+                    return@runBlocking group
+                }
                 val row = host.messages[index]
                 val before = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group
                 check(before == null || before.groupId == target.groupId)
@@ -70,7 +81,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 after
             }
     }
-    private val coordinator by lazy { ParallelRuntime.forChat(activity, host.chatId, scope,
+    private val coordinator by lazy { coordinatorFactory?.invoke(scope, persistence) ?: ParallelRuntime.forChat(activity, host.chatId, scope,
         canonicalSourcesChanged = {}, confirmImage = { request, prompt ->
             confirm("${request.assignment.label}\n\n$prompt", R.string.image_gen_action_create)
         }, persistence = persistence) }
@@ -123,7 +134,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 val group = ParallelInput.freeze(userId, assistantId,
                     if (setup.lastMessageOnly) "last_message_only" else "full_history",
                     prepared.context, prepared.current, prepared.slots, setup.models.indexOfFirst { it.id == setup.primaryId }, System.currentTimeMillis())
-                if (!host.commitTurn(raw, userId, assistantId)) throw ParallelPersistenceException("turn_commit_failed")
+                pendingTurn = raw to group.groupId
                 coordinator.dispatch(host.chatId, group, prepared.commitContext).await()
                 offerSaveRetry()
             } catch (e: CancellationException) {
@@ -133,6 +144,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
             } catch (_: Exception) {
                 notice(activity.getString(R.string.parallel_prepare_failed))
             } finally {
+                pendingTurn = null
                 active = false
                 if (!closed) { host.busy(false); host.settled() }
             }

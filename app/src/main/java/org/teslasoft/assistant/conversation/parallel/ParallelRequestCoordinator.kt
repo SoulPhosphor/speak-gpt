@@ -117,7 +117,7 @@ internal class ParallelRequestCoordinator(
         }
         val versionId = UUID.randomUUID().toString()
         val fields = oldSlot.versions.single { it.versionId == oldSlot.canonicalVersionId }.fields
-            .filterKeys { it in setOf("activeMemoryAttribution") } +
+            .filterKeys { it in setOf("activeMemoryAttribution", "reasoningLevel", org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY) } +
             mapOf("message" to "", "state" to MessageCompletionState.STREAMING)
         val newSlot = oldSlot.copy(versions = oldSlot.versions + ResponseVersion(versionId, fields,
             listOf(ResponseAttempt.pending(nowMs()))), canonicalVersionId = versionId, foregroundVersionId = versionId)

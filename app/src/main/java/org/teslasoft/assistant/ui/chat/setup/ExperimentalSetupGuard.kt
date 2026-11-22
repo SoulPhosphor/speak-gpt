@@ -6,7 +6,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.setup.ExperimentalSetup
 import org.teslasoft.assistant.preferences.Preferences
 
-/** Runs before any composer/history mutation. Stage 4 must replace the readiness block with owned dispatch. */
+/** Runs before composer/history mutation. Valid parallel setup proceeds to the owned controller. */
 internal object ExperimentalSetupGuard {
     fun block(context: Context, preferences: Preferences?, handsFree: Boolean = false): Boolean {
         preferences ?: return false

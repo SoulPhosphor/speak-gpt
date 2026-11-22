@@ -67,6 +67,42 @@ class ParallelChatTransportTest {
             .setBody(if (stream) "data: $frame\n\ndata: [DONE]\n\n" else frame.toString())
     }
 
+    @Test fun uploadedPdfRetainsOriginalBytesWithoutLeakingSnapshotMarkersToTheProvider() {
+        val bytes = "%PDF synthetic original".toByteArray()
+        val hash = ResponseAttachment.digest(bytes)
+        val ref = ResponseAttachment("pdf", "$hash.pdf", "application/pdf", bytes.size.toLong(), hash)
+        val frame = ParallelChatSnapshot.message(JsonObject().apply {
+            addProperty("role", "user")
+            add("content", JsonArray().apply { add(JsonObject().apply {
+                addProperty("type", "file"); add("file", ParallelChatSnapshot.uploadedFile("fixture-upload-id", ref))
+            }) })
+        })
+        val binary = ParallelInputPart.Attachment(ref)
+        val slots = (0..1).map { index ->
+            val endpoint = ApiEndpointObject("fixture", "https://fixture.invalid/v1", "", id = "fixture-$index")
+            val original = ResponseModelAssignment("fixture-model", "Fixture", endpoint.id, endpoint.host, "chat_completions",
+                emptyMap(), emptyMap(), emptyMap(), emptyMap())
+            ParallelSlotInput(ParallelChatSnapshot.assignment(original, endpoint,
+                """{"model":"fixture-model","stream":false,"messages":[]}""", showReasoning = true), listOf(frame, binary))
+        }
+        val group = ParallelInput.freeze(id(), id(), "full_history", emptyList(), listOf(frame, binary), slots, 0, 100L)
+        val slot = group.slots.first()
+        val part = group.input.parts.single { it.attachment != null }
+        val request = ParallelRequest(ResponseGroupTarget("chat", group.assistantMessageId, group.groupId), slot.slotId,
+            slot.canonicalVersionId, slot.versions.single().attempts.single().requestId, slot.assignment,
+            slot.promptPartIds.map { target -> group.input.parts.single { it.partId == target } }, mapOf(part.partId to bytes),
+            ProviderUsageAttempt("fixture-model", "fixture", slot.assignment.endpoint))
+        val body = ParallelChatSnapshot.body(request)
+        assertTrue(body.contains("fixture-upload-id"))
+        assertFalse(body.contains("parallel_uploaded_snapshot"))
+        assertFalse(body.contains("parallel-snapshot:"))
+        val row = ResponseGroupEdits.install(mapOf("message_id" to group.assistantMessageId, "isBot" to true), group)
+        assertEquals(listOf(ref), ResponseGroupAttachments.of(row))
+        assertEquals(setOf(hash), ResponseGroupAttachments.retainedHashes(listOf(row), "pdf"))
+        try { ParallelChatSnapshot.body(request.copy(attachmentBytes = mapOf(part.partId to "changed".toByteArray()))); fail("Changed PDF must be refused") }
+        catch (_: IllegalArgumentException) { }
+    }
+
     @Test fun fourRealHttpRequestsKeepFrozenIncludesEndpointsReasoningAndReceiptsIsolated() = runBlocking {
         withTimeout(30_000) {
             val servers = List(4) { MockWebServer() }

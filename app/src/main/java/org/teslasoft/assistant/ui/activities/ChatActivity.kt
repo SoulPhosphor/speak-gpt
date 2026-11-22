@@ -798,7 +798,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val preparedChat: PreparedChatStartup? = null
     )
 
-    private val parallelChat by lazy { ParallelChatController(this, object : ParallelChatController.Host {
+    private val parallelChat: ParallelChatController by lazy { ParallelChatController(this, object : ParallelChatController.Host {
         override val chatId get() = this@ChatActivity.chatId
         override val messages get() = this@ChatActivity.messages
         override val rawInput get() = messageInput?.text?.toString().orEmpty()
@@ -821,21 +821,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     check(RequestCapacity.canAssemble(RequestCapacity.measure(frozen.payload), RequestHeapState.current()))
                     ParallelTurnBase(frozen.payload, frozen.nativePdfs, eligible.flatMap { it.includes },
                         frozen.stablePrefixCount,
-                        ActiveMemoryAttribution.encode(frozen.activeMemoryReferences)?.let { mapOf(ActiveMemoryAttribution.MESSAGE_KEY to it) }.orEmpty(), frozen.commitContext)
+                        ActiveMemoryAttribution.encode(frozen.activeMemoryReferences)?.let { mapOf(ActiveMemoryAttribution.MESSAGE_KEY to it) }.orEmpty() +
+                            mapOf(org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY to
+                                org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.current(preferences).encode()), frozen.commitContext)
                 }
             } finally { releaseRequestImagePayloads() }
         }
-        override fun commitTurn(raw: String, userId: String, assistantId: String): Boolean {
+        override fun commitTurn(raw: String, group: ResponseGroup): Boolean {
             val before = ArrayList(messages)
-            val user = hashMapOf<String, Any>("message_id" to userId, "message" to (prefix + raw + endSeparator), "isBot" to false,
+            val user = hashMapOf<String, Any>("message_id" to group.userMessageId, "message" to (prefix + raw + endSeparator), "isBot" to false,
                 ChatAdapter.KEY_MESSAGE_TIME to System.currentTimeMillis().toString())
             stampUserIdentity(user)
             val manual = memoryAttachments.ids()
             memoryAttachments.attachTo(user, manual)
             if (pendingIncludes.isNotEmpty()) user[INCLUDES_KEY] = ChatInclude.listToJson(pendingIncludes.map { it.forSentMessage() })
-            val assistant = hashMapOf<String, Any>("message_id" to assistantId, "message" to "", "isBot" to true,
+            val assistant = hashMapOf<String, Any>("message_id" to group.assistantMessageId, "message" to "", "isBot" to true,
                 ChatAdapter.KEY_COMPANION_NAME to currentCompanionLabel(), MessageCompletionState.KEY_STATE to MessageCompletionState.STREAMING)
-            messages.add(user); messages.add(assistant)
+            ResponseGroupEdits.canonicalFields(group)[org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY]?.let {
+                user[org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY] = it
+            }
+            messages.add(user); messages.add(ResponseGroupEdits.install(assistant, group))
             val committed = if (pendingConversation) NewConversationCoordinator(this@ChatActivity).commitPendingConversation(
                 PendingConversationState(chatId, chatName, ConversationMode.CHAT), ArrayList(messages)).succeeded
                 else saveSettings(synchronous = true) == ChatStorageHealth.WriteOutcome.OK
@@ -890,7 +895,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         }
-        override fun settled() { syncChatProjection(); summarizerCycle() }
+        override fun settled() {
+            syncChatProjection(); summarizerCycle()
+            val persona = messages.lastOrNull()?.let(org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope::read)?.companionPersonaId
+            memoryWriteQueue.execute {
+                org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.ensureCompanion(applicationContext, persona)
+                org.teslasoft.assistant.service.MemoryScanAutoResume.onChatReplyFinished(applicationContext)
+            }
+        }
     }) }
 
     /** One normal chat request, frozen before the visible turn is committed. */
