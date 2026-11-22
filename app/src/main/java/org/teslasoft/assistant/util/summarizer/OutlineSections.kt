@@ -44,6 +44,10 @@ object OutlineSections {
     private val HEADER = Regex("^ {0,3}#{1,6}(\\s|$)")
     private val FENCE = Regex("^ {0,3}(`{3,}|~{3,})")
 
+    /** A backtick fence's info text may not contain a backtick (markdown
+     *  reads such a line as inline code, not a fence). */
+    private fun opens(fence: String, rest: String): Boolean = fence[0] != '`' || '`' !in rest
+
     /** A fence closes the open one only with the same character, at least as
      *  many of them, and nothing after it but spaces. */
     private fun closes(open: String, fence: String, rest: String): Boolean =
@@ -70,8 +74,11 @@ object OutlineSections {
             val fence = FENCE.find(line)
             val open = openFence
             if (open == null) {
-                if (fence != null) openFence = fence.groupValues[1]
-                else if (HEADER.containsMatchIn(line)) flush()
+                if (fence != null && opens(fence.groupValues[1], line.substring(fence.range.last + 1))) {
+                    openFence = fence.groupValues[1]
+                } else if (HEADER.containsMatchIn(line)) {
+                    flush()
+                }
             } else if (fence != null && closes(open, fence.groupValues[1], line.substring(fence.range.last + 1))) {
                 openFence = null
             }

@@ -588,7 +588,7 @@ class ChatOutlineActivity : FragmentActivity() {
     /* ------------------------------- runs ---------------------------------- */
 
     /** Retry on the error pop-up: the same run again, asked for the way it
-     *  was the first time (a redo first keeps any unsaved edits). */
+     *  was the first time (a redo first asks about unsaved edits, as Redo does). */
     private fun retryLastRun() {
         val request = ChatOutlineRunner.lastRequest(chatId) ?: return
         if (request.mode == OutlineMode.REDO) {

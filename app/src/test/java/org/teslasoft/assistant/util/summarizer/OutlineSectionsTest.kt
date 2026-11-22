@@ -61,6 +61,9 @@ class OutlineSectionsTest {
         )
         val notClosing = "## A\n```\n```text\n# inside\n```\n## B"
         assertEquals(listOf("## A\n```\n```text\n# inside\n```", "## B"), OutlineSections.split(notClosing))
+        // Backticks after a backtick run make inline code, not a fence.
+        val inline = "## A\n```text`code```\n## B"
+        assertEquals(listOf("## A\n```text`code```", "## B"), OutlineSections.split(inline))
     }
 
     @Test
