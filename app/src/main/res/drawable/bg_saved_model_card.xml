@@ -10,7 +10,7 @@
                     <corners android:radius="@dimen/model_picker_card_radius" />
                     <solid android:color="?attr/colorSurfaceContainerHigh" />
                     <stroke
-                        android:width="@dimen/quick_settings_segment_stroke_width"
+                        android:width="@dimen/chat_selection_outline_width"
                         android:color="?attr/colorOutlineVariant"
                         android:dashWidth="@dimen/chat_selection_outline_dash_length"
                         android:dashGap="@dimen/chat_selection_outline_dash_gap" />

@@ -1130,9 +1130,8 @@ Outline Prompt line and its Redo This Outline pop-up.
 `Widget.App.ModelPicker.Card` draws `bg_saved_model_card`. Every card, selected
 or not, uses the `colorSurfaceContainerHigh` fill. The selected (activated)
 card adds only a dashed outline, like a coupon's cut line, in the Quick Settings
-outline color (`colorOutlineVariant`) and stroke width
-(`quick_settings_segment_stroke_width`). Its dash and gap are the chat Selection
-Mode outline's (`chat_selection_outline_dash_length` and
+outline color (`colorOutlineVariant`). Its thickness, dash and gap are the chat Selection Mode outline's
+(`chat_selection_outline_width`, `chat_selection_outline_dash_length` and
 `chat_selection_outline_dash_gap`, owner direction), so both cut lines share one
 pattern.
 
@@ -1161,7 +1160,9 @@ menu), `Widget.App.SearchPill.Divider` (a thin vertical line), then
 `Widget.App.SearchPill.Icon` and `Widget.App.SearchPill.Field`. When there is
 no scope to choose, the code hides the scope and the divider together and the
 pill holds only the search. Sizes live in `search_pill_*`. Current user: the
-full model list's Model/Provider search (`view_model_browser_controls.xml`).
+full model list's Model/Provider search (`view_model_browser_controls.xml`). The scope opens with
+`AppDropdown.show(..., outlineAnchor = false)` so opening and closing never
+replace its background with a dropdown box.
 
 #### Font previews in a dropdown
 
