@@ -1307,6 +1307,9 @@ object Archivist {
             // shrinks with the section, so it never stands in the way of
             // reading the unread messages.
             var earlierCeiling = Int.MAX_VALUE
+            // Earlier text the last attempt actually sent, in tokens.
+            var lastEarlierTokens = 0
+            var retryWithoutEarlier = false
             // Every message the section traverses, sent or not (hidden,
             // unfinished, a companion not taking part), as it was before the
             // request: a change to any of them while the request is in flight
@@ -1326,7 +1329,7 @@ object Archivist {
                             minOf(earlierBudget.average, earlierCeiling),
                             minOf(earlierBudget.maximum, earlierCeiling)
                         )
-                    )
+                    ) { lastEarlierTokens = it }
                 },
                 shouldShrink = { error ->
                     ArchivistRetryPolicy.isVerifiedContextRejection(error, capturedErrorBody)
@@ -1342,10 +1345,16 @@ object Archivist {
                     // After a confirmed size rejection the single-message
                     // maximum comes down with the target, so an oversized
                     // message is split too (lossless, Stage 6A).
-                    ArchivistConversationChunker.split(
+                    val smaller = ArchivistConversationChunker.split(
                         failedChunk.rows, nextTarget, nextTarget, allowanceTokens = 0
                     ).map { it.copy(rows = labelAt(it.rows, nextTarget)) }
-                }
+                    // A section that cannot be split further is sent again
+                    // without the earlier text that came with it.
+                    retryWithoutEarlier = smaller.singleOrNull() == failedChunk && lastEarlierTokens > 0
+                    if (retryWithoutEarlier) earlierCeiling = 0
+                    smaller
+                },
+                retrySameAllowed = { retryWithoutEarlier }
             )
             val parsed = ParsedChunk(
                 rules = retried.flatMap { it.rules },
@@ -1502,7 +1511,9 @@ object Archivist {
         temperature: Double,
         verifiedContextTokens: Int?,
         earlierFor: (ScanSourceRow, Int, Int) -> List<ScanSourceRow>,
-        earlierBudget: EarlierBudget
+        earlierBudget: EarlierBudget,
+        /** Told how many tokens of earlier text this request carries. */
+        earlierSent: (Int) -> Unit = {}
     ): ParsedChunk {
         val rows = requestChunk.rows
         val chatId = rows.first().chatId
@@ -1598,6 +1609,7 @@ object Archivist {
             rendered = sectionOnly
             renderedTranscriptTokens = IncludeTextPolicy.estimateTokens(rendered.text)
         }
+        earlierSent(if (rendered === sectionOnly) 0 else earlier.sumOf { IncludeTextPolicy.estimateTokens(it.text) })
         if (verifiedContextTokens != null && renderedTranscriptTokens > safeTranscriptTarget) {
             throw ArchivistShrinkRequiredException(
                 nextTargetTokens = safeTranscriptTarget,

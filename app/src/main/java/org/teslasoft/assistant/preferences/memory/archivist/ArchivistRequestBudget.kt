@@ -242,7 +242,11 @@ object ArchivistBoundedShrinkExecutor {
         maxDepth: Int = ArchivistRetryPolicy.MAX_SHRINK_DEPTH,
         analyze: suspend (C, List<O>) -> O,
         shouldShrink: (Throwable) -> Boolean,
-        shrink: (C, Throwable) -> List<C>
+        shrink: (C, Throwable) -> List<C>,
+        /** True when the caller changed something else about the request
+         *  (for example removed repeated earlier text), so sending the same
+         *  unsplittable work again is a real retry, still within [maxDepth]. */
+        retrySameAllowed: () -> Boolean = { false }
     ): List<O> {
         val queue = ArrayDeque<Work<C>>()
         queue.add(Work(initial, 0))
@@ -254,7 +258,9 @@ object ArchivistBoundedShrinkExecutor {
             } catch (error: Exception) {
                 if (!shouldShrink(error) || work.depth >= maxDepth) throw error
                 val smaller = shrink(work.value, error)
-                if (smaller.isEmpty() || (smaller.size == 1 && smaller.first() == work.value)) {
+                if (smaller.isEmpty() ||
+                    (smaller.size == 1 && smaller.first() == work.value && !retrySameAllowed())
+                ) {
                     throw error
                 }
                 for (index in smaller.indices.reversed()) {
