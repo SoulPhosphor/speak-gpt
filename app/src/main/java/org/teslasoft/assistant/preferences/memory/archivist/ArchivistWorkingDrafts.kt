@@ -8,6 +8,7 @@ import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.memory.MemoryMatch
+import org.teslasoft.assistant.util.edits.ReferencedEdits
 import java.util.Locale
 
 /**
@@ -279,63 +280,33 @@ object WorkingDraftEdits {
         combineProblem: (ids: List<Int>, label: String) -> String? = { _, _ -> null },
         allowed: Set<Int>? = null
     ): Validation {
-        val problems = LinkedHashSet<String>()
-        val failed = ArrayList<Failed>()
-        val candidates = ArrayList<Pair<DraftOperation, ArchivistResponseParser.RawDraftEdit?>>()
-
-        fun resolve(ref: String): Int? {
-            val id = exposed[ref.trim().uppercase(Locale.ROOT)] ?: return null
-            if (id !in present) return null
-            if (allowed != null && id !in allowed) return null
-            return id
-        }
-
-        for (edit in edits.distinct()) {
-            val ids = edit.refs.mapNotNull(::resolve).distinct()
-            val unknown = edit.refs.filter { resolve(it) == null }
-            val label = edit.refs.joinToString(" and ") { describeRef(it.trim().uppercase(Locale.ROOT)) }
-            when {
-                edit.refs.isEmpty() -> problems.add("A draft edit named no working draft.")
-                unknown.isNotEmpty() -> unknown.forEach {
-                    problems.add("${describeRef(it.trim().uppercase(Locale.ROOT))} is not a supplied working draft.")
+        val result = ReferencedEdits.validate(
+            edits, withdrawals, exposed, present,
+            combineProblem = { ids, refs -> combineProblem(ids, label(refs)) },
+            allowed = allowed
+        )
+        return Validation(
+            valid = result.valid.map { op ->
+                when (op) {
+                    is ReferencedEdits.Accepted.Edit ->
+                        DraftOperation.Edit(op.ids, op.edit.content, op.edit.typeId, op.edit.tags)
+                    is ReferencedEdits.Accepted.Withdraw -> DraftOperation.Withdraw(op.id)
                 }
-                edit.content.isBlank() -> problems.add("The edit to $label has no content.")
-                ids.size > 1 && combineProblem(ids, label) != null -> problems.add(combineProblem(ids, label)!!)
-                else -> {
-                    candidates.add(
-                        DraftOperation.Edit(ids, edit.content, edit.typeId, edit.tags) to edit
-                    )
-                    continue
-                }
-            }
-            failed.add(Failed(edit, ids))
-        }
-        for (ref in withdrawals.map { it.trim().uppercase(Locale.ROOT) }.distinct()) {
-            val id = resolve(ref)
-            if (id == null) {
-                problems.add("${describeRef(ref)} is not a supplied working draft.")
-                failed.add(Failed(null, emptyList()))
-            } else {
-                candidates.add(DraftOperation.Withdraw(id) to null)
-            }
-        }
+            },
+            failed = result.failed.map { Failed(it.edit, it.knownIds) },
+            problems = result.problems.mapTo(LinkedHashSet(), ::describe).toList()
+        )
+    }
 
-        // A draft named by more than one operation is a conflict: none of
-        // those operations may change it.
-        val uses = HashMap<Int, Int>()
-        candidates.forEach { (op, _) -> op.ids.forEach { uses[it] = (uses[it] ?: 0) + 1 } }
-        val conflicted = uses.filterValues { it > 1 }.keys
-        val valid = ArrayList<DraftOperation>()
-        for ((op, raw) in candidates) {
-            val clash = op.ids.filter { it in conflicted }
-            if (clash.isEmpty()) {
-                valid.add(op)
-            } else {
-                clash.forEach { problems.add("D$it was named by more than one edit or withdrawal.") }
-                failed.add(Failed(raw, op.ids))
-            }
-        }
-        return Validation(valid, failed, problems.toList())
+    private fun label(refs: List<String>): String = refs.joinToString(" and ") { describeRef(it) }
+
+    /** The problem line the repair request shows the model. */
+    private fun describe(problem: ReferencedEdits.Problem): String = when (problem) {
+        ReferencedEdits.Problem.NoReference -> "A draft edit named no working draft."
+        is ReferencedEdits.Problem.Unknown -> "${describeRef(problem.ref)} is not a supplied working draft."
+        is ReferencedEdits.Problem.NoContent -> "The edit to ${label(problem.refs)} has no content."
+        is ReferencedEdits.Problem.CannotCombine -> problem.text
+        is ReferencedEdits.Problem.Conflict -> "D${problem.id} was named by more than one edit or withdrawal."
     }
 
     /**

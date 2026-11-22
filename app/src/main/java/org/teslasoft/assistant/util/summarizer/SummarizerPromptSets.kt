@@ -133,6 +133,8 @@ object SummarizerPromptSets {
                 "Keep the list as short as the section allows, and under {length} words."
             )
         )
+        CHAT_OUTLINE_ID -> setOf(SummarizerPrompts.PRIOR_CHAT_OUTLINE)
+        NOTES_OUTLINE_ID -> setOf(SummarizerPrompts.PRIOR_NOTES_OUTLINE)
         else -> emptySet()
     }
 

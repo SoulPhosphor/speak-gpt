@@ -530,7 +530,8 @@ class SummarizerController(
                     purpose = FoldPurpose.OUTLINE
                 )) {
                     is FoldBatchResult.Advanced -> {
-                        outline = SummarizerPrompts.appendCompaction(outline, result.summary)
+                        // An outline batch returns the whole revised outline.
+                        outline = result.summary
                         tokenBudget = result.tokenBudget
                         done = result.foldedCount
                         setOperationState(
@@ -1261,8 +1262,13 @@ class SummarizerController(
                 when (val result = foldRequest(runtime, request, done, request.size, context,
                     budget, configuredBatchTokens, remainingAllowance, purpose)) {
                     is FoldBatchResult.Advanced -> {
-                        addition = SummarizerPrompts.appendCompaction(addition, result.summary)
-                        context = SummarizerPrompts.appendCompaction(context, result.summary)
+                        if (purpose == FoldPurpose.OUTLINE) {
+                            // Each outline request returns the whole revised outline.
+                            context = result.summary
+                        } else {
+                            addition = SummarizerPrompts.appendCompaction(addition, result.summary)
+                            context = SummarizerPrompts.appendCompaction(context, result.summary)
+                        }
                         done = result.foldedCount
                         budget = result.tokenBudget
                     }
@@ -1270,7 +1276,11 @@ class SummarizerController(
                 }
             }
         }
-        return FoldBatchResult.Advanced(addition, exchangeEnd, tokenBudget.coerceAtMost(budget))
+        return FoldBatchResult.Advanced(
+            if (purpose == FoldPurpose.OUTLINE) context else addition,
+            exchangeEnd,
+            tokenBudget.coerceAtMost(budget)
+        )
     }
 
     /** Fold one bounded batch without persisting it. */
@@ -1300,7 +1310,8 @@ class SummarizerController(
                 .filter { it.second.isNotBlank() }
 
             if (departing.isEmpty()) {
-                return FoldBatchResult.Advanced("", end, budget)
+                // Nothing to add: an outline stays as it is.
+                return FoldBatchResult.Advanced(if (purpose == FoldPurpose.OUTLINE) summary else "", end, budget)
             }
 
             val body = when (purpose) {
@@ -1368,7 +1379,12 @@ class SummarizerController(
                 return FoldBatchResult.Failed
             }
 
-            if (text.isBlank()) {
+            // An outline reply that cannot be applied fails the same way
+            // as an empty one; nothing from it is applied.
+            val revised = if (purpose == FoldPurpose.OUTLINE && text.isNotBlank()) {
+                OutlineSections.apply(summary, text)
+            } else text
+            if (text.isBlank() || revised == null) {
                 recordFailure(
                     runtime.prefs,
                     SummarizerErrorCategory.RESPONSE_UNREADABLE,
@@ -1387,7 +1403,7 @@ class SummarizerController(
                 return FoldBatchResult.Failed
             }
 
-            return FoldBatchResult.Advanced(text, end, budget)
+            return FoldBatchResult.Advanced(revised, end, budget)
         }
     }
 

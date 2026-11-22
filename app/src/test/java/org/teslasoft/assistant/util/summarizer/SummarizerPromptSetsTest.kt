@@ -120,6 +120,22 @@ class SummarizerPromptSetsTest {
     }
 
     @Test
+    fun untouchedSavedOutlinePromptsUpdateToSectionEditingText() {
+        val shipped = SummarizerPromptSets.builtIns(Kind.CHAT_OUTLINE)
+        val saved = listOf(
+            shipped[0].copy(text = SummarizerPrompts.PRIOR_CHAT_OUTLINE),
+            shipped[1].copy(text = SummarizerPrompts.PRIOR_NOTES_OUTLINE)
+        )
+        val normalized = SummarizerPromptSets.normalize(Kind.CHAT_OUTLINE, saved)
+        assertEquals(listOf(SummarizerPrompts.CHAT_OUTLINE, SummarizerPrompts.NOTES_OUTLINE), normalized.map { it.text })
+        // A prompt the user changed is kept as written.
+        val edited = SummarizerPromptSets.normalize(
+            Kind.CHAT_OUTLINE, listOf(shipped[0].copy(text = SummarizerPrompts.PRIOR_CHAT_OUTLINE + " Mine."))
+        )
+        assertEquals(SummarizerPrompts.PRIOR_CHAT_OUTLINE + " Mine.", edited[0].text)
+    }
+
+    @Test
     fun builtInsAreRecognizedPerCollection() {
         assertTrue(SummarizerPromptSets.isBuiltIn(Kind.SUMMARY, SummarizerPromptSets.STORYTELLER_ID))
         assertTrue(SummarizerPromptSets.isBuiltIn(Kind.COMPACTION, SummarizerPromptSets.REPORTER_ID))
