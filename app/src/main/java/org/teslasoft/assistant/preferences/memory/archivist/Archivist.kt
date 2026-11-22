@@ -2170,7 +2170,19 @@ object Archivist {
         val valid: MemoryCandidate
     )
 
-    private class DraftValidation(val valid: List<ValidDraft>, val duplicates: Int)
+    private class DraftValidation(
+        val valid: List<ValidDraft>,
+        val duplicates: Int,
+        /** Existing memories that exact repeats were left out for; checked
+         *  again inside the filing transaction (Stage 6B.3). */
+        val dependencies: List<MemoryDependency> = emptyList()
+    )
+
+    /** The existing memory [candidate] repeats exactly, as a dependency, or
+     *  null when it repeats none. */
+    private fun exactRepeatOf(store: MemoryStore, candidate: MemoryMatch.Candidate): MemoryDependency? =
+        store.alreadyPresentMemoryId(candidate)?.let { id -> store.getMemory(id) }
+            ?.let { MemoryDependencies.of(it, MemoryStore.draftRejectionHash(it.content)) }
 
     /** Returns how many candidates were skipped as duplicates of memories
      *  that already exist ("Archivist found only memories that already
@@ -2190,7 +2202,7 @@ object Archivist {
         return fileValidDrafts(
             context, store, conversation, validation.valid.map { listOf(it) }, maxSuggestions,
             emptyMap(), validation.duplicates + collected.exactDuplicatesRemoved
-        ).first
+        ).prepared
     }
 
     /** What reconciliation prepared for one conversation's filing. */
@@ -2276,10 +2288,12 @@ object Archivist {
         val plan = planner.plan(filing, maxSuggestions)
         val units = plan.units.map { unit -> unit.mapNotNull { validByDraftId[it] } }
         val links = plan.memoryLinks.mapNotNull { (draftId, ids) -> validByDraftId[draftId]?.let { it.index to ids } }.toMap()
-        val (prepared, filedUnits) = fileValidDrafts(
+        val filed = fileValidDrafts(
             context, store, conversation, units, maxSuggestions, links,
             validation.duplicates + plan.covered.size
         )
+        val prepared = filed.prepared
+        val filedUnits = filed.units
         val keptForReview = filedUnits.count { unit ->
             unit.size > 1 || unit.any { v -> drafts[v.index].let { it.unresolvedEdit || it.alternativeOf.isNotEmpty() } }
         }
@@ -2292,7 +2306,11 @@ object Archivist {
             }
             if (plan.rankingFailed) add("ranking request failed; suggestions ranked on the device")
         }
-        return ReconciledMemories(prepared, plan.dependencies, keptForReview, logLines)
+        // Every decision that left something out because a saved memory
+        // already holds it is checked again inside the filing transaction.
+        val dependencies = (plan.dependencies + validation.dependencies + filed.dependencies)
+            .distinctBy { it.memoryId to it.fingerprint }
+        return ReconciledMemories(prepared, dependencies, keptForReview, logLines)
     }
 
     /**
@@ -2308,6 +2326,7 @@ object Archivist {
     ): DraftValidation {
         var duplicates = 0
         val valid = ArrayList<ValidDraft>()
+        val dependencies = ArrayList<MemoryDependency>()
         val stagedIdentities = HashSet<String>()
         // The current user-owned Type ids: a suggestion is honored only if it
         // names one of these, otherwise the memory files as No Type (never
@@ -2374,9 +2393,9 @@ object Archivist {
                 MemoryMatch.placementKey(candidate.scope, candidate.targetIds),
                 candidate.typeId.orEmpty()
             ).joinToString("\u0000")
-            if (store.classifyCandidate(candidate) is MemoryMatch.Outcome.AlreadyPresent ||
-                !stagedIdentities.add(stagedIdentity)
-            ) {
+            val repeated = exactRepeatOf(store, candidate)
+            if (repeated != null || !stagedIdentities.add(stagedIdentity)) {
+                repeated?.let(dependencies::add)
                 duplicates++; continue
             }
             // A draft the user deleted is a rejection (owner preference,
@@ -2430,7 +2449,7 @@ object Archivist {
                 is CandidateResult.Valid -> valid.add(ValidDraft(index, d, candidate, filingResult.candidate))
             }
         }
-        return DraftValidation(valid, duplicates)
+        return DraftValidation(valid, duplicates, dependencies)
     }
 
     /**
@@ -2450,8 +2469,9 @@ object Archivist {
         /** Saved memories to link, by [ValidDraft.index]. */
         memoryLinks: Map<Int, List<String>>,
         duplicatesBefore: Int
-    ): Pair<PreparedMemories, List<List<ValidDraft>>> {
+    ): FiledDrafts {
         var duplicates = duplicatesBefore
+        val dependencies = ArrayList<MemoryDependency>()
         val tokenReader = org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter.reader(context)
         val finalParts = StagedMemoryParts(tokenReader)
         val records = finalParts.records
@@ -2500,8 +2520,9 @@ object Archivist {
                     // Checked again here, after the filing requests, so a
                     // memory saved or a suggestion discarded meanwhile counts.
                     val partCandidate = v.candidate.copy(content = splitRecord.content)
-                    if (store.classifyCandidate(partCandidate) is MemoryMatch.Outcome.AlreadyPresent ||
-                        store.isDraftRejected(splitRecord.content)) {
+                    val repeated = exactRepeatOf(store, partCandidate)
+                    if (repeated != null || store.isDraftRejected(splitRecord.content)) {
+                        repeated?.let(dependencies::add)
                         duplicates++
                         continue
                     }
@@ -2530,8 +2551,15 @@ object Archivist {
                 if (others.isNotEmpty()) relationshipHints[id] = (relationshipHints[id].orEmpty() + others).distinct()
             }
         }
-        return PreparedMemories(records, relationshipHints, duplicates, sources) to filedUnits
+        return FiledDrafts(PreparedMemories(records, relationshipHints, duplicates, sources), filedUnits, dependencies)
     }
+
+    private class FiledDrafts(
+        val prepared: PreparedMemories,
+        val units: List<List<ValidDraft>>,
+        /** Existing memories exact repeats were left out for at filing. */
+        val dependencies: List<MemoryDependency>
+    )
 
     /** Whether a saved memory still covers what an "already covered" entry
      *  left out: unchanged, or discarded by the user in exactly that wording. */

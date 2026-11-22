@@ -7565,6 +7565,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     fun classifyCandidate(candidate: MemoryMatch.Candidate): MemoryMatch.Outcome =
         MemoryMatch.classify(candidate, loadComparableLibrary(candidate.scope, excludeId = null))
 
+    /** The existing memory [candidate] repeats exactly, or null. */
+    fun alreadyPresentMemoryId(candidate: MemoryMatch.Candidate): String? =
+        MemoryMatch.alreadyPresentIn(candidate, loadComparableLibrary(candidate.scope, excludeId = null))
+
     /**
      * The DETERMINISTIC exact Possible Matches for a still-pending draft:
      * different-type or archived/superseded exact matches. Recomputed on demand
