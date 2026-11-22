@@ -2497,14 +2497,13 @@ object Archivist {
                     )
                     // Re-running a conversation must not duplicate a part
                     // already filed, or resurrect a part the user rejected.
-                    // Unsplit proposals already passed this same gate.
-                    if (parts.size > 1) {
-                        val partCandidate = v.candidate.copy(content = splitRecord.content)
-                        if (store.classifyCandidate(partCandidate) is MemoryMatch.Outcome.AlreadyPresent ||
-                            store.isDraftRejected(splitRecord.content)) {
-                            duplicates++
-                            continue
-                        }
+                    // Checked again here, after the filing requests, so a
+                    // memory saved or a suggestion discarded meanwhile counts.
+                    val partCandidate = v.candidate.copy(content = splitRecord.content)
+                    if (store.classifyCandidate(partCandidate) is MemoryMatch.Outcome.AlreadyPresent ||
+                        store.isDraftRejected(splitRecord.content)) {
+                        duplicates++
+                        continue
                     }
                     val validHints = (d.relatedExistingMemoryIds + memoryLinks[v.index].orEmpty())
                         .filter { it != splitRecord.memoryId && store.getMemory(it) != null }.distinct()
