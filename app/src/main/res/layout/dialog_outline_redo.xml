@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Redo This Outline pop-up body (owner design, Nov 22 2026): the outline
+     prompt to redo with and a gear that opens it, then Cancel and Okay. The
+     title and explanation are the pop-up's own. Every appearance comes from
+     shared styles. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout style="@style/Widget.App.Dialog.DropdownLine">
+
+        <TextView
+            android:id="@+id/text_redo_prompt"
+            style="@style/Widget.App.Dropdown.CanonicalValue.Fill" />
+
+        <ImageButton
+            android:id="@+id/btn_redo_prompt_gear"
+            style="@style/Widget.App.Dropdown.TrailingGear"
+            android:contentDescription="@string/image_gen_action_edit_prompt"
+            android:tooltipText="@string/image_gen_action_edit_prompt" />
+    </LinearLayout>
+
+    <include layout="@layout/dialog_two_actions_cancel_first" />
+</LinearLayout>

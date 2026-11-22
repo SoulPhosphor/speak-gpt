@@ -111,6 +111,8 @@ class SummarizerPromptsActivity : SettingsPageActivity() {
                 requested ?: SummarizerPromptSets.Kind.SUMMARY,
                 intent.getStringExtra(EXTRA_PROMPT_ID)
             )
+            // Chat Outline's New Prompt: open on a fresh, empty prompt.
+            if (intent.getBooleanExtra(EXTRA_NEW_PROMPT, false)) editor?.addPrompt()
         }
 
         textKind?.setOnClickListener { showKindDropdown() }
@@ -199,6 +201,12 @@ class SummarizerPromptsActivity : SettingsPageActivity() {
         current.markSaved()
         btnSave?.let { SaveIconFlash.flash(it) }
         Toast.makeText(this, R.string.companion_editor_saved_toast, Toast.LENGTH_SHORT).show()
+        // Opened from Chat Outline: Save returns there with the saved prompt.
+        if (intent.getBooleanExtra(EXTRA_RETURN_ON_SAVE, false)) {
+            val savedId = current.variants().getOrNull(current.activeIndex())?.id
+            setResult(RESULT_OK, Intent().putExtra(RESULT_PROMPT_ID, savedId))
+            finish()
+        }
     }
 
     private fun attemptLeave() {
@@ -212,6 +220,11 @@ class SummarizerPromptsActivity : SettingsPageActivity() {
     companion object {
         private const val EXTRA_KIND = "summarizer_prompt_kind"
         private const val EXTRA_PROMPT_ID = "summarizer_prompt_id"
+        private const val EXTRA_NEW_PROMPT = "summarizer_new_prompt"
+        private const val EXTRA_RETURN_ON_SAVE = "summarizer_return_on_save"
+
+        /** The prompt that was open when Save returned to the caller. */
+        const val RESULT_PROMPT_ID = "summarizer_saved_prompt_id"
 
         /** Opens the [kind] collection on [promptId] (Quick Settings gear). */
         fun createIntent(
@@ -221,6 +234,16 @@ class SummarizerPromptsActivity : SettingsPageActivity() {
         ): Intent = Intent(context, SummarizerPromptsActivity::class.java)
             .putExtra(EXTRA_KIND, kind.name)
             .putExtra(EXTRA_PROMPT_ID, promptId)
+
+        /**
+         * Chat Outline's gear: opens the outline prompts on [promptId], or on a
+         * new empty prompt when [promptId] is null. Save returns to the caller
+         * with [RESULT_PROMPT_ID].
+         */
+        fun createOutlineIntent(context: Context, promptId: String?): Intent =
+            createIntent(context, SummarizerPromptSets.Kind.CHAT_OUTLINE, promptId)
+                .putExtra(EXTRA_NEW_PROMPT, promptId == null)
+                .putExtra(EXTRA_RETURN_ON_SAVE, true)
 
         private const val STATE_OPEN_KIND = "state_open_kind"
         private const val STATE_CHOSEN_KIND = "state_chosen_kind"

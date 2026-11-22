@@ -1694,7 +1694,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.register(chatId, chatOutlineStarter)
             // A Chat Outline screen restored without this screen left its run here.
             org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.takePending(chatId)?.let { request ->
-                startChatOutline(request.mode, request.redoIndex)
+                startChatOutline(request.mode, request.redoIndex, request.promptId)
                 startActivity(ChatOutlineActivity.createIntent(this, chatId, chatName))
             }
             // The summary / compaction review may have just closed: run any
@@ -5494,7 +5494,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Starts a Chat Outline run over the whole stored conversation. */
     private fun startChatOutline(
         mode: org.teslasoft.assistant.util.summarizer.SummarizerController.OutlineMode,
-        redoIndex: Int
+        redoIndex: Int,
+        promptId: String?
     ): Boolean {
         if (!org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)) {
             return false
@@ -5507,14 +5508,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             snapshot = snapshot.copy(entries = snapshot.entries.toList()),
             chatName = chatName,
             mode = mode,
-            redoIndex = redoIndex
+            redoIndex = redoIndex,
+            promptId = promptId
         )
         return true
     }
 
     private val chatOutlineStarter =
-        org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.Starter { mode, redoIndex ->
-            startChatOutline(mode, redoIndex)
+        org.teslasoft.assistant.util.summarizer.ChatOutlineRunner.Starter { mode, redoIndex, promptId ->
+            startChatOutline(mode, redoIndex, promptId)
         }
 
     private fun showChatExportDialog() {

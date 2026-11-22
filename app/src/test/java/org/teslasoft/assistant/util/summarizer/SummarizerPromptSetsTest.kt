@@ -105,6 +105,21 @@ class SummarizerPromptSetsTest {
     }
 
     @Test
+    fun outlinePromptsShipChatOutlineAsDefaultAndNotesOutlineBesideIt() {
+        val shipped = SummarizerPromptSets.builtIns(Kind.CHAT_OUTLINE)
+        assertEquals(listOf("Chat Outline", "Notes Outline"), shipped.map { it.name })
+        assertTrue(shipped[0].isDefault)
+        assertFalse(shipped[1].isDefault)
+        assertEquals(SummarizerPrompts.NOTES_OUTLINE, shipped[1].text)
+        // A collection saved before Notes Outline shipped gains it, unchanged in use.
+        val saved = listOf(shipped[0].copy(text = "My outline rules."))
+        val normalized = SummarizerPromptSets.normalize(Kind.CHAT_OUTLINE, saved)
+        assertEquals(listOf(SummarizerPromptSets.CHAT_OUTLINE_ID, SummarizerPromptSets.NOTES_OUTLINE_ID), normalized.map { it.id })
+        assertEquals("My outline rules.", SummarizerPromptSets.activeTextOf(Kind.CHAT_OUTLINE, normalized))
+        assertTrue(SummarizerPromptSets.isBuiltIn(Kind.CHAT_OUTLINE, SummarizerPromptSets.NOTES_OUTLINE_ID))
+    }
+
+    @Test
     fun builtInsAreRecognizedPerCollection() {
         assertTrue(SummarizerPromptSets.isBuiltIn(Kind.SUMMARY, SummarizerPromptSets.STORYTELLER_ID))
         assertTrue(SummarizerPromptSets.isBuiltIn(Kind.COMPACTION, SummarizerPromptSets.REPORTER_ID))

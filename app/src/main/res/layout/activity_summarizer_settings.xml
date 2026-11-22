@@ -44,7 +44,7 @@
         <TextView
             android:id="@+id/activity_title"
             style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/title_summarizer_settings"
+            android:text="@string/title_summarizer_outline_compaction_settings"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"

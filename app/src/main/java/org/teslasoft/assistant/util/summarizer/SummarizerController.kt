@@ -101,7 +101,7 @@ class SummarizerController(
     enum class OperationKind { SUMMARIZING, COMPACTING, OUTLINING }
 
     /** What a Chat Outline run does with its result. */
-    enum class OutlineMode { GENERATE_NEW, REPLACE_ALL, REDO }
+    enum class OutlineMode { GENERATE_NEW, REDO }
 
     /** What a batched request is for: its request text and usage label. */
     private enum class FoldPurpose { COMPACTION, OUTLINE }
@@ -437,7 +437,8 @@ class SummarizerController(
      * and keeps running in the background. Each reply is added after the
      * outline so far. Nothing is saved until every batch has succeeded; a
      * cancelled or failed run keeps nothing. [mode] decides where the new
-     * outline goes; [redoIndex] is the tab Redo This Outline replaces. An
+     * outline goes; [redoIndex] is the tab Redo This Outline replaces;
+     * [promptId] is the outline prompt to use (null: the chat's chosen one). An
      * automatic summary update in progress is stopped first and picks up
      * again on its next cycle. After saving, an empty Tags line is filled
      * with suggested tags; a failed suggestion leaves it empty.
@@ -447,6 +448,7 @@ class SummarizerController(
         chatName: String,
         mode: OutlineMode,
         redoIndex: Int = -1,
+        promptId: String? = null,
         onFinished: (Boolean) -> Unit = {}
     ) {
         if (manualCompactionRunning || outlineRunning) return
@@ -460,7 +462,7 @@ class SummarizerController(
         job = scope.launch {
             var committed = false
             try {
-                val saved = outlineSnapshot(snapshot, chatName, mode, redoIndex)
+                val saved = outlineSnapshot(snapshot, chatName, mode, redoIndex, promptId)
                 committed = saved != null
                 // The outline is saved and the run counts as done from here.
                 // Tags are separate work after it: cancelling them only
@@ -496,7 +498,8 @@ class SummarizerController(
         snapshot: Snapshot,
         chatName: String,
         mode: OutlineMode,
-        redoIndex: Int
+        redoIndex: Int,
+        promptId: String?
     ): String? {
         val chatId = chatIdProvider()
         if (chatId.isBlank() || snapshot.entries.isEmpty()) return null
@@ -507,8 +510,12 @@ class SummarizerController(
         val configuredBatchTokens = prefs.getCompactionAverageTokens()
         val maximumTokens = prefs.getCompactionMaximumTokens()
         var tokenBudget = configuredBatchTokens
+        // The prompt is fixed when the run starts; its name names a new tab.
+        val prompt = SummarizerPromptSets.activeVariant(
+            prefs, SummarizerPromptSets.Kind.CHAT_OUTLINE, chatId, promptId
+        )
         try {
-            val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.CHAT_OUTLINE)
+            val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.CHAT_OUTLINE, prompt.text)
                 ?: return null
             while (done < target) {
                 when (val result = foldBatch(
@@ -540,13 +547,13 @@ class SummarizerController(
         if (outline.isBlank() || chatIdProvider() != chatId) return null
 
         // Read the saved outlines only now, so edits made while this ran stay.
-        val current = ChatOutlines.fromJson(prefs.getChatOutlines())
-        val updated = when (mode) {
-            OutlineMode.REPLACE_ALL -> ChatOutlines.afterReplaceAll(outline)
-            OutlineMode.GENERATE_NEW -> ChatOutlines.afterGenerateNew(current, outline)
-            OutlineMode.REDO ->
-                if (redoIndex in current.indices) ChatOutlines.afterReplace(current, redoIndex, outline)
-                else ChatOutlines.afterGenerateNew(current, outline)
+        val current = ChatOutlines.load(appContext, prefs.getChatOutlines())
+        val updated = when {
+            mode == OutlineMode.REDO && redoIndex in current.indices ->
+                ChatOutlines.afterRedo(current, redoIndex, outline, prompt.id, prompt.name)
+            // A full set takes no new tab; nothing is saved.
+            ChatOutlines.isFull(current) -> return null
+            else -> ChatOutlines.afterGenerateNew(current, outline, prompt.id, prompt.name)
         }
         prefs.setChatOutlines(ChatOutlines.toJson(updated))
         notifyStateChanged()
@@ -1147,7 +1154,9 @@ class SummarizerController(
      *  prompt once per cycle. */
     private fun resolveFoldRuntime(
         prefs: Preferences,
-        promptKind: SummarizerPromptSets.Kind
+        promptKind: SummarizerPromptSets.Kind,
+        /** The prompt's text when the caller already chose it. */
+        promptText: String? = null
     ): FoldRuntime? {
         val endpointId = prefs.getSummarizerEndpointId()
         val endpoint = if (endpointId.isBlank()) null else try {
@@ -1211,7 +1220,7 @@ class SummarizerController(
                 else -> "Automatic"
             },
             prompt = SummarizerPrompts.render(
-                SummarizerPromptSets.activeText(prefs, promptKind, chatIdProvider())
+                promptText ?: SummarizerPromptSets.activeText(prefs, promptKind, chatIdProvider())
             )
         )
     }

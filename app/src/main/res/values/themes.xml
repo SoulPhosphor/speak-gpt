@@ -3390,6 +3390,23 @@
         <item name="android:textAlignment">center</item>
     </style>
 
+    <!-- A gear after a dropdown on the same line: opens the selected item
+         to read or edit it (ui-style-guide.md, "Dropdown with a trailing
+         gear"). -->
+    <style name="Widget.App.Dropdown.TrailingGear" parent="Widget.App.QuickTile.EditButton">
+        <item name="android:layout_marginStart">@dimen/dropdown_trailing_gear_gap</item>
+        <item name="android:layout_marginEnd">0dp</item>
+        <item name="android:src">@drawable/ic_settings</item>
+    </style>
+
+    <!-- A pop-up's dropdown line (dropdown, then optional TrailingGear),
+         inset like the pop-up's message. -->
+    <style name="Widget.App.Dialog.DropdownLine" parent="Widget.App.Dialog.Content">
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingTop">@dimen/dialog_dropdown_line_gap</item>
+    </style>
+
     <style name="Widget.App.ChatOutline.StatusSpinner" parent="Widget.Material3.CircularProgressIndicator.ExtraSmall">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>

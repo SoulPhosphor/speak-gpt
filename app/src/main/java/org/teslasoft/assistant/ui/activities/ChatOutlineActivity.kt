@@ -28,6 +28,8 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.PopupMenu
 import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.core.widget.addTextChangedListener
@@ -40,12 +42,15 @@ import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.dto.CompanionPromptVariant
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.chat.ChatMarkdownRenderer
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 import org.teslasoft.assistant.ui.util.PromptTabBackground
 import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.ui.util.ScreenChrome
+import org.teslasoft.assistant.ui.widgets.AppDropdown
+import org.teslasoft.assistant.util.summarizer.ChatOutline
 import org.teslasoft.assistant.util.summarizer.ChatOutlineRunner
 import org.teslasoft.assistant.util.summarizer.ChatOutlines
 import org.teslasoft.assistant.util.summarizer.SummarizerController
@@ -53,16 +58,22 @@ import org.teslasoft.assistant.util.summarizer.SummarizerController.OperationSta
 import org.teslasoft.assistant.util.summarizer.SummarizerController.OutlineMode
 import org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
 import org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory
+import org.teslasoft.assistant.util.summarizer.SummarizerPromptSession
+import org.teslasoft.assistant.util.summarizer.SummarizerPromptSets
 
 /**
- * Chat Outline (owner design, Nov 13 2026): the chat's outlines, one tab
- * each, shown as formatted markdown. Edit on a tab's menu shows its raw
- * markdown for editing; Save keeps the edit and the Tags line. Generate New
- * Outline adds a tab, Replace All Outlines With New replaces every tab with
- * one, Redo This Outline rewrites one tab, Delete removes one tab, and the
- * header trash can deletes every outline and the tags. Runs are started by
- * the chat screen underneath (ChatOutlineRunner), keep going in the
- * background, and report their percentage in the shared progress pop-up.
+ * Chat Outline (owner design, Nov 13 and Nov 22 2026): the chat's outlines,
+ * one tab each (at most five), shown as formatted markdown. The Outline
+ * Prompt dropdown picks the prompt Generate New Outline uses (kept in step
+ * with Quick Settings' choice for this chat), or New Prompt; its gear opens
+ * that prompt, or a new empty one, in Summarizer Prompts, and Save there
+ * comes back here with it selected. Generate New Outline adds a tab named
+ * after its prompt. A tab's menu offers Edit (its raw markdown; Save keeps
+ * the edit and the Tags line), Rename, Delete, and Redo This Outline, which
+ * asks which prompt to redo it with. The header trash can deletes every
+ * outline and the tags. Runs are started by the chat screen underneath
+ * (ChatOutlineRunner), keep going in the background, and report their
+ * percentage in the shared progress pop-up.
  */
 class ChatOutlineActivity : FragmentActivity() {
 
@@ -72,7 +83,7 @@ class ChatOutlineActivity : FragmentActivity() {
     private var btnSave: ImageButton? = null
     private var btnDeleteAll: ImageButton? = null
     private var btnGenerateNew: MaterialButton? = null
-    private var btnReplaceAll: MaterialButton? = null
+    private var textPrompt: TextView? = null
     private var rowStatus: View? = null
     private var fieldTags: EditText? = null
     private var tabs: ChipGroup? = null
@@ -81,7 +92,35 @@ class ChatOutlineActivity : FragmentActivity() {
     private var textOutline: TextView? = null
     private var fieldOutline: TextInputEditText? = null
 
-    private var outlines: List<String> = emptyList()
+    private var outlines: List<ChatOutline> = emptyList()
+
+    /** The outline prompts, as last saved. */
+    private var promptVariants: List<CompanionPromptVariant> = emptyList()
+    /** New Prompt is selected in the Outline Prompt dropdown. */
+    private var newPromptSelected = false
+    /** The tab a Redo This Outline pop-up is for, or -1. */
+    private var redoIndex = -1
+    /** The Redo pop-up's prompt: an outline prompt's id, or null for New Prompt. */
+    private var redoPromptId: String? = null
+    /** Where Summarizer Prompts was opened from: ORIGIN_MAIN, ORIGIN_REDO or ORIGIN_NONE. */
+    private var promptsOrigin = ORIGIN_NONE
+
+    private val promptsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            loadPromptVariants()
+            val savedId = result.data?.getStringExtra(SummarizerPromptsActivity.RESULT_PROMPT_ID)
+                ?.takeIf { id -> result.resultCode == RESULT_OK && promptVariants.any { it.id == id } }
+            val origin = promptsOrigin
+            promptsOrigin = ORIGIN_NONE
+            if (origin == ORIGIN_REDO) {
+                if (savedId != null) redoPromptId = savedId
+                showRedo()
+            } else if (savedId != null) {
+                SummarizerPromptSession.choose(chatId, SummarizerPromptSets.Kind.CHAT_OUTLINE, savedId)
+                newPromptSelected = false
+            }
+            renderPrompt()
+        }
     private var shownIndex = 0
     /** The tab whose raw markdown is open for editing, or -1. */
     private var editingIndex = -1
@@ -122,7 +161,7 @@ class ChatOutlineActivity : FragmentActivity() {
         btnDeleteAll = findViewById(R.id.btn_delete_outlines)
         btnSave = findViewById(R.id.btn_save)
         btnGenerateNew = findViewById(R.id.btn_generate_new_outline)
-        btnReplaceAll = findViewById(R.id.btn_replace_all_outlines)
+        textPrompt = findViewById(R.id.text_outline_prompt)
         rowStatus = findViewById(R.id.row_outline_status)
         fieldTags = findViewById(R.id.field_outline_tags)
         fieldTags?.let { org.teslasoft.assistant.ui.util.BoundedFieldScroll.attach(it) }
@@ -143,20 +182,28 @@ class ChatOutlineActivity : FragmentActivity() {
                 .ifBlank { getString(R.string.label_untitled_chat) }
 
         savedTags = preferences?.getChatOutlineTags().orEmpty()
-        outlines = ChatOutlines.fromJson(preferences?.getChatOutlines())
+        outlines = ChatOutlines.load(this, preferences?.getChatOutlines())
         shownIndex = savedInstanceState?.getInt(STATE_SHOWN, 0) ?: 0
         editingIndex = savedInstanceState?.getInt(STATE_EDITING, -1) ?: -1
+        newPromptSelected = savedInstanceState?.getBoolean(STATE_NEW_PROMPT, false) ?: false
+        redoIndex = savedInstanceState?.getInt(STATE_REDO_INDEX, -1) ?: -1
+        redoPromptId = savedInstanceState?.getString(STATE_REDO_PROMPT)
+        promptsOrigin = savedInstanceState?.getInt(STATE_PROMPTS_ORIGIN, ORIGIN_NONE) ?: ORIGIN_NONE
+        loadPromptVariants()
         fieldTags?.setText(savedInstanceState?.getString(STATE_TAGS) ?: savedTags)
         clampIndexes()
         if (editingIndex >= 0) {
-            fieldOutline?.setText(savedInstanceState?.getString(STATE_EDIT_TEXT) ?: outlines[editingIndex])
+            fieldOutline?.setText(savedInstanceState?.getString(STATE_EDIT_TEXT) ?: outlines[editingIndex].text)
         }
 
         btnBack?.setOnClickListener { attemptLeave() }
         btnSave?.setOnClickListener { save() }
         btnDeleteAll?.setOnClickListener { confirmDeleteAll() }
-        btnGenerateNew?.setOnClickListener { startRun(OutlineMode.GENERATE_NEW) }
-        btnReplaceAll?.setOnClickListener { confirmReplaceAll() }
+        btnGenerateNew?.setOnClickListener { onGenerateNew() }
+        textPrompt?.setOnClickListener { showPromptDropdown() }
+        findViewById<View>(R.id.btn_outline_prompt_gear)?.setOnClickListener {
+            openPrompt(if (newPromptSelected) null else selectedPromptId(), ORIGIN_MAIN)
+        }
         btnMenu?.setOnClickListener { showTabMenu(it) }
         fieldTags?.addTextChangedListener { refreshSave() }
         fieldOutline?.addTextChangedListener { refreshSave() }
@@ -169,10 +216,15 @@ class ChatOutlineActivity : FragmentActivity() {
         render()
         renderOperation(SummarizerControllerRegistry.operationState(chatId))
         SummarizerControllerRegistry.addAppListener(operationListener)
+        // A Redo pop-up open when Android rebuilt this screen opens again.
+        if (redoIndex >= 0 && promptsOrigin == ORIGIN_NONE) showRedo()
     }
 
     override fun onResume() {
         super.onResume()
+        // Prompts may have been renamed, added or deleted elsewhere.
+        loadPromptVariants()
+        renderPrompt()
         // Refreshed on every return, so a scan that finished meanwhile shows.
         findViewById<TextView>(R.id.text_memory_scan_progress)?.let {
             org.teslasoft.assistant.ui.chat.ChatScanProgressLine.bind(this, this, it, chatId)
@@ -193,6 +245,10 @@ class ChatOutlineActivity : FragmentActivity() {
         outState.putInt(STATE_EDITING, editingIndex)
         outState.putString(STATE_TAGS, fieldTags?.text?.toString().orEmpty())
         if (editingIndex >= 0) outState.putString(STATE_EDIT_TEXT, fieldOutline?.text?.toString().orEmpty())
+        outState.putBoolean(STATE_NEW_PROMPT, newPromptSelected)
+        outState.putInt(STATE_REDO_INDEX, redoIndex)
+        outState.putString(STATE_REDO_PROMPT, redoPromptId)
+        outState.putInt(STATE_PROMPTS_ORIGIN, promptsOrigin)
     }
 
     /* ------------------------------ rendering ------------------------------ */
@@ -204,16 +260,119 @@ class ChatOutlineActivity : FragmentActivity() {
 
     private fun render() {
         val hasOutlines = outlines.isNotEmpty()
-        btnReplaceAll?.visibility = if (hasOutlines) View.VISIBLE else View.GONE
         tabs?.visibility = if (hasOutlines) View.VISIBLE else View.GONE
         frame?.visibility = if (hasOutlines) View.VISIBLE else View.GONE
         btnGenerateNew?.isEnabled = !running
-        btnReplaceAll?.isEnabled = !running
         btnDeleteAll?.isEnabled = !running && (hasOutlines || savedTags.isNotEmpty())
         btnMenu?.visibility = if (running) View.GONE else View.VISIBLE
+        renderPrompt()
         renderTabs()
         renderShownOutline()
         refreshSave()
+    }
+
+    /* --------------------------- outline prompt ---------------------------- */
+
+    private fun loadPromptVariants() {
+        val prefs = preferences ?: return
+        promptVariants = SummarizerPromptSets.load(prefs, SummarizerPromptSets.Kind.CHAT_OUTLINE)
+    }
+
+    /** The outline prompt Generate New Outline uses: this chat's choice, else the default. */
+    private fun selectedPromptId(): String? = promptVariants.getOrNull(
+        SummarizerPromptSets.selectedIndex(
+            promptVariants,
+            SummarizerPromptSession.chosenId(chatId, SummarizerPromptSets.Kind.CHAT_OUTLINE)
+        )
+    )?.id
+
+    /** The outline prompts' names, then New Prompt. */
+    private fun promptLabels(): List<String> =
+        promptVariants.map { it.name } + getString(R.string.chat_outline_new_prompt)
+
+    /** A dropdown position for [promptId]; null (New Prompt) is the last. */
+    private fun promptPosition(promptId: String?): Int {
+        val index = promptId?.let { id -> promptVariants.indexOfFirst { it.id == id } } ?: -1
+        return if (index >= 0) index else promptVariants.size
+    }
+
+    private fun renderPrompt() {
+        textPrompt?.text = promptLabels()[promptPosition(if (newPromptSelected) null else selectedPromptId())]
+    }
+
+    private fun showPromptDropdown() {
+        val anchor = textPrompt ?: return
+        val labels = promptLabels()
+        val current = promptPosition(if (newPromptSelected) null else selectedPromptId())
+        AppDropdown.show(anchor, labels, current) { picked ->
+            val variant = promptVariants.getOrNull(picked)
+            newPromptSelected = variant == null
+            if (variant != null) {
+                SummarizerPromptSession.choose(chatId, SummarizerPromptSets.Kind.CHAT_OUTLINE, variant.id)
+            }
+            renderPrompt()
+        }
+    }
+
+    /** Opens [promptId] in Summarizer Prompts, or a new empty prompt when null. */
+    private fun openPrompt(promptId: String?, origin: Int) {
+        promptsOrigin = origin
+        promptsLauncher.launch(SummarizerPromptsActivity.createOutlineIntent(this, promptId))
+    }
+
+    /** New Prompt chosen where a prompt is needed: say so and open a new prompt. */
+    private fun requireNewPrompt(origin: Int) {
+        Toast.makeText(this, R.string.chat_outline_new_prompt_toast, Toast.LENGTH_SHORT).show()
+        openPrompt(null, origin)
+    }
+
+    private fun onGenerateNew() {
+        if (running) return
+        when {
+            ChatOutlines.isFull(outlines) -> ChatOutlineDialogs.showLimit(this)
+            newPromptSelected -> requireNewPrompt(ORIGIN_MAIN)
+            else -> startRun(OutlineMode.GENERATE_NEW, promptId = selectedPromptId())
+        }
+    }
+
+    /* ------------------------------ redo ----------------------------------- */
+
+    private fun confirmRedo(index: Int) {
+        if (running || index !in outlines.indices) return
+        redoIndex = index
+        // Opens on the prompt this tab was made with, when it still exists.
+        redoPromptId = outlines[index].promptId?.takeIf { id -> promptVariants.any { it.id == id } }
+            ?: selectedPromptId()
+        showRedo()
+    }
+
+    private fun showRedo() {
+        if (running || redoIndex !in outlines.indices || isFinishing) {
+            redoIndex = -1
+            return
+        }
+        ChatOutlineDialogs.showRedo(
+            this,
+            promptLabels(),
+            promptPosition(redoPromptId),
+            onSelect = { position -> redoPromptId = promptVariants.getOrNull(position)?.id },
+            onGear = { position ->
+                redoPromptId = promptVariants.getOrNull(position)?.id
+                openPrompt(redoPromptId, ORIGIN_REDO)
+            },
+            onOkay = { position ->
+                val variant = promptVariants.getOrNull(position)
+                redoPromptId = variant?.id
+                if (variant == null) {
+                    requireNewPrompt(ORIGIN_REDO)
+                } else {
+                    val index = redoIndex
+                    redoIndex = -1
+                    withSavedEdits { startRun(OutlineMode.REDO, index, variant.id) }
+                }
+            },
+            onCancel = { redoIndex = -1 }
+        )
     }
 
     private fun renderTabs() {
@@ -229,7 +388,7 @@ class ChatOutlineActivity : FragmentActivity() {
                 this, null, 0,
                 if (shown) R.style.Widget_App_PromptTab_Active else R.style.Widget_App_PromptTab
             )
-            tab.text = tabLabel(index)
+            tab.text = outlines[index].name
             tab.background = PromptTabBackground(
                 if (shown) surface else Color.TRANSPARENT,
                 outlineColor,
@@ -240,10 +399,6 @@ class ChatOutlineActivity : FragmentActivity() {
             row.addView(tab)
         }
     }
-
-    private fun tabLabel(index: Int): String =
-        ChatOutlines.numberedLabel(index)?.let { getString(R.string.chat_outline_tab_numbered, it) }
-            ?: getString(R.string.chat_outline_tab_first)
 
     private fun renderShownOutline() {
         val text = textOutline ?: return
@@ -256,7 +411,7 @@ class ChatOutlineActivity : FragmentActivity() {
             field.visibility = View.GONE
             text.visibility = View.VISIBLE
             ChatMarkdownRenderer.builder(this, text.textSize).build()
-                .setMarkdown(text, outlines[shownIndex])
+                .setMarkdown(text, outlines[shownIndex].text)
         }
     }
 
@@ -273,17 +428,31 @@ class ChatOutlineActivity : FragmentActivity() {
         val index = shownIndex
         val popup = PopupMenu(this, anchor)
         if (editingIndex != index) popup.menu.add(0, MENU_EDIT, 0, R.string.chat_outline_menu_edit)
-        popup.menu.add(0, MENU_REDO, 1, R.string.chat_outline_menu_redo)
+        popup.menu.add(0, MENU_RENAME, 1, R.string.prompt_menu_rename)
         if (outlines.size > 1) popup.menu.add(0, MENU_DELETE, 2, R.string.chat_outline_menu_delete)
+        popup.menu.add(0, MENU_REDO, 3, R.string.chat_outline_menu_redo)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_EDIT -> startEditing(index)
-                MENU_REDO -> withSavedEdits { startRun(OutlineMode.REDO, index) }
+                MENU_RENAME -> rename(index)
                 MENU_DELETE -> confirmDeleteOne(index)
+                MENU_REDO -> confirmRedo(index)
             }
             true
         }
         popup.show()
+    }
+
+    private fun rename(index: Int) {
+        if (index !in outlines.indices) return
+        ChatOutlineDialogs.showRename(this, outlines[index].name) { name ->
+            val prefs = preferences ?: return@showRename
+            val updated = ChatOutlines.afterRename(ChatOutlines.load(this, prefs.getChatOutlines()), index, name)
+            prefs.setChatOutlines(ChatOutlines.toJson(updated))
+            outlines = updated
+            clampIndexes()
+            render()
+        }
     }
 
     private fun startEditing(index: Int) {
@@ -296,7 +465,7 @@ class ChatOutlineActivity : FragmentActivity() {
 
     private fun openEditor(index: Int) {
         editingIndex = index
-        fieldOutline?.setText(outlines[index])
+        fieldOutline?.setText(outlines[index].text)
         render()
         fieldOutline?.requestFocus()
     }
@@ -307,7 +476,7 @@ class ChatOutlineActivity : FragmentActivity() {
 
     private fun editDirty(): Boolean =
         editingIndex in outlines.indices &&
-            fieldOutline?.text?.toString().orEmpty() != outlines[editingIndex]
+            fieldOutline?.text?.toString().orEmpty() != outlines[editingIndex].text
 
     private fun isDirty(): Boolean = tagsDirty() || editingIndex >= 0
 
@@ -321,8 +490,8 @@ class ChatOutlineActivity : FragmentActivity() {
         if (running) return
         val tags = fieldTags?.text?.toString().orEmpty().trim()
         if (editingIndex in outlines.indices) {
-            val current = ChatOutlines.fromJson(prefs.getChatOutlines())
-            val updated = ChatOutlines.afterReplace(current, editingIndex, fieldOutline?.text?.toString().orEmpty())
+            val current = ChatOutlines.load(this, prefs.getChatOutlines())
+            val updated = ChatOutlines.afterEdit(current, editingIndex, fieldOutline?.text?.toString().orEmpty())
             prefs.setChatOutlines(ChatOutlines.toJson(updated))
             outlines = updated
         }
@@ -384,13 +553,6 @@ class ChatOutlineActivity : FragmentActivity() {
         dialog.show()
     }
 
-    private fun confirmReplaceAll() {
-        if (running) return
-        confirm(R.string.chat_outline_replace_all_title, R.string.chat_outline_replace_all_body) {
-            withSavedEdits { startRun(OutlineMode.REPLACE_ALL) }
-        }
-    }
-
     private fun confirmDeleteAll() {
         if (running) return
         confirm(R.string.chat_outline_delete_all_title, R.string.chat_outline_delete_all_body) {
@@ -409,7 +571,7 @@ class ChatOutlineActivity : FragmentActivity() {
     private fun confirmDeleteOne(index: Int) {
         confirm(R.string.chat_outline_delete_one_title, R.string.chat_outline_delete_one_body) {
             val prefs = preferences ?: return@confirm
-            val current = ChatOutlines.fromJson(prefs.getChatOutlines())
+            val current = ChatOutlines.load(this, prefs.getChatOutlines())
             val updated = ChatOutlines.afterDelete(current, index)
             prefs.setChatOutlines(ChatOutlines.toJson(updated))
             outlines = updated
@@ -425,19 +587,19 @@ class ChatOutlineActivity : FragmentActivity() {
 
     /* ------------------------------- runs ---------------------------------- */
 
-    private fun startRun(mode: OutlineMode, redoIndex: Int = -1) {
+    private fun startRun(mode: OutlineMode, redoIndex: Int = -1, promptId: String? = null) {
         if (running) return
         if (!ChatOutlineRunner.hasStarter(chatId) && SummarizerController.isConfigured(this)) {
             // Android rebuilt the app and the chat screen underneath is not
             // ready yet: hand it the run; it starts it and reopens this screen.
             // Closing this screen first asks about unsaved changes.
             withSavedEdits {
-                ChatOutlineRunner.request(chatId, mode, redoIndex)
+                ChatOutlineRunner.request(chatId, mode, redoIndex, promptId)
                 finish()
             }
             return
         }
-        if (ChatOutlineRunner.start(chatId, mode, redoIndex)) return
+        if (ChatOutlineRunner.start(chatId, mode, redoIndex, promptId)) return
         // Without a Summary Model nothing can run; say so the way a failed run would.
         if (!SummarizerController.isConfigured(this)) {
             showFailure(
@@ -499,7 +661,7 @@ class ChatOutlineActivity : FragmentActivity() {
     private fun reloadOutlines(showNewest: Boolean) {
         val prefs = preferences ?: return
         val previousCount = outlines.size
-        outlines = ChatOutlines.fromJson(prefs.getChatOutlines())
+        outlines = ChatOutlines.load(this, prefs.getChatOutlines())
         val storedTags = prefs.getChatOutlineTags()
         if (!tagsDirty()) fieldTags?.setText(storedTags)
         savedTags = storedTags
@@ -645,9 +807,17 @@ class ChatOutlineActivity : FragmentActivity() {
         private const val STATE_EDITING = "state_editing_outline"
         private const val STATE_TAGS = "state_outline_tags"
         private const val STATE_EDIT_TEXT = "state_outline_edit_text"
+        private const val STATE_NEW_PROMPT = "state_outline_new_prompt"
+        private const val STATE_REDO_INDEX = "state_outline_redo_index"
+        private const val STATE_REDO_PROMPT = "state_outline_redo_prompt"
+        private const val STATE_PROMPTS_ORIGIN = "state_outline_prompts_origin"
         private const val MENU_EDIT = 1
         private const val MENU_REDO = 2
         private const val MENU_DELETE = 3
+        private const val MENU_RENAME = 4
+        private const val ORIGIN_NONE = 0
+        private const val ORIGIN_MAIN = 1
+        private const val ORIGIN_REDO = 2
 
         fun createIntent(context: Context, chatId: String, chatName: String): Intent =
             Intent(context, ChatOutlineActivity::class.java)

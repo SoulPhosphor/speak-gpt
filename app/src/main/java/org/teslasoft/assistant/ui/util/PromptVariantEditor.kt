@@ -238,7 +238,8 @@ class PromptVariantEditor(
         }
     }
 
-    private fun addPrompt() {
+    /** Adds an empty prompt and opens it (the + button). */
+    fun addPrompt() {
         flushActivePrompt()
         val name = CompanionPromptVariant.nextPromptName(variants)
         variants.add(CompanionPromptVariant(name = name, text = "", isDefault = false))

@@ -45,6 +45,7 @@ object SummarizerPromptSets {
     const val IMAGE_SUMMARY_ID = "builtin_image_summary"
     const val IMAGE_SUMMARY_NAME = "Image Summary"
     const val CHAT_OUTLINE_ID = "builtin_chat_outline"
+    const val NOTES_OUTLINE_ID = "builtin_notes_outline"
 
     /** The shipped prompts of a collection, in display order. */
     fun builtIns(kind: Kind): List<CompanionPromptVariant> = when (kind) {
@@ -90,6 +91,12 @@ object SummarizerPromptSets {
                 name = SummarizerPrompts.CHAT_OUTLINE_NAME,
                 text = SummarizerPrompts.CHAT_OUTLINE,
                 isDefault = true
+            ),
+            CompanionPromptVariant(
+                id = NOTES_OUTLINE_ID,
+                name = SummarizerPrompts.NOTES_OUTLINE_NAME,
+                text = SummarizerPrompts.NOTES_OUTLINE,
+                isDefault = false
             )
         )
     }
@@ -163,6 +170,26 @@ object SummarizerPromptSets {
      */
     fun activeText(prefs: Preferences, kind: Kind, chatId: String = ""): String =
         activeTextOf(kind, load(prefs, kind), SummarizerPromptSession.chosenId(chatId, kind))
+
+    /**
+     * The prompt a request for [chatId] uses: [promptId] when given and still
+     * present, else the prompt chosen in Quick Settings for this chat screen,
+     * else the default. A blank prompt's text falls back to the first
+     * built-in prompt's.
+     */
+    fun activeVariant(
+        prefs: Preferences,
+        kind: Kind,
+        chatId: String = "",
+        promptId: String? = null
+    ): CompanionPromptVariant {
+        val variants = load(prefs, kind)
+        val explicit = promptId?.let { id -> variants.firstOrNull { it.id == id } }
+        val variant = explicit
+            ?: variants.getOrNull(selectedIndex(variants, SummarizerPromptSession.chosenId(chatId, kind)))
+            ?: builtIns(kind).first()
+        return if (variant.text.isBlank()) variant.copy(text = builtIns(kind).first().text) else variant
+    }
 
     /** Index of the prompt in use: the chosen prompt when present, else the default. */
     fun selectedIndex(variants: List<CompanionPromptVariant>, chosenId: String?): Int {

@@ -255,6 +255,30 @@ You may refer to the user as user but write the AI portion in first person inste
 Reply only with the outline.
     """.trimIndent()
 
+    const val NOTES_OUTLINE_NAME = "Notes Outline"
+
+    /** The second shipped outline prompt (owner request, Nov 22 2026): what
+     *  came out of the conversation (suggestions, wording, decisions, open
+     *  questions) under one header per topic, without restating facts the
+     *  user already knows. */
+    val NOTES_OUTLINE = """
+You write an outline of this conversation that captures what the user will want to look back on later. The user already knows the facts of their own situation, so do not restate them. Focus on what came out of the conversation. Below are the outline written so far, for context, and the next messages in the conversation. Write the outline for these messages.
+
+Write in markdown. Use one header for each problem or topic, in the order they come up. Under each header, write one short line naming the problem so the user recognizes it. Then use these labels, only when something belongs under them:
+
+- **Suggestions:** what I recommended or offered as options.
+- **Wording:** any wording I proposed, quoted exactly.
+- **Decided:** what the user chose or agreed to.
+- **Still open:** questions or choices left unresolved.
+- **To remember:** anything else worth keeping for later.
+
+Use short bullet points under each label. Leave out a label when nothing belongs under it. Do not repeat anything already in the outline unless something new happened with it. Do not present suggestions as decisions.
+
+You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
+
+Reply only with the outline.
+    """.trimIndent()
+
     /**
      * App scaffolding for every Chat Outline request, not an editable prompt:
      * the outline is built one batch of messages at a time, in order, and the
