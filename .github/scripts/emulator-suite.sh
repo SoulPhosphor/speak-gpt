@@ -10,8 +10,10 @@
 #   passed          the runner reported "OK (".
 #   test-failure    the runner reported failing tests or an app crash. Never retried.
 #   timeout         the class exceeded CLASS_TIMEOUT_SECONDS. Never retried.
-#   no-result       no result although the emulator still responds. Never retried.
-#   infrastructure  no result and the emulator stopped responding. After a
+#   incomplete      the runner did not provably complete (see completion_problem:
+#                   adb exit code, final result code, OK count vs started
+#                   tests) although the emulator still responds. Never retried.
+#   infrastructure  not provably complete and the emulator stopped responding. After a
 #                   successful recovery the class runs once more; both attempts
 #                   stay in the summary.
 #   setup-failure   the class could not be prepared (for example the network
@@ -189,14 +191,43 @@ recover_emulator() {
 
 step2_model_present=1
 
+# Why a run did not provably complete, or nothing when it did. "Complete"
+# means all of: adb exited 0; the runner's final INSTRUMENTATION_CODE is -1
+# (RESULT_OK) and is the last result code printed; the summary says
+# "OK (N tests)"; no test reported an error (-1) or failure (-2); and N plus
+# ignored tests (-3) equals the number of tests that started. A bare "OK ("
+# is never enough.
+completion_problem() {
+  local output="$1" exit_code="$2" text starts ignored bad ok_n codes
+  [ "$exit_code" -eq 0 ] || { echo "adb exited $exit_code"; return; }
+  text="$(tr -d '\r' < "$output" 2>/dev/null)"
+  codes="$(grep -E '^INSTRUMENTATION_CODE: ' <<<"$text")"
+  [ -n "$codes" ] || { echo "no INSTRUMENTATION_CODE (runner did not finish)"; return; }
+  [ "$(tail -n 1 <<<"$codes")" = "INSTRUMENTATION_CODE: -1" ] || { echo "final $(tail -n 1 <<<"$codes")"; return; }
+  ok_n="$(grep -oE '^OK \([0-9]+ tests?\)' <<<"$text" | tail -n 1 | grep -oE '[0-9]+')"
+  [ -n "$ok_n" ] || { echo "no OK summary"; return; }
+  starts="$(grep -c '^INSTRUMENTATION_STATUS_CODE: 1$' <<<"$text")"
+  ignored="$(grep -c '^INSTRUMENTATION_STATUS_CODE: -3$' <<<"$text")"
+  bad="$(grep -cE '^INSTRUMENTATION_STATUS_CODE: -(1|2)$' <<<"$text")"
+  [ "$bad" -eq 0 ] || { echo "$bad test(s) reported an error or failure"; return; }
+  [ "$starts" -gt 0 ] || { echo "no test started"; return; }
+  [ $((ok_n + ignored)) -eq "$starts" ] || { echo "OK ($ok_n) + ignored ($ignored) != started ($starts)"; return; }
+}
+
+# Prints the outcome; COMPLETION_NOTE explains anything short of "passed".
+COMPLETION_NOTE=""
 classify() {
   local output="$1" exit_code="$2"
+  COMPLETION_NOTE=""
   if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 137 ]; then echo timeout; return; fi
-  if grep -Fq "OK (" "$output" 2>/dev/null; then echo passed; return; fi
-  if grep -Eq 'FAILURES!!!|INSTRUMENTATION_STATUS_CODE: -2|shortMsg=Process crashed|INSTRUMENTATION_FAILED' "$output" 2>/dev/null; then
+  if tr -d '\r' < "$output" 2>/dev/null | grep -Eq '^FAILURES!!!|^INSTRUMENTATION_STATUS_CODE: -(1|2)$|shortMsg=Process crashed|INSTRUMENTATION_FAILED'; then
     echo test-failure; return
   fi
-  if device_healthy; then echo no-result; else echo infrastructure; fi
+  COMPLETION_NOTE="$(completion_problem "$output" "$exit_code")"
+  if [ -z "$COMPLETION_NOTE" ]; then echo passed; return; fi
+  # Not provably complete. Only a lost emulator is infrastructure (eligible
+  # for one recovered rerun); otherwise the class fails as incomplete.
+  if device_healthy; then echo incomplete; else echo infrastructure; fi
 }
 
 last_test_line() {
@@ -297,15 +328,17 @@ run_class_attempt() {
     || event "$result_name: could not save its logcat"
   if [ "$result_name" = "$STEP2_CLASS" ]; then pull_step2_evidence; fi
 
-  local outcome; outcome="$(classify "$output" "$exit_code")"
+  # classify runs in this shell (not a subshell) so COMPLETION_NOTE survives.
+  local outcome
+  classify "$output" "$exit_code" > "$RESULTS_DIR/.outcome"
+  outcome="$(cat "$RESULTS_DIR/.outcome")"
   local last; last="$(last_test_line "$output")"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$class_name" "$attempt" "$outcome" "$((SECONDS - start))" "$exit_code" "last test: ${last:-none}" >> "$SUMMARY_TSV"
+  local note="last test: ${last:-none}"
+  [ -n "$COMPLETION_NOTE" ] && note="$note; not complete: $COMPLETION_NOTE"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$class_name" "$attempt" "$outcome" "$((SECONDS - start))" "$exit_code" "$note" >> "$SUMMARY_TSV"
   if [ "$outcome" != "passed" ]; then
+    [ -n "$COMPLETION_NOTE" ] && event "$result_name attempt $attempt: $outcome ($COMPLETION_NOTE)"
     collect_diagnostics "$result_name-$outcome$suffix" >/dev/null
-  elif [ "$exit_code" -ne 0 ]; then
-    # The runner reported OK; the adb connection ended with an error afterwards.
-    event "$result_name: runner reported OK but adb exited $exit_code"
-    annotate warning "$result_name: tests reported OK but adb exited $exit_code afterwards"
   fi
   OUTCOME="$outcome"
 }
@@ -376,5 +409,7 @@ case "$MODE" in
   start) shift; cmd_start "$@" ;;
   run-suite) shift; cmd_run_suite "$@" ;;
   diagnostics) shift; collect_diagnostics "${1:-manual}" ;;
-  *) echo "usage: $0 start | run-suite CLASS... | diagnostics LABEL" >&2; exit 2 ;;
+  # Offline check of the completion rule against a saved runner output.
+  check-output) shift; completion_problem "$1" "${2:-0}" ;;
+  *) echo "usage: $0 start | run-suite CLASS... | diagnostics LABEL | check-output FILE [ADB_EXIT]" >&2; exit 2 ;;
 esac
