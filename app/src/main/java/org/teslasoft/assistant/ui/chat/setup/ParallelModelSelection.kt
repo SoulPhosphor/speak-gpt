@@ -1,5 +1,7 @@
 package org.teslasoft.assistant.ui.chat.setup
 
+import com.google.gson.Gson
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.conversation.setup.ExperimentalSetup
 import org.teslasoft.assistant.conversation.setup.ExperimentalSetupCodec
 import org.teslasoft.assistant.conversation.setup.SetupModel
@@ -25,6 +27,15 @@ internal class ParallelModelSelection(raw: String) {
         val existing = models.firstOrNull { it.identity == model.identity } ?: return toggle(model)
         models = models.map { if (it.id == existing.id) model.copy(id = existing.id) else it }
         return true
+    }
+
+    fun editSettings(identity: ModelIdentity, edit: (FavoriteModelObject) -> Unit) {
+        models = models.map { model ->
+            if (model.identity != identity) model else {
+                val settings = model.settings().also(edit)
+                model.copy(settingsJson = Gson().toJson(settings)).also { it.validate() }
+            }
+        }
     }
 
     fun raw(): String = ExperimentalSetupCodec.encode(ExperimentalSetup(models = models))

@@ -34,7 +34,9 @@ internal class SavedModelPickerAdapter(
     /** Whose saved models these are: Model Settings opens in the same lists. */
     private val scope: ModelPickerScope = ModelPickerScope.CHAT,
     /** Optional multi-select ownership; ordinary callers keep the existing single selection. */
-    private val isSelected: ((ModelIdentity) -> Boolean)? = null
+    private val isSelected: ((ModelIdentity) -> Boolean)? = null,
+    private val onParameters: ((ModelIdentity) -> Unit)? = null,
+    private val onReasoning: ((ModelIdentity) -> Unit)? = null
 ) : BaseAdapter() {
 
     enum class Source { FAVORITES, RECENT, CATALOG }
@@ -127,7 +129,8 @@ internal class SavedModelPickerAdapter(
         holder.reasoningIndicator.isVisible = showsReasoning && !canConfigure
         holder.reasoning.isVisible = showsReasoning && canConfigure
         holder.reasoning.setOnClickListener {
-            context.startActivity(ReasoningSettingsActivity.createIntent(context, target.modelId, target.endpointId))
+            if (onReasoning != null) onReasoning.invoke(target)
+            else context.startActivity(ReasoningSettingsActivity.createIntent(context, target.modelId, target.endpointId))
         }
 
         holder.routing.isVisible = row.supportsRouting
@@ -154,7 +157,7 @@ internal class SavedModelPickerAdapter(
                 when (action) {
                     PIN -> onPin(settings, !row.pinned)
                     FAVORITE -> onFavorite(settings)
-                    MODEL_SETTINGS -> context.startActivity(
+                    MODEL_SETTINGS -> if (onParameters != null) onParameters.invoke(target) else context.startActivity(
                         ModelParametersActivity.createIntent(context, target.modelId, target.endpointId, chatId, scope)
                     )
                     DELETE -> onDelete(target, source)

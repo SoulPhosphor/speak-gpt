@@ -19,6 +19,7 @@ package org.teslasoft.assistant.ui.fragments.dialogs
 import org.teslasoft.assistant.ui.chat.setup.ParallelModelSelection
 import org.teslasoft.assistant.ui.chat.setup.SetupModelResolver
 import org.teslasoft.assistant.conversation.setup.ExperimentalSetup
+import org.teslasoft.assistant.ui.chat.setup.ParallelPickerRouting
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -191,6 +192,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     }
 
+    private var pendingConfigurationTarget: ModelIdentity? = null
+    private var pendingConfigurationKind: String? = null
     private var parallelSelection: ParallelModelSelection? = null
     private val parallelPicker get() = arguments?.containsKey(ARG_PARALLEL_MODELS) == true
 
@@ -305,6 +308,12 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             savedInstanceState?.getString(ARG_PARALLEL_MODELS)
                 ?: requireArguments().getString(ARG_PARALLEL_MODELS)!!
         )
+        savedInstanceState?.getString("parallelConfigurationEndpoint")?.let { endpoint ->
+            savedInstanceState.getString("parallelConfigurationModel")?.let { model ->
+                pendingConfigurationTarget = ModelIdentity(endpoint, model)
+                pendingConfigurationKind = savedInstanceState.getString("parallelConfigurationKind")
+            }
+        }
         pickerTab = PickerTab.entries.firstOrNull {
             it.name == (savedInstanceState?.getString(STATE_PICKER_TAB) ?: arguments?.getString(ARG_START_TAB))
         } ?: PickerTab.FAVORITES
@@ -341,11 +350,59 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             val savedModel = result.data?.getStringExtra(ChooseProviderActivity.EXTRA_MODEL)
                 ?.takeIf { it.isNotBlank() }
                 ?: pendingModel.modelId
-            finishModelSelection(savedModel, pendingModel.endpointId, RoutingChoice.Keep, updateParallelSelection = true)
+            if (parallelPicker && result.data != null) {
+                val original = parallelSelection?.models?.firstOrNull {
+                    it.identity == ModelIdentity(pendingModel.endpointId, savedModel)
+                }?.settings() ?: favoriteModelsPreferences?.getFavorite(savedModel, pendingModel.endpointId)
+                    ?: FavoriteModelObject(savedModel, pendingModel.endpointId)
+                val routing = ParallelPickerRouting.result(result.data!!, original)
+                finishModelSelection(savedModel, pendingModel.endpointId, RoutingChoice.Use(routing), updateParallelSelection = true)
+            } else finishModelSelection(savedModel, pendingModel.endpointId, RoutingChoice.Keep, updateParallelSelection = true)
         }
         // Cancel/back leaves the selector open on purpose. The not-yet-applied
         // bad model never reached the chat, so choosing another model is a valid
         // recovery without another modal layer.
+    }
+
+    private val modelConfigurationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val target = pendingConfigurationTarget
+        val kind = pendingConfigurationKind
+        pendingConfigurationTarget = null
+        pendingConfigurationKind = null
+        if (parallelPicker && target != null && result.resultCode == Activity.RESULT_OK) {
+            parallelSelection?.editSettings(target) { settings ->
+                if (kind == "reasoning") {
+                    favoriteModelsPreferences?.getFavorite(target.modelId, target.endpointId)?.let { saved ->
+                        settings.reasoningEffort = saved.reasoningEffort
+                        settings.showReasoning = saved.showReasoning
+                    }
+                } else if (kind == "parameters") {
+                    val context = requireContext()
+                    val saved = FavoriteModelParameters.startingParameters(context, target.modelId, target.endpointId)
+                    val defaults = FavoriteModelParameters.apiDefaults(context, target.modelId, target.endpointId)
+                    settings.streaming = saved.streaming ?: defaults.streaming
+                    settings.temperature = saved.temperature ?: defaults.temperature
+                    settings.topP = saved.topP ?: defaults.topP
+                    settings.frequencyPenalty = saved.frequencyPenalty ?: defaults.frequencyPenalty
+                    settings.presencePenalty = saved.presencePenalty ?: defaults.presencePenalty
+                }
+            }
+            reloadFavorites()
+            render()
+        }
+    }
+
+    private fun openParallelModelConfiguration(target: ModelIdentity, kind: String) {
+        pendingConfigurationTarget = target
+        pendingConfigurationKind = kind
+        val intent = if (kind == "reasoning") {
+            org.teslasoft.assistant.ui.activities.ReasoningSettingsActivity.createIntent(
+                requireContext(), target.modelId, target.endpointId)
+        } else org.teslasoft.assistant.ui.activities.ModelParametersActivity.createIntent(
+            requireContext(), target.modelId, target.endpointId, "", scope)
+        modelConfigurationLauncher.launch(intent)
     }
 
     private var favoriteSelectedListener: FavoriteModelListAdapter.OnItemClickListener = object : FavoriteModelListAdapter.OnItemClickListener {
@@ -391,6 +448,12 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 is RoutingChoice.Use -> choice.routing.copy()
                 else -> favoriteModelsPreferences?.getFavorite(model, endpointId)
                     ?: FavoriteModelObject(model, endpointId)
+            }
+            val identity = ModelIdentity(endpointId, model)
+            if (updateParallelSelection && parallelSelection?.contains(identity) == true) {
+                parallelSelection?.editSettings(identity) { settings.copyRoutingTo(it) }
+                render()
+                return
             }
             val selected = runCatching { SetupModelResolver.capture(requireContext(),
                 requireArguments().getString("chatId").orEmpty(), settings) }.getOrNull()
@@ -931,6 +994,11 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        pendingConfigurationTarget?.let { target ->
+            outState.putString("parallelConfigurationEndpoint", target.endpointId)
+            outState.putString("parallelConfigurationModel", target.modelId)
+            outState.putString("parallelConfigurationKind", pendingConfigurationKind)
+        }
         parallelSelection?.let { outState.putString(ARG_PARALLEL_MODELS, it.raw()) }
         outState.putString(STATE_PICKER_TAB, pickerTab.name)
         outState.putString(STATE_CATALOG_PROFILE, catalog?.profile?.id)
@@ -1025,7 +1093,9 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 }
             },
             scope = scope,
-            isSelected = if (parallelPicker) ({ identity -> parallelSelection?.contains(identity) == true }) else null
+            isSelected = if (parallelPicker) ({ identity -> parallelSelection?.contains(identity) == true }) else null,
+            onParameters = if (parallelPicker) ({ target -> openParallelModelConfiguration(target, "parameters") }) else null,
+            onReasoning = if (parallelPicker) ({ target -> openParallelModelConfiguration(target, "reasoning") }) else null
         )
         modelList?.adapter = savedModelAdapter
         reloadSavedModelRows()
@@ -1128,6 +1198,12 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             scope = scope
         )?.let {
             if (chatPicker) pendingRoutingTarget = target
+            if (parallelPicker) {
+                val settings = parallelSelection?.models?.firstOrNull { model -> model.identity == target }?.settings()
+                    ?: favorites.getFavorite(target.modelId, target.endpointId)
+                    ?: FavoriteModelObject(target.modelId, target.endpointId)
+                ParallelPickerRouting.prepare(it, settings)
+            }
             chooseProviderLauncher.launch(it)
         }
     }

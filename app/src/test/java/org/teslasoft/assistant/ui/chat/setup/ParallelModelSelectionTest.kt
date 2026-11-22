@@ -40,4 +40,31 @@ class ParallelModelSelectionTest {
         assertEquals("Changed label", draft.models.last().endpointLabel)
     }
 
+    @Test fun configurationEditsReachTheSelectedSnapshotWithoutReplacingRoutingOrIdentity() {
+        val a = model("a")
+        val b = model("b")
+        val draft = ParallelModelSelection(ExperimentalSetupCodec.encode(ExperimentalSetup(models = listOf(a, b))))
+        draft.editSettings(a.identity) { it.reasoningEffort = "low"; it.showReasoning = false }
+        draft.editSettings(a.identity) { it.temperature = 0.9f; it.streaming = true }
+        val actual = draft.models.first()
+        assertEquals(a.id, actual.id)
+        assertEquals(a.endpointHost, actual.endpointHost)
+        assertEquals(listOf("a", "b"), draft.models.map { it.id })
+        assertEquals(b, draft.models.last())
+        assertEquals("provider-a", actual.settings().selectedProvider)
+        assertEquals(listOf("one", "two"), actual.settings().providerOrder)
+        assertEquals(listOf("three"), actual.settings().ignoredProviders)
+        assertEquals("low", actual.settings().reasoningEffort)
+        assertFalse(actual.settings().showReasoning)
+        assertEquals(0.9f, actual.settings().temperature)
+        assertTrue(actual.settings().streaming!!)
+        draft.editSettings(a.identity) { model("changed").settings().copyRoutingTo(it) }
+        assertEquals("provider-changed", draft.models.first().settings().selectedProvider)
+        assertEquals(0.9f, draft.models.first().settings().temperature)
+        assertEquals("low", draft.models.first().settings().reasoningEffort)
+        assertEquals(draft.models, ParallelModelSelection(draft.raw()).models)
+        draft.editSettings(model("unselected").identity) { fail("Must not edit or add an unselected model") }
+        assertEquals(2, draft.models.size)
+    }
+
 }
