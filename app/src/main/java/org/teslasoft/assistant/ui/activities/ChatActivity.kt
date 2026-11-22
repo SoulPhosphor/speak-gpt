@@ -3425,6 +3425,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
         messageInput = findViewById(R.id.message_input)
+        messageInput?.let { input ->
+            org.teslasoft.assistant.ui.chat.AsteriskAutoPair.attach(input) {
+                Preferences.getPreferences(this, "").getAutoInsertSecondAsterisk()
+            }
+        }
         experimentalModeHint = messageInput?.let { input ->
             ExperimentalModeHint(input) { preferences }.also { it.refresh() }
         }

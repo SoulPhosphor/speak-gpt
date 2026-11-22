@@ -4017,6 +4017,8 @@
     <string name="chat_behaviors_title">Chat Behaviors</string>
     <string name="chat_behaviors_allow_message_visibility">Allow Message Visibility</string>
     <string name="chat_behaviors_allow_message_visibility_hint">Allows you to hide messages from you or the AI from the AI. They will still be visible in your chat history and this is reversible.</string>
+    <string name="chat_behaviors_auto_insert_second_asterisk">Automatically Insert Second Asterisk</string>
+    <string name="chat_behaviors_auto_insert_second_asterisk_hint">After typing an * a second one will appear after your cursor.</string>
     <!-- Message menu actions for hiding a message from the AI (owner wording, Nov 2 2026). -->
     <string name="message_make_hidden">Make Hidden</string>
     <string name="message_make_visible">Make Visible</string>
