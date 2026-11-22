@@ -1527,9 +1527,12 @@ object Archivist {
                 // The chat and the saved memories are checked again first.
                 continue@publish
             }
-            // Deferred lookups run before filing; a draft never compared is
-            // never treated as having no match.
-            matching?.let { m -> matchingEvidence { m.completeLookups(working, stillActive) } }?.let { working = it }
+            // Every draft is looked up again before filing, against the
+            // memories as they are now (including any saved while the scan
+            // was paused); a draft never compared is never treated as having
+            // no match. If the lookup fails, the earlier evidence is kept.
+            matching?.let { m -> matchingEvidence { m.completeLookups(ScannerMatching.withoutProposalEvidence(working), stillActive) } }
+                ?.let { working = it }
         }
 
         val ids = messages.map { it.id }
@@ -1732,7 +1735,13 @@ object Archivist {
             // memories, Archived ones only fill places left over. Each is
             // reread so its current status is the one shown.
             val selected = ScannerPromptMatches.select(sectionMatches)
-            val pendingRecords = selected.pendingIds.mapNotNull { id ->
+            // Only memories this scene may still be compared with are shown:
+            // one moved to another world or campaign since the lookup is
+            // left out, so it can never be named as covering anything here.
+            val stillEligible: Set<String> =
+                if (selected.pendingIds.isEmpty() && selected.archivedIds.isEmpty()) emptySet()
+                else store.scannerComparableMemories(retrievalScope).mapTo(HashSet()) { it.first.memoryId }
+            val pendingRecords = selected.pendingIds.filter { it in stillEligible }.mapNotNull { id ->
                 store.getMemory(id)?.takeIf { it.status == "draft" }
             }
             val promptMemories = ScannerClues.forPrompt(
@@ -1741,7 +1750,7 @@ object Archivist {
             ) { it.memoryId }
             val activeRecords = promptMemories.mapNotNull { memory -> store.getMemory(memory.memoryId) }
                 .filter { it.status == "active" }
-            val archivedRecords = selected.archivedIds.mapNotNull { id ->
+            val archivedRecords = selected.archivedIds.filter { it in stillEligible }.mapNotNull { id ->
                 store.getMemory(id)?.takeIf { it.status == "archived" }
             }.take(
                 (ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT - activeRecords.size - pendingRecords.size)

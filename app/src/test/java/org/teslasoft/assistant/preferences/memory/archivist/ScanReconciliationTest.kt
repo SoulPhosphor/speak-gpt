@@ -219,6 +219,22 @@ class ScanReconciliationTest {
         assertEquals(listOf(listOf(1)), plan.units)
     }
 
+    @Test fun beforeFilingEveryDraftIsComparedAgainstTheMemoriesAsTheyAreNow() {
+        val memoryDraft = ArchivistResponseParser.DraftMemory("Likes oolong", "real_life", null, emptyList(), null)
+        val lookup = org.teslasoft.assistant.preferences.memory.matching.MatchEvidence("fp", "model", emptyList())
+        val section = listOf(meaning("m1"))
+        val working = WorkingDrafts(listOf(
+            WorkingDraft(1, memoryDraft, evidence = org.teslasoft.assistant.preferences.memory.matching.DraftMatchEvidence(lookup, section)),
+            WorkingDraft(2, memoryDraft.copy(content = "Lives in York"),
+                evidence = org.teslasoft.assistant.preferences.memory.matching.DraftMatchEvidence(lookup))
+        ), nextId = 3)
+        val refreshed = org.teslasoft.assistant.preferences.memory.matching.ScannerMatching.withoutProposalEvidence(working)
+        // A complete earlier lookup no longer counts: each draft is looked up again.
+        refreshed.drafts.forEach { assertTrue((it.evidence ?: org.teslasoft.assistant.preferences.memory.matching.DraftMatchEvidence()).needsLookup("fp", "model")) }
+        assertEquals(section, refreshed.drafts[0].evidence?.sections)
+        assertNull(refreshed.drafts[1].evidence)
+    }
+
     // ---- Failures lose nothing ----
 
     @Test fun aFailedComparisonFilesEveryProposalLinkedForReview() {

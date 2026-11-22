@@ -211,6 +211,14 @@ class ScannerMatching(
         /** Passes of deferred lookups before filing (20 drafts each). */
         const val MAX_COMPLETION_PASSES = 10
 
+        /** [working] with every draft's own lookup marked out of date, so
+         *  [completeLookups] compares each one with the current memories. */
+        fun withoutProposalEvidence(working: WorkingDrafts): WorkingDrafts = working.copy(
+            drafts = working.drafts.map { d ->
+                d.copy(evidence = d.evidence?.copy(proposal = null)?.takeIf { it.sections.isNotEmpty() })
+            }
+        )
+
         /** A working draft as a comparison record: its own wording and tags,
          *  as a filed memory's document would be. */
         fun draftRecord(draft: WorkingDraft): ComparisonRecord {
