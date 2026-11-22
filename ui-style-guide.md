@@ -1131,8 +1131,10 @@ Outline Prompt line and its Redo This Outline pop-up.
 or not, uses the `colorSurfaceContainerHigh` fill. The selected (activated)
 card adds only a dashed outline, like a coupon's cut line, in the Quick Settings
 outline color (`colorOutlineVariant`) and stroke width
-(`quick_settings_segment_stroke_width`); the dash and gap come from
-`model_picker_selected_dash_length` and `model_picker_selected_dash_gap`.
+(`quick_settings_segment_stroke_width`). Its dash and gap are the chat Selection
+Mode outline's (`chat_selection_outline_dash_length` and
+`chat_selection_outline_dash_gap`, owner direction), so both cut lines share one
+pattern.
 
 #### Compact provider dropdown in a model picker card
 

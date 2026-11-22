@@ -12,8 +12,8 @@
                     <stroke
                         android:width="@dimen/quick_settings_segment_stroke_width"
                         android:color="?attr/colorOutlineVariant"
-                        android:dashWidth="@dimen/model_picker_selected_dash_length"
-                        android:dashGap="@dimen/model_picker_selected_dash_gap" />
+                        android:dashWidth="@dimen/chat_selection_outline_dash_length"
+                        android:dashGap="@dimen/chat_selection_outline_dash_gap" />
                 </shape>
             </item>
             <item>

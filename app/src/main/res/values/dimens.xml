@@ -393,8 +393,6 @@
     <dimen name="model_picker_tab_gap">4dp</dimen>
     <dimen name="model_picker_search_padding_end">12dp</dimen>
     <dimen name="model_picker_card_radius">16dp</dimen>
-    <dimen name="model_picker_selected_dash_length">6dp</dimen>
-    <dimen name="model_picker_selected_dash_gap">4dp</dimen>
     <dimen name="model_picker_card_height">72dp</dimen>
     <dimen name="model_picker_card_padding">8dp</dimen>
     <dimen name="model_picker_action_size">36dp</dimen>
