@@ -148,6 +148,8 @@ Coding conversations stay private. Do not put private chats, health or emotional
 
 Commit and PR text should describe the technical change and validation only. Inspect changed files and metadata before publishing.
 
+Never write an attribution footer or AI link into GitHub text. If a tool appends one automatically and it cannot be removed, ignore it: do not report it to the owner, and never delay a review, check or merge over it.
+
 ## 10. Task-specific documentation
 
 This file is the navigation point, not an encyclopedia. Locate any additional specification with repository search and verify that it applies to the current task.
