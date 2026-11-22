@@ -1105,6 +1105,14 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // what the chat now uses rather than the sheet's earlier values.
         refreshSamplingControlsFromPreferences()
         saveParametersLink?.refresh()
+        view?.let { root -> preferences?.let { prefs ->
+            org.teslasoft.assistant.ui.chat.setup.ExperimentalQuickSettings.bind(this, root, prefs, chatId) {
+                shouldForceUpdate = true
+                refreshProviderModeTile()
+                setupReasoningTile()
+                updateListener?.onUpdate()
+            }
+        } }
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {

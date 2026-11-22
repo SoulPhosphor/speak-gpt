@@ -2164,3 +2164,7 @@ The model-rule editor places `AppButton.Primary.ModelRuleChoice` and its
 `Row.TextColumn` with `Row.Title` and `Row.Subtitle`, and `RemovableList.Remove`.
 `ModelRuleEditor.TargetList` stacks these rows vertically. Model names and
 endpoint labels wrap, and the remove action remains at the trailing edge.
+
+## Experimental Mode Setup
+
+The hidden setup page uses `ActionBar` / `BackButton` / `Title.NearBack` / `SaveButton`, `Page.Content`, `Row.RadioGroup` / `Row.Radio`, `Row.Toggle` / `TextColumn` / `Title` / `Switch`, the existing `ParallelModels.AllowImages` row and `Field.Error`. `Widget.App.ExperimentalSetup.Scroll` supplies only the bounded scrolling geometry. `Widget.App.ExperimentalSetup.WeightedSubtitle` adds only LinearLayout weight to the existing wrapping subtitle for the multi-select picker count. Ordinary model pickers keep their existing list/header behavior; the selection count and Done row are shown only for parallel selection. Quick Settings prepares its Setup/status row on `QuickSettings.ToggleRow`, with the compact parallel-model summary on `Segment.Standalone`; both remain behind the Stage 4 public-entry gate.

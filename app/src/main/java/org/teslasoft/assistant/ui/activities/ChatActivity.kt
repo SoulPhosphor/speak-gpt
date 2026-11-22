@@ -6395,7 +6395,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         experimentalModeHint?.messageHint() ?: getString(R.string.hint_message)
 
     private fun experimentalModeOn(): Boolean =
-        preferences?.getChatExperimentalMode() == true
+        preferences?.getChatLastMessageOnly() == true
 
     /** Experimental Mode sends no summary, as in a fresh chat. */
     private fun experimentalSummarizerState(experimental: Boolean): FrozenSummarizerState =
@@ -9124,6 +9124,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         shouldAdd: Boolean = true,
         preparedTurn: PreparedRegularTurn? = null
     ) {
+        if (org.teslasoft.assistant.ui.chat.setup.ExperimentalSetupGuard.block(this, preferences)) return
         // No sends into a chat whose stored history is locked or preserved-
         // corrupt (Round 4) — the blocking dialog owns this screen.
         if (chatStorageUnavailable) return
@@ -10563,6 +10564,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * boundary, after every capacity decision has completed.
      */
     private fun prepareTypedTurn(rawMessage: String) {
+        if (org.teslasoft.assistant.ui.chat.setup.ExperimentalSetupGuard.block(this, preferences)) return
         if (chatStorageUnavailable || rawMessage.isEmpty() ||
             requestPreparationInProgress
         ) {
@@ -11191,6 +11193,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the button just runs a single transcription turn (never engaging a loop
      *  that could never re-arm and would strand the flag on). */
     private fun startHandsFreeByUser() {
+        if (org.teslasoft.assistant.ui.chat.setup.ExperimentalSetupGuard.block(this, preferences, handsFree = true)) return
         if (chatStorageUnavailable) return
         if (isAiCurrentlyBusy()) {
             cancelAllAiActivity("conversation button tap (busy) on this screen")
@@ -14965,6 +14968,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     override fun onRetryClick() {
+        if (org.teslasoft.assistant.ui.chat.setup.ExperimentalSetupGuard.block(this, preferences)) return
         disableAutoScroll = false
         // Keep the reply being regenerated as an alternate version instead of
         // discarding it (owner spec, Aug 16 2026). Snapshot the current last
@@ -15012,6 +15016,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     override fun onRegenerate(position: Int) {
+        if (org.teslasoft.assistant.ui.chat.setup.ExperimentalSetupGuard.block(this, preferences)) return
         if (position < 0 || position >= messages.size) return
         if (messages[position]["isBot"] != true) return
         // Adapter rows explain this with an anchored popup. Keep this guard so

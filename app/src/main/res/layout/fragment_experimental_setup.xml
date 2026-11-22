@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.App.ModelPicker.Screen">
+    <androidx.constraintlayout.widget.ConstraintLayout android:id="@id/action_bar"
+        style="@style/Widget.App.ActionBar">
+        <ImageButton android:id="@id/btn_back" style="@style/Widget.App.ActionBar.BackButton" />
+        <TextView style="@style/Widget.App.ActionBar.Title.NearBack"
+            android:text="@string/experimental_setup_title"
+            app:layout_constraintEnd_toStartOf="@+id/experimental_setup_save" />
+        <ImageButton android:id="@id/experimental_setup_save"
+            style="@style/Widget.App.ActionBar.SaveButton"
+            android:src="@drawable/ic_save" android:contentDescription="@string/btn_save" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+    <ScrollView android:id="@+id/experimental_setup_scroll"
+        style="@style/Widget.App.ExperimentalSetup.Scroll"
+        app:layout_constraintTop_toBottomOf="@id/action_bar"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent">
+        <LinearLayout style="@style/Widget.App.Page.Content">
+            <RadioGroup android:id="@+id/experimental_setup_modes" style="@style/Widget.App.Row.RadioGroup">
+                <RadioButton android:id="@+id/experimental_setup_off" style="@style/Widget.App.Row.Radio"
+                    android:text="@string/experimental_setup_off" />
+                <RadioButton android:id="@+id/experimental_setup_single" style="@style/Widget.App.Row.Radio"
+                    android:text="@string/experimental_setup_single" />
+                <RadioButton android:id="@+id/experimental_setup_parallel" style="@style/Widget.App.Row.Radio"
+                    android:text="@string/experimental_setup_parallel" />
+            </RadioGroup>
+            <LinearLayout android:id="@+id/experimental_last_message_row" style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/experimental_last_message_only" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/experimental_last_message_only" style="@style/Widget.App.Row.Switch"
+                    android:contentDescription="@string/experimental_last_message_only" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/experimental_parallel_controls" style="@style/Widget.App.StackedSelector.Group">
+                <com.google.android.material.button.MaterialButton android:id="@+id/experimental_choose_models"
+                    style="@style/AppButton.Primary" android:text="@string/experimental_choose_models" />
+                <TextView style="@style/Widget.App.Section.Title" android:text="@string/experimental_primary_model" />
+                <RadioGroup android:id="@+id/experimental_primary_models" style="@style/Widget.App.Row.RadioGroup" />
+                <include layout="@layout/view_parallel_model_image_policy" />
+            </LinearLayout>
+            <TextView android:id="@+id/experimental_setup_error" style="@style/Widget.App.Field.Error"
+                android:accessibilityLiveRegion="polite" android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>
