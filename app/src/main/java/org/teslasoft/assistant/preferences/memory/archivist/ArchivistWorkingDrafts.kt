@@ -343,7 +343,8 @@ object WorkingDraftEdits {
      * draft was named, and keeps independently valid wording of any edit that
      * still cannot be applied as an alternative beside the original draft.
      * An invalid withdrawal, or an edit naming only invented references,
-     * changes nothing and adds nothing.
+     * changes nothing and adds nothing, and wording whose named items the
+     * caller's rule does not allow to be combined is never kept.
      */
     suspend fun resolve(
         edits: List<ArchivistResponseParser.RawDraftEdit>,
@@ -377,6 +378,9 @@ object WorkingDraftEdits {
         val alternatives = remaining.mapNotNull { f ->
             val edit = f.edit ?: return@mapNotNull null
             if (f.knownIds.isEmpty() || edit.content.isBlank()) return@mapNotNull null
+            // Kept wording must itself be allowed: a combination the
+            // caller's rule rejects is never kept as a draft.
+            if (f.knownIds.size > 1 && combineProblem(f.knownIds, "") != null) return@mapNotNull null
             DraftAlternative(f.knownIds, edit.content, edit.typeId, edit.tags)
         }
         return (first.valid + repaired) to (alternatives to remaining.size)

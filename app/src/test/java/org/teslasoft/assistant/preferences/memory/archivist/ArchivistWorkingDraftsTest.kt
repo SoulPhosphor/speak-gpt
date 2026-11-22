@@ -225,9 +225,13 @@ class ArchivistWorkingDraftsTest {
             )
         )
         val asked = ArrayList<List<String>>()
-        val result = changes(drafts, edits = listOf(edit("D1", "D2", content = "Garden plan")), repair = { asked.add(it); null })
+        val result = changes(drafts, edits = listOf(edit("D1", "D2", content = "Both garden plans")), repair = { asked.add(it); null })
         assertEquals(listOf(listOf("D1 and D2 have different scopes or targets and cannot be combined.")), asked)
-        assertEquals(listOf("Garden plan", "Garden plan v2"), drafts.applying(result).drafts.take(2).map { it.memory.content })
+        // After a failed repair, the rejected combination is not kept as a
+        // draft under either placement.
+        assertTrue(result.alternatives.isEmpty())
+        assertEquals(1, result.failedEdits)
+        assertEquals(listOf("Garden plan", "Garden plan v2"), drafts.applying(result).drafts.map { it.memory.content })
     }
 
     @Test fun anEditKeepsTheDraftsTypeAndTagsUnlessItGivesNewOnes() {
