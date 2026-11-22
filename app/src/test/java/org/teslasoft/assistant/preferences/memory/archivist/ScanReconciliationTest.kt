@@ -52,8 +52,9 @@ class ScanReconciliationTest {
         related: List<String> = emptyList(),
         alternativeOf: List<Int> = emptyList(),
         unresolved: Boolean = false,
-        placement: String = MemoryMatch.placementKey("real_life", emptyList())
-    ) = FilingDraft(id, content, placement, related, shown, alternativeOf, unresolved, matches)
+        placement: String = MemoryMatch.placementKey("real_life", emptyList()),
+        eligible: Set<String>? = null
+    ) = FilingDraft(id, content, placement, related, shown, alternativeOf, unresolved, matches, eligible)
 
     private fun meaning(memoryId: String, score: Float = 0.9f, status: MatchStatus = MatchStatus.ACTIVE) =
         ScannerMatch(memoryId, null, status, MatchMethod.EMBEDDING, score)
@@ -201,6 +202,21 @@ class ScanReconciliationTest {
         assertEquals(MemoryDependencies.fingerprint(sent), dependency.fingerprint)
         // So the filing-time recheck sees the edit and the decision is made again.
         assertFalse(MemoryDependencies.holds(dependency, memories.getValue("m1"), discarded = false))
+    }
+
+    @Test fun aMatchThatMovedOutOfTheScenesReachCanNoLongerCoverTheProposal() {
+        // The memory was moved to another world after the draft's lookup.
+        val moved = memory("m1", "Prefers tea to coffee.", status = "draft")
+        val calls = Calls()
+        val plan = runBlocking {
+            planner(mapOf("m1" to moved), calls, compare = { p -> p.map { it.draftId to it.memoryId }.toSet() })
+                .plan(listOf(draft(1, "Prefers tea to coffee.", listOf(
+                    ScannerMatch("m1", null, MatchStatus.PENDING, MatchMethod.EXACT)
+                ), eligible = emptySet())), cap = 0)
+        }
+        assertTrue(plan.covered.isEmpty())
+        assertTrue(calls.comparisons.isEmpty())
+        assertEquals(listOf(listOf(1)), plan.units)
     }
 
     // ---- Failures lose nothing ----

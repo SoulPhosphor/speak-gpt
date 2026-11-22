@@ -344,7 +344,11 @@ data class FilingDraft(
     val alternativeOf: List<Int>,
     val unresolvedEdit: Boolean,
     /** Filed-memory matches from the draft's own lookup. */
-    val matches: List<ScannerMatch>
+    val matches: List<ScannerMatch>,
+    /** Saved memories the draft's scene may be compared with now; a match
+     *  that has since moved out of reach can no longer cover it. Null when
+     *  not restricted. */
+    val eligibleMemoryIds: Set<String>? = null
 )
 
 /** A filed memory as it is now, for reconciliation. */
@@ -426,6 +430,7 @@ class ScanFilingPlanner(
             var perDraft = 0
             val candidates = d.matches
                 .filter { it.memoryId != null && it.method in COMPARABLE_METHODS }
+                .filter { d.eligibleMemoryIds == null || it.memoryId in d.eligibleMemoryIds }
                 .sortedWith(compareBy<ScannerMatch> {
                     if (it.method == MatchMethod.EXACT) 0 else 1
                 }.thenByDescending { it.score ?: 0f })

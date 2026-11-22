@@ -1554,10 +1554,17 @@ object Archivist {
                 )
                 ChatCommit(chatId, stored.lorebookSuggestionIds, emptyList(), prepared.duplicatesSkipped, sourceRange)
             } else {
+                val eligibleByScope = HashMap<RetrievalScope, Set<String>>()
                 val reconciled = reconcileMemoryDrafts(
                     context, store, conversation, working, messages, maxSuggestions, filingMemo,
                     modelTransport, model, temperature
-                )
+                ) { scene ->
+                    // The same eligibility the draft's lookup used, as it is now.
+                    val scope = scene?.let { reconciliationScope(store, prefs, it) } ?: RetrievalScope.NONE
+                    eligibleByScope.getOrPut(scope) {
+                        store.scannerComparableMemories(scope).mapTo(HashSet()) { it.first.memoryId }
+                    }
+                }
                 // The filing requests took time: the chat is checked again so
                 // an edit made meanwhile is read before anything is filed.
                 val chatNow = rangeMessages(readRangeSource(context, store, chatId), range)
@@ -1733,10 +1740,11 @@ object Archivist {
                 ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT - pendingRecords.size
             ) { it.memoryId }
             val activeRecords = promptMemories.mapNotNull { memory -> store.getMemory(memory.memoryId) }
+                .filter { it.status == "active" }
             val archivedRecords = selected.archivedIds.mapNotNull { id ->
                 store.getMemory(id)?.takeIf { it.status == "archived" }
             }.take(
-                (ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT - promptMemories.size - pendingRecords.size)
+                (ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT - activeRecords.size - pendingRecords.size)
                     .coerceAtLeast(0)
             )
             val retrievedRecords = activeRecords + pendingRecords + archivedRecords
@@ -1748,15 +1756,10 @@ object Archivist {
                 typeName = record.typeId?.let { typeNames[it] },
                 status = status
             )
-            val existingContext = promptMemories.map { memory ->
-                ArchivistExistingMemory(
-                    stableId = memory.memoryId,
-                    content = memory.content,
-                    scope = memory.scope,
-                    targetNames = targetNames[memory.memoryId].orEmpty(),
-                    typeName = memory.typeId?.let { typeNames[it] }
-                )
-            } + pendingRecords.map { existing(it, ArchivistExistingMemory.STATUS_PENDING) } +
+            // What the AI is shown and what an "already covered" answer
+            // depends on come from the same records.
+            val existingContext = activeRecords.map { existing(it, ArchivistExistingMemory.STATUS_ACTIVE) } +
+                pendingRecords.map { existing(it, ArchivistExistingMemory.STATUS_PENDING) } +
                 archivedRecords.map { existing(it, ArchivistExistingMemory.STATUS_ARCHIVED) }
             shownRecords = retrievedRecords.associateBy { it.memoryId }
             val earlierMemoryCandidates = working.drafts
@@ -2207,7 +2210,9 @@ object Archivist {
         memo: ScanFilingPlanner.Memo,
         transport: ArchivistModelTransport,
         model: String,
-        temperature: Double
+        temperature: Double,
+        /** The saved memories a scene may be compared with now. */
+        eligibleFor: (ArchivistSceneContext?) -> Set<String>
     ): ReconciledMemories {
         val drafts = working.drafts
         if (drafts.isEmpty()) return ReconciledMemories(PreparedMemories(emptyList(), emptyMap(), 0), emptyList(), 0, emptyList())
@@ -2224,7 +2229,8 @@ object Archivist {
                 shownMemoryIds = d.shownMemoryIds.toSet(),
                 alternativeOf = d.alternativeOf,
                 unresolvedEdit = d.unresolvedEdit,
-                matches = d.evidence?.proposal?.matches.orEmpty().filter { it.memoryId != null }
+                matches = d.evidence?.proposal?.matches.orEmpty().filter { it.memoryId != null },
+                eligibleMemoryIds = eligibleFor(d.memory.scene)
             )
         }
         val textById = messages.associate { it.id to it.text }
