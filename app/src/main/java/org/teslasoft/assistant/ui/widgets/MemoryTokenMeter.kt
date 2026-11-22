@@ -47,12 +47,20 @@ class MemoryTokenMeter @JvmOverloads constructor(
         bar = findViewById(R.id.memory_token_progress)
     }
 
+    /** Shows a different memory: earlier counts are cleared without changing the meter's height. */
     fun bind(input: MemoryTokenBudget.Input) {
-        requests.value = Request(++revision, input.copy(tags = input.tags.toList()))
+        enqueue(input)
         words.setText(R.string.mem_words_pending)
         tokens.setText(R.string.mem_tokens_pending)
         tokens.isActivated = false
-        bar.visibility = View.INVISIBLE
+        if (bar.visibility == View.VISIBLE) bar.visibility = View.INVISIBLE
+    }
+
+    /** Re-measures the memory already shown; current counts stay until the new ones replace them. */
+    fun refresh(input: MemoryTokenBudget.Input) = enqueue(input)
+
+    private fun enqueue(input: MemoryTokenBudget.Input) {
+        requests.value = Request(++revision, input.copy(tags = input.tags.toList()))
     }
 
     fun bind(record: MemoryRecord) = bind(input(record))
@@ -87,7 +95,7 @@ class MemoryTokenMeter @JvmOverloads constructor(
         }
         activeScope.launch {
             EmbeddingTokenCounter.changes.drop(1).collect {
-                requests.value?.input?.let { bind(it) }
+                requests.value?.input?.let { refresh(it) }
             }
         }
     }
@@ -95,7 +103,7 @@ class MemoryTokenMeter @JvmOverloads constructor(
     override fun onWindowVisibilityChanged(visibility: Int) {
         super.onWindowVisibilityChanged(visibility)
         if (visibility == View.VISIBLE && isAttachedToWindow) {
-            requests.value?.input?.let { bind(it) }
+            requests.value?.input?.let { refresh(it) }
         }
     }
 

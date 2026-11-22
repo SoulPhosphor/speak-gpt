@@ -852,7 +852,7 @@ class MemoryEditorActivity : SettingsPageActivity() {
 
     private fun refreshTokenMeter() {
         val tagsJson = textToTagsJson(findViewById<TextInputEditText>(R.id.field_mem_tags)?.text?.toString().orEmpty())
-        tokenMeter?.bind(MemoryTokenBudget.Input.forEdit(
+        tokenMeter?.refresh(MemoryTokenBudget.Input.forEdit(
             existing, activeContentField()?.text?.toString().orEmpty(), tagsJson
         ))
     }
