@@ -240,6 +240,53 @@ Use brief bullet points, with one fact per bullet. Keep the list as short as the
     /** The shipped Chat Outline prompt (owner request, Nov 13 2026): a
      *  markdown outline with headers and bullet points, easy to scan. */
     val CHAT_OUTLINE = """
+You write an outline of this conversation so the user can quickly see what it covers.
+
+Maintain a clear, accurate, well-organized outline of the conversation. Organize information into appropriate topics and sections. As new messages arrive, add new information where it belongs, update existing sections when relevant, and consolidate related information when useful. Preserve important context and details while avoiding unnecessary duplication.
+
+Write in markdown. Use headers for the main topics and bullet points beneath them for the details, so the outline is easy to scan:
+
+- one header for each main topic, in the order the topics come up;
+- short bullet points for what was discussed, decided, made, or left open;
+- nested bullet points only where a detail belongs to another bullet.
+
+Keep each bullet short. Include names, titles, and specific details the user would need to recognize what was discussed. Do not present suggestions, guesses, or possibilities as settled facts.
+
+You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
+
+Reply only with the outline.
+    """.trimIndent()
+
+    const val NOTES_OUTLINE_NAME = "Notes Outline"
+
+    /** The second shipped outline prompt (owner request, Nov 22 2026): what
+     *  came out of the conversation (suggestions, wording, decisions, open
+     *  questions) under one header per topic, without restating facts the
+     *  user already knows. */
+    val NOTES_OUTLINE = """
+You write an outline of this conversation that captures what the user will want to look back on later. The user already knows the facts of their own situation, so do not restate them. Focus on what came out of the conversation.
+
+Maintain a clear, accurate, well-organized outline of the conversation. Organize information into appropriate topics and sections. As new messages arrive, add new information where it belongs, update existing sections when relevant, and consolidate related information when useful. Preserve important context and details while avoiding unnecessary duplication.
+
+Write in markdown. Use one header for each problem or topic, in the order they come up. Under each header, write one short line naming the problem so the user recognizes it. Then use these labels, only when something belongs under them:
+
+- **Suggestions:** what I recommended or offered as options.
+- **Wording:** any wording I proposed, quoted exactly.
+- **Decided:** what the user chose or agreed to.
+- **Still open:** questions or choices left unresolved.
+- **To remember:** anything else worth keeping for later.
+
+Use short bullet points under each label. Leave out a label when nothing belongs under it. Do not present suggestions as decisions.
+
+You may refer to the user as user but write the AI portion in first person instead of saying the assistant did things.
+
+Reply only with the outline.
+    """.trimIndent()
+
+    /** The Chat Outline and Notes Outline prompts as first shipped, when each
+     *  reply was added after the outline so far: untouched saved copies are
+     *  updated to the current text. */
+    internal val PRIOR_CHAT_OUTLINE = """
 You write an outline of this conversation so the user can quickly see what it covers. Below are the outline written so far, for context, and the next messages in the conversation. Write the outline for these messages.
 
 Write in markdown. Use headers for the main topics and bullet points beneath them for the details, so the outline is easy to scan:
@@ -255,13 +302,7 @@ You may refer to the user as user but write the AI portion in first person inste
 Reply only with the outline.
     """.trimIndent()
 
-    const val NOTES_OUTLINE_NAME = "Notes Outline"
-
-    /** The second shipped outline prompt (owner request, Nov 22 2026): what
-     *  came out of the conversation (suggestions, wording, decisions, open
-     *  questions) under one header per topic, without restating facts the
-     *  user already knows. */
-    val NOTES_OUTLINE = """
+    internal val PRIOR_NOTES_OUTLINE = """
 You write an outline of this conversation that captures what the user will want to look back on later. The user already knows the facts of their own situation, so do not restate them. Focus on what came out of the conversation. Below are the outline written so far, for context, and the next messages in the conversation. Write the outline for these messages.
 
 Write in markdown. Use one header for each problem or topic, in the order they come up. Under each header, write one short line naming the problem so the user recognizes it. Then use these labels, only when something belongs under them:
@@ -281,15 +322,19 @@ Reply only with the outline.
 
     /**
      * App scaffolding for every Chat Outline request, not an editable prompt:
-     * the outline is built one batch of messages at a time, in order, and the
-     * app adds each reply after the outline so far.
+     * the outline is built one batch of messages at a time, in order, and
+     * each reply rewrites or adds sections of the outline so far
+     * ([OutlineSections]).
      */
     val OUTLINE_CONTEXT_RULE = """
 CHAT OUTLINE INSTRUCTIONS
 
-The outline written so far is kept exactly as saved. Your reply will be added after it. Use it only as context: to understand the conversation and to avoid repeating it. Do not rewrite or reproduce any of it.
+The outline written so far is shown below, divided into sections. Each section begins with a reference such as S1 or S2, which is not part of the outline. Outline the new messages: add new sections for new topics, and when the new messages add to or change a topic already in the outline, rewrite that section to include it.
 
-Outline only the new messages. Reply with the new part of the outline only, with no introduction or comments about this process.
+Reply with exactly one JSON object and nothing else, in this form:
+{"section_edits": [{"section": "S2", "content": "the complete new text of that section, including its header"}], "new_sections": "markdown for any new topics, or an empty string"}
+
+Name each section at most once. Leave out sections that need no change. Do not include the S references in your text.
     """.trimIndent()
 
     /** App scaffolding: suggests the Tags line after an outline is made. */
@@ -313,7 +358,7 @@ Reply with only the tags, separated by commas, with no other text.
         }
         sb.append("\n\n").append(OUTLINE_CONTEXT_RULE)
         sb.append("\n\nOutline so far:\n")
-        sb.append(existingOutline.ifBlank { "None yet." })
+        sb.append(OutlineSections.render(existingOutline).ifBlank { "None yet." })
         sb.append("\n\nNew messages to outline:\n")
         for ((role, text) in messages) {
             sb.append('\n').append(role).append(": ").append(text).append('\n')

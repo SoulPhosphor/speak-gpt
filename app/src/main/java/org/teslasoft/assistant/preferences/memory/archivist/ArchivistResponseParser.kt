@@ -17,6 +17,8 @@
 package org.teslasoft.assistant.preferences.memory.archivist
 
 import org.json.JSONObject
+import org.teslasoft.assistant.util.edits.ReferencedEdit
+import org.teslasoft.assistant.util.edits.ReferencedEdits
 
 /**
  * Parses one Archivist model response into validated draft proposals (pure —
@@ -111,13 +113,13 @@ object ArchivistResponseParser {
     /** One returned working-draft edit before validation: the references it
      *  names, its complete new prose, and an optional Type and tags. */
     data class RawDraftEdit(
-        val refs: List<String>,
-        val content: String,
+        override val refs: List<String>,
+        override val content: String,
         /** A new Type id, or null to keep the draft's Type. */
         val typeId: String?,
         /** New tags, or null (absent or empty) to keep the draft's tags. */
         val tags: List<String>?
-    )
+    ) : ReferencedEdit
 
     /** Defensive bounds on working-draft operations in one response. */
     const val MAX_DRAFT_EDITS_PER_RESPONSE = 40
@@ -341,10 +343,5 @@ object ArchivistResponseParser {
 
     /** Models often wrap JSON in prose or a markdown fence; take the outermost
      *  object. Throws (caller catches per conversation) when there is none. */
-    private fun extractJsonObject(raw: String): String {
-        val start = raw.indexOf('{')
-        val end = raw.lastIndexOf('}')
-        require(start in 0 until end) { "no JSON object in response" }
-        return raw.substring(start, end + 1)
-    }
+    private fun extractJsonObject(raw: String): String = ReferencedEdits.jsonObjectIn(raw)
 }
