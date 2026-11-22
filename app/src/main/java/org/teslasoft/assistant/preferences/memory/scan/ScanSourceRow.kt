@@ -33,7 +33,9 @@ data class ScanSourceRow(
     /** 1-based part of a message split into several pieces, and how many
      *  pieces it was split into; 1 of 1 for a message read whole. */
     val partIndex: Int = 1,
-    val partCount: Int = 1
+    val partCount: Int = 1,
+    /** Memories the message's reply request used (Stage 6B.2 clues). */
+    val usedMemoryIds: List<String> = emptyList()
 ) {
     val isAssistant: Boolean get() = role == "assistant"
 
@@ -98,7 +100,8 @@ object ScanSourceRows {
                     campaignId = scope.campaignId,
                     roleplayCharacterId = scope.roleplayCharacterId,
                     userPersonaId = scope.userPersonaId,
-                    projectId = scope.projectId
+                    projectId = scope.projectId,
+                    usedMemoryIds = message.usedMemoryIds
                 )
             )
         }

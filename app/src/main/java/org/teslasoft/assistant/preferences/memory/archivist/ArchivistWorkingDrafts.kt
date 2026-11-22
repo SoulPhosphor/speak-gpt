@@ -8,6 +8,8 @@ import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.memory.MemoryMatch
+import org.teslasoft.assistant.preferences.memory.matching.DraftMatchEvidence
+import org.teslasoft.assistant.preferences.memory.matching.MatchEvidenceCodec
 import java.util.Locale
 
 /**
@@ -32,7 +34,10 @@ data class WorkingDraft(
     val sources: List<PassageRef> = emptyList(),
     /** Drafts this one is an unreconciled alternative wording of: an edit
      *  that could not be applied even after repair. Stage 6B.3 reconciles. */
-    val alternativeOf: List<Int> = emptyList()
+    val alternativeOf: List<Int> = emptyList(),
+    /** Stage 6B.2 match evidence, saved with the checkpoint. Out of date
+     *  once the draft's wording changes (see [DraftMatchEvidence.needsLookup]). */
+    val evidence: DraftMatchEvidence? = null
 )
 
 /** A validated operation, in stable draft IDs. */
@@ -187,6 +192,7 @@ data class WorkingDrafts(
                     draft.sources.forEach { put(JSONArray().put(it.messageId).put(it.start).put(it.end)) }
                 })
                 if (draft.alternativeOf.isNotEmpty()) put("alternative_of", JSONArray(draft.alternativeOf))
+                draft.evidence?.let { put("match_evidence", MatchEvidenceCodec.encode(it)) }
             }.toString()
 
         /**
@@ -210,13 +216,14 @@ data class WorkingDrafts(
                 o.optJSONArray("alternative_of")?.let { arr ->
                     for (i in 0 until arr.length()) arr.optInt(i, 0).takeIf { it > 0 }?.let(alternativeOf::add)
                 }
-                Triple(o.optInt("draft_id", 0).takeIf { it > 0 }, memory, sources to alternativeOf)
+                val evidence = MatchEvidenceCodec.decode(o.optJSONObject("match_evidence"))
+                Triple(o.optInt("draft_id", 0).takeIf { it > 0 }, memory, Triple(sources, alternativeOf, evidence))
             }
             var next = maxOf(savedNextId, (parsed.mapNotNull { it.first }.maxOrNull() ?: 0) + 1)
             val used = HashSet<Int>()
             val drafts = parsed.map { (id, memory, extra) ->
                 val stable = id?.takeIf { used.add(it) } ?: next++.also { used.add(it) }
-                WorkingDraft(stable, memory, extra.first, extra.second)
+                WorkingDraft(stable, memory, extra.first, extra.second, extra.third)
             }
             return WorkingDrafts(drafts, next)
         }

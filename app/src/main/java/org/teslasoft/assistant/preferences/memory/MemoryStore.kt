@@ -33,6 +33,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.models.ModelIdentity
 import org.teslasoft.assistant.preferences.models.ModelIdentityCodec
 import org.teslasoft.assistant.preferences.models.LegacyModelTargetResolver
+import org.teslasoft.assistant.preferences.memory.matching.ScannerComparisonCache
 import org.teslasoft.assistant.util.Hash
 import java.time.Instant
 import java.util.UUID
@@ -75,7 +76,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 37
+        private const val DATABASE_VERSION = 38
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -1002,6 +1003,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
         createMemorySourcesTable(db)
         createMemoryHandlingPreferencesTable(db)
+        ScannerComparisonCache.createTables(db)
         db.execSQL("CREATE INDEX idx_proposals_pending ON proposals(status) WHERE status = 'pending'")
         db.execSQL("CREATE INDEX idx_card_entries_card ON card_entries(card_type, card_id)")
         db.execSQL("CREATE INDEX idx_cpm_member ON campaign_party_members(party_member_id)")
@@ -2218,6 +2220,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "INSERT INTO meta (key, value) VALUES (?, ?) " +
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "37")
+            )
+        }
+        if (oldVersion < 38) {
+            // Stage 6B.2 (owner approval 2026-11-22): the scanner comparison
+            // cache. Additive only: two empty tables of comparison vectors;
+            // nothing existing is read or changed.
+            ScannerComparisonCache.createTables(db)
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "38")
             )
         }
     }
@@ -3743,6 +3756,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.beginTransaction()
         try {
             db.delete("analysis_candidates", "run_id = ?", arrayOf(rangeId))
+            ScannerComparisonCache.clearDrafts(db, rangeId)
             db.update("analysis_run_state", ContentValues().apply {
                 put("chunk_ordinal", 0)
                 put("updated_at", nowIso())
@@ -4872,6 +4886,42 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      */
     fun activeMemoriesForScope(scope: RetrievalScope): List<RetrievableMemory> {
         val out = ArrayList<RetrievableMemory>()
+        val (branches, args) = scopeEligibilityBranches(scope)
+        val sql = "SELECT m.memory_id, m.scope, m.content, m.embedding_text, " +
+            "m.importance, m.created_at, m.updated_at, m.world_id, " +
+            "m.protection_json, m.type_id, m.tags_json, m.vibe " +
+            "FROM memories m WHERE m.status = 'active' AND (" +
+            branches.joinToString(" OR ") + ")"
+        readableDatabase.rawQuery(sql, args.toTypedArray()).use {
+            while (it.moveToNext()) out.add(readRetrievable(it))
+        }
+        return out
+    }
+
+    /**
+     * The memories the memory scanner may compare against in [scope] (Stage
+     * 6B.2): Active, Pending and Archived, under exactly the scope and target
+     * eligibility of [activeMemoriesForScope]. Every Type and No Type is
+     * included; Superseded is not. Comparison only: nothing here reaches a
+     * chat.
+     */
+    fun scannerComparableMemories(scope: RetrievalScope): List<Pair<RetrievableMemory, String>> {
+        val out = ArrayList<Pair<RetrievableMemory, String>>()
+        val (branches, args) = scopeEligibilityBranches(scope)
+        val sql = "SELECT m.memory_id, m.scope, m.content, m.embedding_text, " +
+            "m.importance, m.created_at, m.updated_at, m.world_id, " +
+            "m.protection_json, m.type_id, m.tags_json, m.vibe, m.status " +
+            "FROM memories m WHERE m.status IN ('active','draft','archived') AND (" +
+            branches.joinToString(" OR ") + ")"
+        readableDatabase.rawQuery(sql, args.toTypedArray()).use {
+            while (it.moveToNext()) out.add(readRetrievable(it) to it.getString(it.getColumnIndexOrThrow("status")))
+        }
+        return out
+    }
+
+    /** The scope and target conditions shared by chat retrieval and scanner
+     *  comparison, as SQL branches over `memories m` and their arguments. */
+    private fun scopeEligibilityBranches(scope: RetrievalScope): Pair<List<String>, List<String>> {
         val args = ArrayList<String>()
         val branches = ArrayList<String>()
 
@@ -4914,16 +4964,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             branches.add("m.scope = 'real_life'")
             branches.add("m.scope = 'project'")
         }
-
-        val sql = "SELECT m.memory_id, m.scope, m.content, m.embedding_text, " +
-            "m.importance, m.created_at, m.updated_at, m.world_id, " +
-            "m.protection_json, m.type_id, m.tags_json, m.vibe " +
-            "FROM memories m WHERE m.status = 'active' AND (" +
-            branches.joinToString(" OR ") + ")"
-        readableDatabase.rawQuery(sql, args.toTypedArray()).use {
-            while (it.moveToNext()) out.add(readRetrievable(it))
-        }
-        return out
+        return branches to args
     }
 
     /** Memory ids linked to a project via the §2 multi-select join table — the

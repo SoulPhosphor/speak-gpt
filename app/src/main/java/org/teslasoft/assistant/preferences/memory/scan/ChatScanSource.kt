@@ -12,6 +12,8 @@ import org.teslasoft.assistant.preferences.MessageIdentity
 import org.teslasoft.assistant.preferences.MessageNumbers
 import org.teslasoft.assistant.preferences.MessageVisibility
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
+import org.teslasoft.assistant.preferences.memory.ActiveMemoryAttribution
+import org.teslasoft.assistant.preferences.memory.ActiveMemoryReference
 import org.teslasoft.assistant.util.Hash
 import java.time.Instant
 
@@ -35,7 +37,11 @@ data class ScanMessage(
     val fingerprint: String,
     /** An assistant reply that has not finished (still being written, or
      *  ended early and may yet be regenerated). */
-    val unfinishedReply: Boolean = false
+    val unfinishedReply: Boolean = false,
+    /** Memories this reply's request actually used, from its Active
+     *  Memories record (`activeMemoryAttribution`); empty for user messages
+     *  and replies saved before the record existed. Scanner clues only. */
+    val usedMemoryIds: List<String> = emptyList()
 ) {
     val startedAt: String?
         get() = timeMillis?.let { runCatching { Instant.ofEpochMilli(it).toString() }.getOrNull() }
@@ -142,9 +148,17 @@ object ChatScanSource {
                 model = m[MODEL_KEY]?.toString()?.takeIf { it.isNotBlank() },
                 fingerprint = fingerprint(assistant, text, eligible, scope?.encode()),
                 unfinishedReply = assistant &&
-                    !MessageCompletionState.isComplete(m[MessageCompletionState.KEY_STATE]?.toString())
+                    !MessageCompletionState.isComplete(m[MessageCompletionState.KEY_STATE]?.toString()),
+                usedMemoryIds = if (!assistant) emptyList() else usedMemoryIds(m)
             )
         }
+
+    /** The memories recorded as used by a reply (not lorebook entries). */
+    fun usedMemoryIds(message: Map<String, *>): List<String> =
+        ActiveMemoryAttribution.decode(message[ActiveMemoryAttribution.MESSAGE_KEY]?.toString())
+            .filter { it.source == ActiveMemoryReference.SOURCE_MEMORY }
+            .map { it.id }
+            .distinct()
 
     /** The existing visibility rules: hidden messages and replies that did
      *  not finish are not read; a blank message has nothing to read. */
