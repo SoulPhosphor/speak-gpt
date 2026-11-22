@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.ui.chat.setup.ParallelPickerRouting
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -402,7 +403,7 @@ class ChooseProviderActivity : SettingsPageActivity() {
     /** The routing [model] uses where this screen was opened from: the
      *  Summarizer's own, or the chat's (null without a chat). */
     private fun routingForEditing(model: String): FavoriteModelObject? =
-        if (scope.isDedicated) DedicatedModelRouting.of(scope).forEditing(this, endpointId, model)
+        ParallelPickerRouting.initial(intent, endpointId, model) ?: if (scope.isDedicated) DedicatedModelRouting.of(scope).forEditing(this, endpointId, model)
         else chatPreferences?.let { ChatModelRouting.forEditing(this, it, endpointId, model) }
 
     private fun favoriteProvidersFor(model: String): List<String> =
@@ -466,8 +467,9 @@ class ChooseProviderActivity : SettingsPageActivity() {
             else favoriteProvidersFor(selectedModel)
         // A chat (or the Summarizer) shows the routing it actually uses, which
         // may be its own.
-        val favorite = if (selectedModel.isBlank() || (chatPreferences == null && !scope.isDedicated)) stored
-        else routingForEditing(selectedModel)
+        val favorite = ParallelPickerRouting.initial(intent, endpointId, selectedModel)
+            ?: if (selectedModel.isBlank() || (chatPreferences == null && !scope.isDedicated)) stored
+            else routingForEditing(selectedModel)
 
         selectedProvider = favorite?.selectedProvider ?: ""
         orderList.clear()

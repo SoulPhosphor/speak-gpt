@@ -106,8 +106,16 @@ class ModelParametersActivity : FragmentActivity() {
     private var streaming: Boolean = true
     private var initialSnapshot: String = ""
 
+    private val configurationResult by lazy { org.teslasoft.assistant.ui.chat.setup.ModelConfigurationResult(this) }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        configurationResult.saveState(outState)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        configurationResult.restore(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_model_parameters)
 
@@ -220,6 +228,7 @@ class ModelParametersActivity : FragmentActivity() {
         }
         if (isDedicatedJobsModel()) FavoriteModelParameters.setLive(this, scope, values)
 
+        configurationResult.markSaved()
         initialSnapshot = snapshot()
         markSaveButtonGreen()
         Toast.makeText(this, R.string.model_parameters_saved_toast, Toast.LENGTH_SHORT).show()
@@ -267,6 +276,7 @@ class ModelParametersActivity : FragmentActivity() {
             }
             seedControls(FavoriteModelParameters.defaults(this, modelId, endpointId, scope))
         }
+        configurationResult.markSaved()
         initialSnapshot = snapshot()
         resetSaveButtonTint()
         btnRestoreDefaults?.let { SaveIconFlash.flash(it) }

@@ -93,8 +93,16 @@ class ReasoningSettingsActivity : FragmentActivity() {
     private var showReasoning: Boolean = true
     private var initialSnapshot: String = ""
 
+    private val configurationResult by lazy { org.teslasoft.assistant.ui.chat.setup.ModelConfigurationResult(this) }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        configurationResult.saveState(outState)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        configurationResult.restore(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_reasoning_settings)
 
@@ -219,6 +227,7 @@ class ReasoningSettingsActivity : FragmentActivity() {
         favorite.reasoningEffort = selectedEffort.serialized
         favorite.showReasoning = showReasoning
         FavoriteModelsPreferences.getPreferences(this).addFavoriteModel(favorite)
+        configurationResult.markSaved()
         initialSnapshot = snapshot()
         markSaveButtonGreen()
         Toast.makeText(this, R.string.reasoning_settings_saved_toast, Toast.LENGTH_SHORT).show()

@@ -8,7 +8,7 @@
         android:id="@+id/row_chat_experimental_mode"
         style="@style/Widget.App.QuickSettings.Segment.Standalone">
 
-        <LinearLayout style="@style/Widget.App.QuickSettings.ToggleRow">
+        <LinearLayout android:id="@+id/experimental_legacy_controls" style="@style/Widget.App.QuickSettings.ToggleRow">
 
             <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
@@ -24,6 +24,16 @@
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switch_chat_experimental_mode"
                 style="@style/Widget.App.QuickSettings.Switch" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/experimental_setup_controls"
+            style="@style/Widget.App.QuickSettings.ToggleRow" android:visibility="gone">
+            <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                <TextView style="@style/Widget.App.QuickSettings.ToggleRow.Title"
+                    android:text="@string/experimental_mode_toggle" />
+                <TextView android:id="@+id/experimental_setup_status" style="@style/Widget.App.Row.Subtitle" />
+            </LinearLayout>
+            <com.google.android.material.button.MaterialButton android:id="@+id/experimental_setup_button"
+                style="@style/AppButton.Primary.Inline.Trailing" android:text="@string/experimental_setup_action" />
         </LinearLayout>
     </LinearLayout>
 </merge>

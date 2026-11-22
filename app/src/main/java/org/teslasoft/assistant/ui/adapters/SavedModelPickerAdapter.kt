@@ -32,7 +32,11 @@ internal class SavedModelPickerAdapter(
     private val onFavorite: (FavoriteModelObject) -> Unit,
     private val onDelete: (ModelIdentity, Source) -> Unit,
     /** Whose saved models these are: Model Settings opens in the same lists. */
-    private val scope: ModelPickerScope = ModelPickerScope.CHAT
+    private val scope: ModelPickerScope = ModelPickerScope.CHAT,
+    /** Optional multi-select ownership; ordinary callers keep the existing single selection. */
+    private val isSelected: ((ModelIdentity) -> Boolean)? = null,
+    private val onParameters: ((ModelIdentity) -> Unit)? = null,
+    private val onReasoning: ((ModelIdentity) -> Unit)? = null
 ) : BaseAdapter() {
 
     enum class Source { FAVORITES, RECENT, CATALOG }
@@ -89,7 +93,8 @@ internal class SavedModelPickerAdapter(
         val routingConfigured = settings.routingType != FavoriteModelObject.ROUTING_AUTOMATIC ||
             settings.ignoredProviders.isNotEmpty()
 
-        holder.card.isActivated = target == selected
+        holder.card.isActivated = isSelected?.invoke(target) ?: (target == selected)
+        holder.card.isSelected = isSelected != null && holder.card.isActivated
         holder.card.setOnClickListener { onSelect(row, source) }
         holder.name.text = target.modelId
         holder.subtitle.isVisible = !catalog
@@ -124,7 +129,8 @@ internal class SavedModelPickerAdapter(
         holder.reasoningIndicator.isVisible = showsReasoning && !canConfigure
         holder.reasoning.isVisible = showsReasoning && canConfigure
         holder.reasoning.setOnClickListener {
-            context.startActivity(ReasoningSettingsActivity.createIntent(context, target.modelId, target.endpointId))
+            if (onReasoning != null) onReasoning.invoke(target)
+            else context.startActivity(ReasoningSettingsActivity.createIntent(context, target.modelId, target.endpointId))
         }
 
         holder.routing.isVisible = row.supportsRouting
@@ -151,7 +157,7 @@ internal class SavedModelPickerAdapter(
                 when (action) {
                     PIN -> onPin(settings, !row.pinned)
                     FAVORITE -> onFavorite(settings)
-                    MODEL_SETTINGS -> context.startActivity(
+                    MODEL_SETTINGS -> if (onParameters != null) onParameters.invoke(target) else context.startActivity(
                         ModelParametersActivity.createIntent(context, target.modelId, target.endpointId, chatId, scope)
                     )
                     DELETE -> onDelete(target, source)

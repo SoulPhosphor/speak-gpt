@@ -121,6 +121,7 @@ object PerChatSettingKeys {
 
         // Experimental Mode: requests leave out the earlier messages
         "experimental_mode",
+        "experimental_setup",
 
         // Conversation summarizer (conversation-summary-plan.md decision 9:
         // the summary, bookmark, and error log are chat data — encrypted with
