@@ -42,7 +42,12 @@ object OutlineSections {
     private const val KEY_NEW = "new_sections"
 
     private val HEADER = Regex("^ {0,3}#{1,6}(\\s|$)")
-    private val FENCE = Regex("^ {0,3}(```|~~~)")
+    private val FENCE = Regex("^ {0,3}(`{3,}|~{3,})")
+
+    /** A fence closes the open one only with the same character, at least as
+     *  many of them, and nothing after it but spaces. */
+    private fun closes(open: String, fence: String, rest: String): Boolean =
+        fence[0] == open[0] && fence.length >= open.length && rest.isBlank()
 
     data class SectionEdit(
         override val refs: List<String>,
@@ -54,17 +59,21 @@ object OutlineSections {
     fun split(outline: String): List<String> {
         val sections = ArrayList<String>()
         val current = StringBuilder()
-        var inFence = false
+        // The open fence's run of backticks or tildes, or null outside one.
+        var openFence: String? = null
         fun flush() {
             val text = current.toString().trimEnd().trimStart('\n', '\r')
             if (text.isNotBlank()) sections.add(text)
             current.setLength(0)
         }
         for (line in outline.lines()) {
-            if (FENCE.containsMatchIn(line)) {
-                inFence = !inFence
-            } else if (!inFence && HEADER.containsMatchIn(line)) {
-                flush()
+            val fence = FENCE.find(line)
+            val open = openFence
+            if (open == null) {
+                if (fence != null) openFence = fence.groupValues[1]
+                else if (HEADER.containsMatchIn(line)) flush()
+            } else if (fence != null && closes(open, fence.groupValues[1], line.substring(fence.range.last + 1))) {
+                openFence = null
             }
             current.append(line).append('\n')
         }

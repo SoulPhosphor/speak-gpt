@@ -51,6 +51,19 @@ class OutlineSectionsTest {
     }
 
     @Test
+    fun aFenceClosesOnlyWithAMatchingFence() {
+        // A shorter or different fence inside a block does not end it, and a
+        // fence with text after it is not a closing fence.
+        val example = "## Example\n````md\n```kotlin\n# inner\n```\n~~~\n# still inside\n````\n## Next"
+        assertEquals(
+            listOf("## Example\n````md\n```kotlin\n# inner\n```\n~~~\n# still inside\n````", "## Next"),
+            OutlineSections.split(example)
+        )
+        val notClosing = "## A\n```\n```text\n# inside\n```\n## B"
+        assertEquals(listOf("## A\n```\n```text\n# inside\n```", "## B"), OutlineSections.split(notClosing))
+    }
+
+    @Test
     fun rendersEachSectionAfterItsReference() {
         assertEquals(
             "S1\n- Opening note\n\nS2\n## Garden\n- Tomatoes\n\nS3\n## Taxes\n- Form due in April",
