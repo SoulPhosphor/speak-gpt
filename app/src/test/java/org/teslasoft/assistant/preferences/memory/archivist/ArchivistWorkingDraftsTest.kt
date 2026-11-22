@@ -313,4 +313,16 @@ class ArchivistWorkingDraftsTest {
         assertEquals(listOf("greenhouse heater broke", "car repairs"), chosen)
         assertFalse(chosen.contains("likes tea"))
     }
+
+    @Test fun anOversizedCombinationIsCheckedWholeAndAnUnknownReferenceRejectsIt() {
+        val drafts = WorkingDrafts().applying(
+            SectionDraftChanges(newDrafts = (1..11).map { memory("Fact $it") })
+        )
+        val all = (1..11).map { "D$it" }.toTypedArray()
+        val combined = drafts.applying(changes(drafts, edits = listOf(edit(*all, content = "Facts 1 to 11"))))
+        assertEquals(listOf("Facts 1 to 11"), combined.drafts.map { it.memory.content })
+        val withUnknown = changes(drafts, edits = listOf(edit(*all, "D99", content = "Facts")), repair = { null })
+        assertEquals(1, withUnknown.failedEdits)
+        assertEquals(11, drafts.applying(withUnknown).drafts.count { it.alternativeOf.isEmpty() })
+    }
 }

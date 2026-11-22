@@ -121,7 +121,6 @@ object ArchivistResponseParser {
 
     /** Defensive bounds on working-draft operations in one response. */
     const val MAX_DRAFT_EDITS_PER_RESPONSE = 40
-    private const val MAX_REFS_PER_DRAFT_EDIT = 10
 
     fun parse(raw: String): Parsed = parse(raw, null)
 
@@ -241,7 +240,9 @@ object ArchivistResponseParser {
             for (i in 0 until arr.length()) {
                 if (edits.size >= MAX_DRAFT_EDITS_PER_RESPONSE) break
                 val o = arr.optJSONObject(i) ?: continue
-                val refs = readRefs(o, "replaces", "replace", MAX_REFS_PER_DRAFT_EDIT)
+                // Every named reference is kept: a combination is checked
+                // whole, never cut down to a different operation.
+                val refs = readRefs(o, "replaces", "replace", Int.MAX_VALUE)
                 edits.add(
                     RawDraftEdit(
                         refs = refs,

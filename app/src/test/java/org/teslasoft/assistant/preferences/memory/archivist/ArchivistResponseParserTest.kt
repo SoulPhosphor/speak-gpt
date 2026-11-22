@@ -355,4 +355,13 @@ class ArchivistResponseParserTest {
         assertEquals("Fixed", edits.single().content)
         assertTrue(withdrawn.isEmpty())
     }
+
+    @Test
+    fun aCombinationNamingManyDraftsKeepsEveryReference() {
+        val refs = (1..15).joinToString(",") { "\"D$it\"" }
+        val parsed = ArchivistResponseParser.parse(
+            """{"draft_edits":[{"replaces":[$refs],"content":"All of them"}]}"""
+        )
+        assertEquals((1..15).map { "D$it" }, parsed.draftEdits.single().refs)
+    }
 }
