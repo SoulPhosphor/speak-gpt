@@ -238,6 +238,20 @@ class ScannerMatchEngineTest {
         )
     }
 
+    @Test fun aMemoryChangedBetweenLookupsIsReportedAsItIsNow() {
+        val vectors = FakeVectors()
+        val self = draft(1, "The user started violin lessons with a teacher").also(vectors::store)
+        val first = ScannerMatchEngine.lookupProposal(self, listOf(pending), emptyList(), emptyList(), vectors)
+        assertEquals(MatchStatus.PENDING, first.matches.single().status)
+        // Approved and later archived: the next lookup reports Archived.
+        val archivedNow = pending.copy(status = MatchStatus.ARCHIVED)
+        val second = ScannerMatchEngine.lookupProposal(self, listOf(archivedNow), emptyList(), emptyList(), vectors)
+        assertEquals(MatchStatus.ARCHIVED, second.matches.single().status)
+        // Deleted: it is no longer an eligible record, so nothing refers to it.
+        val third = ScannerMatchEngine.lookupProposal(self, emptyList(), listOf("p1"), emptyList(), vectors)
+        assertTrue(third.matches.isEmpty() && third.links.isEmpty())
+    }
+
     @Test fun sectionCluesAreReportedOnlyWhenStillEligible() {
         val evidence = ScannerMatchEngine.lookupSection(
             fingerprint = "s", sectionText = "Assistant: anything else today?", windows = emptyList(),

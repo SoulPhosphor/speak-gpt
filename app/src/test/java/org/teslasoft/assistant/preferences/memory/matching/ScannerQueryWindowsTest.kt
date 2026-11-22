@@ -142,6 +142,44 @@ class ScannerQueryWindowsTest {
         assertEquals(text.length, covered)
     }
 
+    @Test fun combiningMarksAndJoinedEmojiAreKeptWhole() {
+        // Accented letters written with combining marks, and family emoji
+        // joined by zero-width joiners, repeated with no spaces.
+        // Drawn at random from the sequences so the text never repeats and
+        // each window can be located exactly.
+        val units = listOf(
+            "e\u0301", "a\u0308", "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67",
+            "\u0915\u094D\u0937", "\uD83D\uDC4D\uD83C\uDFFD", "\u4E2D", "\u6587"
+        )
+        val random = java.util.Random(3)
+        val text = buildString { repeat(600) { append(units[random.nextInt(units.size)]) } }
+        val windows = ScannerQueryWindows.split(text, 64, realCount)
+        assertTrue(windows.size > 1)
+        windows.forEach { w ->
+            assertTrue(realCount(w) <= 64)
+            assertFalse(Character.isLowSurrogate(w.first()))
+            assertFalse(Character.isHighSurrogate(w.last()))
+        }
+        // Every code point arrives, in order: nothing is lost even where a cut
+        // falls inside a combined character.
+        var covered = 0
+        for (w in windows) {
+            val joined = w.replace(" ", "")
+            val at = text.indexOf(joined, startIndex = maxOf(0, covered - joined.length))
+            assertTrue(at in 0..covered)
+            covered = maxOf(covered, at + joined.length)
+        }
+        assertEquals(text.length, covered)
+        assertTrue(text.endsWith(windows.last().replace(" ", "")))
+    }
+
+    @Test fun anAllowanceSmallerThanThePrefixStillEndsAndCoversTheText() {
+        // Nothing fits; every code point becomes its own window and the
+        // split still finishes without dropping text.
+        val windows = ScannerQueryWindows.split("abc def", 1, realCount)
+        assertEquals(listOf("a", "b", "c", "d", "e", "f"), windows)
+    }
+
     @Test fun aWindowAlwaysMakesProgress() {
         // A counter that says even one word is too long must not loop forever.
         val windows = ScannerQueryWindows.split("a b c d", 3) { if (it.contains(" ")) 99 else 50 }
