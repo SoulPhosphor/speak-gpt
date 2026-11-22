@@ -2356,6 +2356,10 @@
     <string name="memory_scanner_average_tokens">Memory Scanner Average Token Amount</string>
     <string name="memory_scanner_average_tokens_hint">Average tokens sent together to the memory scanner AI at one time to be scanned. No partial messages will be sent unless the response exceeds the maximum token count.</string>
     <string name="memory_scanner_maximum_tokens">Maximum Memory Scanner Token Amount</string>
+    <string name="memory_scanner_earlier_average_tokens">Earlier Context Average Token Amount</string>
+    <string name="memory_scanner_earlier_average_tokens_hint">The average amount of earlier conversation text sent to the memory scanner AI to help understand new messages and correct working memories. All new messages are still scanned.</string>
+    <string name="memory_scanner_earlier_maximum_tokens">Maximum Earlier Context Token Amount</string>
+    <string name="memory_scanner_earlier_maximum_tokens_hint">The maximum amount of earlier conversation text that can be included in a single scanner request. Allows additional context when needed without exceeding this limit.</string>
     <string name="memory_assistant_conversation_amount">Conversation Amount Per Request</string>
     <string name="memory_assistant_conversation_amount_hint">Controls how much conversation text is sent in each AI request. Smaller amounts work with more models and providers but require more requests.</string>
     <string name="memory_assistant_conversation_amount_auto">Auto</string>

@@ -22,11 +22,10 @@ import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
  */
 object ScanContext {
 
-    /** Starting allowances from the November 18 scanner proposal: at most
-     *  256 estimated tokens from one message and 768 in total per request.
-     *  The Stage 6B setting will let the user choose the total. */
-    const val EXCERPT_TOKENS_PER_MESSAGE = 256
-    const val EXCERPT_TOKENS_TOTAL = 768
+    /** Defaults of the Earlier Context token settings on Memory Scanner
+     *  Tool Settings (owner decision, Stage 6B.1). */
+    const val DEFAULT_EARLIER_AVERAGE_TOKENS = 2_000
+    const val DEFAULT_EARLIER_MAXIMUM_TOKENS = 4_000
 
     /** [rows] with each piece of a split message labeled as its part. */
     fun labelParts(
@@ -48,44 +47,50 @@ object ScanContext {
 
     /**
      * Earlier eligible messages before [first] (the section's first piece),
-     * newest first while they fit, returned in chat order. A section that
-     * starts inside a message begins with that message's earlier text. Each
-     * message contributes at most its last [perMessage] tokens, cut after a
-     * space where one exists; [total] bounds all of them together.
+     * newest first, returned in chat order. A section that starts inside a
+     * message begins with that message's earlier text. Whole messages are
+     * added until about [average] tokens are reached; the average may be
+     * exceeded to finish a message, but [maximum] never is. A message is cut
+     * (keeping its end, after a space where one exists) only when it cannot
+     * fit whole under the maximum, and nothing older is added after it.
      */
     fun earlierExcerpts(
         chatMessages: List<ScanMessage>,
         first: ScanSourceRow,
         resolveScope: (ScanMessageScope?) -> ScanScopeResolution,
-        perMessage: Int = EXCERPT_TOKENS_PER_MESSAGE,
-        total: Int = EXCERPT_TOKENS_TOTAL,
+        average: Int = DEFAULT_EARLIER_AVERAGE_TOKENS,
+        maximum: Int = DEFAULT_EARLIER_MAXIMUM_TOKENS,
         estimate: (String) -> Int = IncludeTextPolicy::estimateTokens
     ): List<ScanSourceRow> {
-        if (total <= 0) return emptyList()
+        val ceiling = maxOf(average, maximum)
+        if (average <= 0 || ceiling <= 0) return emptyList()
         val at = chatMessages.indexOfFirst { it.id == first.messageId }
         if (at < 0) return emptyList()
         val out = ArrayList<ScanSourceRow>()
-        var left = total
+        var used = 0
+        fun row(message: ScanMessage, scope: ScanScopeResolution.Read, start: Int, end: Int) = ScanSourceRow(
+            chatId = first.chatId, messageId = message.id, messageNumber = message.number,
+            role = message.role, start = start, end = end, text = message.text.substring(start, end),
+            startedAt = message.startedAt, modelTag = message.model,
+            companionId = scope.companionId, worldId = scope.worldId, campaignId = scope.campaignId,
+            roleplayCharacterId = scope.roleplayCharacterId, userPersonaId = scope.userPersonaId,
+            projectId = scope.projectId
+        )
+        /** False once nothing more may be added. */
         fun take(message: ScanMessage, end: Int): Boolean {
             val scope = resolveScope(message.scope) as? ScanScopeResolution.Read ?: return true
-            val budget = minOf(perMessage, left)
-            if (budget <= 0) return false
-            val start = tailStart(message.text, end, budget, estimate)
-            if (start >= end) return true
-            val text = message.text.substring(start, end)
-            if (text.isBlank()) return true
-            out.add(
-                ScanSourceRow(
-                    chatId = first.chatId, messageId = message.id, messageNumber = message.number,
-                    role = message.role, start = start, end = end, text = text,
-                    startedAt = message.startedAt, modelTag = message.model,
-                    companionId = scope.companionId, worldId = scope.worldId, campaignId = scope.campaignId,
-                    roleplayCharacterId = scope.roleplayCharacterId, userPersonaId = scope.userPersonaId,
-                    projectId = scope.projectId
-                )
-            )
-            left -= estimate(text)
-            return left > 0
+            if (end <= 0 || message.text.substring(0, end).isBlank()) return true
+            val whole = estimate(message.text.substring(0, end))
+            if (used + whole <= ceiling) {
+                out.add(row(message, scope, 0, end))
+                used += whole
+                return used < average
+            }
+            val start = tailStart(message.text, end, ceiling - used, estimate)
+            if (start < end && message.text.substring(start, end).isNotBlank()) {
+                out.add(row(message, scope, start, end))
+            }
+            return false
         }
         if (first.start > 0 && chatMessages[at].eligible) {
             if (!take(chatMessages[at], first.start)) return out.reversed()

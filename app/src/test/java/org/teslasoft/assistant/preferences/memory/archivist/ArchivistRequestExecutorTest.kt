@@ -585,4 +585,36 @@ class ArchivistRequestExecutorTest {
         memoryId = "pending-$index",
         now = "2026-08-10T00:00:00Z"
     )
+
+    @Test
+    fun theDraftEditRepairSendsTheSameRequestWithOnlyTheProblemsAdded() = runBlocking {
+        val seen = ArrayList<ArchivistModelRequest>()
+        val answer = ArchivistRequestExecutor.draftEditRepair(
+            systemPrompt = "SYSTEM",
+            conversationData = "DATA",
+            problems = listOf("D1 was named by more than one edit or withdrawal."),
+            model = "fake-model",
+            temperature = 0.3,
+            transport = ArchivistModelTransport { request ->
+                seen.add(request)
+                """{"draft_edits":[{"replaces":["D1"],"content":"Fixed"}],"withdrawn_drafts":["D2"]}"""
+            }
+        )
+        val request = seen.single()
+        assertEquals("DATA", request.conversationData)
+        assertTrue(request.systemPrompt.startsWith("SYSTEM"))
+        assertTrue(request.systemPrompt.contains("- D1 was named by more than one edit or withdrawal."))
+        assertEquals(ArchivistRequestExecutor.DRAFT_EDIT_REPAIR_ATTEMPT, request.attempt)
+        assertEquals("Fixed", answer!!.first.single().content)
+        assertEquals(listOf("D2"), answer.second)
+    }
+
+    @Test
+    fun anUnreadableDraftEditRepairIsNullNotAFailure() = runBlocking {
+        val answer = ArchivistRequestExecutor.draftEditRepair(
+            "SYSTEM", "DATA", listOf("problem"), "fake-model", 0.3,
+            ArchivistModelTransport { "not json" }
+        )
+        assertEquals(null, answer)
+    }
 }

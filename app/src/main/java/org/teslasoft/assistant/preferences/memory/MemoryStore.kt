@@ -3638,7 +3638,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         /** A repeat of an already staged candidate: the combined payload to
          *  keep (for example, the repeat's extra tags), or null to keep the
          *  stored one, so a resumed scan files what an uninterrupted one would. */
-        mergeRepeat: (stream: String, stored: String, repeat: String) -> String? = { _, _, _ -> null }
+        mergeRepeat: (stream: String, stored: String, repeat: String) -> String? = { _, _, _ -> null },
+        /** The range's complete working-draft collection after this section
+         *  (Stage 6B.1), replacing the saved one in order; null leaves the
+         *  saved memory drafts as they are. */
+        workingDrafts: List<StagedAnalysisCandidate>? = null
     ) {
         val db = writableDatabase
         db.beginTransaction()
@@ -3646,6 +3650,23 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             check(rowExists(db, "scan_ranges", "range_id", rangeId)) { "Scan range is not active" }
             check(rowExists(db, "analysis_run_state", "run_id", rangeId)) {
                 "Candidate collection is not active"
+            }
+            if (workingDrafts != null) {
+                db.delete("analysis_candidates", "run_id = ? AND stream = ?", arrayOf(rangeId, "memory"))
+                for ((ordinal, draft) in workingDrafts.withIndex()) {
+                    db.insertOrThrow("analysis_candidates", null, ContentValues().apply {
+                        put("candidate_id", newId("cand-"))
+                        put("run_id", rangeId)
+                        put("stream", draft.stream)
+                        put("target_type", draft.targetType)
+                        put("target_id", draft.targetId)
+                        put("candidate_hash", draft.candidateHash)
+                        put("chunk_ordinal", chunkOrdinal)
+                        put("candidate_ordinal", ordinal)
+                        put("payload_json", draft.payloadJson)
+                        put("created_at", nowIso())
+                    })
+                }
             }
             for ((candidateOrdinal, candidate) in candidates.withIndex()) {
                 val stored = db.rawQuery(

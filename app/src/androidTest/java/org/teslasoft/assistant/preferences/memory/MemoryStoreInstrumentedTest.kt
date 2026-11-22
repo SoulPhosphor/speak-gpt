@@ -393,6 +393,26 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
+    fun theWholeWorkingCollectionIsReplacedWithItsCheckpointInOrder() {
+        val store = open(freshDbName())
+        store.beginScanRun(runRecord("run-w"), listOf(scanRange("run-w", "chat-1")))
+        val rule = StagedAnalysisCandidate("model_rule", null, null, "h-rule", """{"text":"Be brief."}""")
+        store.saveScanSection(
+            "range-run-w-chat-1", 1, listOf(rule), """{"sections":1,"next_draft":3}""",
+            workingDrafts = listOf(candidate("first"), candidate("second"))
+        )
+        // Section 2 withdraws "first" and edits "second"; the rule is kept.
+        val checkpoint = """{"sections":2,"next_draft":4}"""
+        store.saveScanSection(
+            "range-run-w-chat-1", 2, emptyList(), checkpoint,
+            workingDrafts = listOf(candidate("second, corrected"), candidate("third"))
+        )
+        val staged = store.stagedScanCandidates("range-run-w-chat-1")
+        assertEquals(listOf("h-rule", "h-second, corrected", "h-third"), staged.map { it.candidateHash })
+        assertEquals(checkpoint, store.scanRange("range-run-w-chat-1")!!.checkpointJson)
+    }
+
+    @Test
     fun aKilledRunKeepsItsCheckpointAndWorkingDraftsAndResumesThem() {
         val store = open(freshDbName())
         store.beginScanRun(runRecord("run-k"), listOf(scanRange("run-k", "chat-1")))

@@ -71,6 +71,8 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
     private var fieldMaxSuggestions: TextInputEditText? = null
     private var fieldScannerAverageTokens: TextInputEditText? = null
     private var fieldScannerMaximumTokens: TextInputEditText? = null
+    private var fieldScannerEarlierAverageTokens: TextInputEditText? = null
+    private var fieldScannerEarlierMaximumTokens: TextInputEditText? = null
 
     private var textMinImportanceValue: TextView? = null
     private var fieldExtractionPrompt: TextInputEditText? = null
@@ -105,6 +107,8 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
         fieldMaxSuggestions = findViewById(R.id.field_max_suggestions)
         fieldScannerAverageTokens = findViewById(R.id.field_scanner_average_tokens)
         fieldScannerMaximumTokens = findViewById(R.id.field_scanner_maximum_tokens)
+        fieldScannerEarlierAverageTokens = findViewById(R.id.field_scanner_earlier_average_tokens)
+        fieldScannerEarlierMaximumTokens = findViewById(R.id.field_scanner_earlier_maximum_tokens)
         textMinImportanceValue = findViewById(R.id.text_min_importance_value)
         fieldExtractionPrompt = findViewById(R.id.field_extraction_prompt)
         btnResetPrompt = findViewById(R.id.btn_reset_prompt)
@@ -144,6 +148,8 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
 
         fieldScannerAverageTokens?.setText(preferences?.getMemoryScannerAverageTokens()?.toString())
         fieldScannerMaximumTokens?.setText(preferences?.getMemoryScannerMaximumTokens()?.toString())
+        fieldScannerEarlierAverageTokens?.setText(preferences?.getMemoryScannerEarlierAverageTokens()?.toString())
+        fieldScannerEarlierMaximumTokens?.setText(preferences?.getMemoryScannerEarlierMaximumTokens()?.toString())
 
         /* ---- Minimum Importance ---- */
         selectedImportance = (preferences?.getArchivistMinImportance() ?: 0).coerceIn(0, 5)
@@ -281,7 +287,17 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
             }
             return false
         }
-        if (maximum < average) {
+        val earlierAverage = fieldScannerEarlierAverageTokens?.text?.toString()?.trim()?.toIntOrNull()
+        val earlierMaximum = fieldScannerEarlierMaximumTokens?.text?.toString()?.trim()?.toIntOrNull()
+        if (earlierAverage == null || earlierAverage <= 0 || earlierMaximum == null) {
+            (if (earlierAverage == null || earlierAverage <= 0) fieldScannerEarlierAverageTokens
+                else fieldScannerEarlierMaximumTokens)?.apply {
+                requestFocus()
+                selectAll()
+            }
+            return false
+        }
+        if (maximum < average || earlierMaximum < earlierAverage) {
             val actions = layoutInflater.inflate(R.layout.dialog_single_action, null)
             val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                 .setTitle(R.string.summarizer_compaction_maximum_error_title)
@@ -296,6 +312,7 @@ class MemoryAssistantAdvancedSettingsActivity : SettingsPageActivity() {
             return false
         }
         preferences?.setMemoryScannerTokenAmounts(average, maximum)
+        preferences?.setMemoryScannerEarlierTokenAmounts(earlierAverage, earlierMaximum)
 
         preferences?.setArchivistMinImportance(selectedImportance)
 

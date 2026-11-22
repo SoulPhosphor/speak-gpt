@@ -2725,6 +2725,25 @@ class Preferences internal constructor(
         putGlobalString("memory_scanner_maximum_tokens", maximum.toString())
     }
 
+    /** Earlier conversation text repeated before a scanner section, read
+     *  again from the chat (Stage 6B.1): about this many tokens on average. */
+    fun getMemoryScannerEarlierAverageTokens(): Int =
+        getGlobalString("memory_scanner_earlier_average_tokens", "").toIntOrNull()?.takeIf { it > 0 }
+            ?: org.teslasoft.assistant.preferences.memory.scan.ScanContext.DEFAULT_EARLIER_AVERAGE_TOKENS
+
+    /** Never more earlier conversation text than this in one request. */
+    fun getMemoryScannerEarlierMaximumTokens(): Int = maxOf(
+        getMemoryScannerEarlierAverageTokens(),
+        getGlobalString("memory_scanner_earlier_maximum_tokens", "").toIntOrNull()?.takeIf { it > 0 }
+            ?: org.teslasoft.assistant.preferences.memory.scan.ScanContext.DEFAULT_EARLIER_MAXIMUM_TOKENS
+    )
+
+    fun setMemoryScannerEarlierTokenAmounts(average: Int, maximum: Int) {
+        if (average <= 0 || maximum < average) return
+        putGlobalString("memory_scanner_earlier_average_tokens", average.toString())
+        putGlobalString("memory_scanner_earlier_maximum_tokens", maximum.toString())
+    }
+
     /** The Memory Scanner's own provider routing for its selected model (see
      *  getSummarizerRoutingOverride). "" = none. */
     fun getMemoryScannerRoutingOverride(): String =
