@@ -16,6 +16,13 @@ internal object ParallelChatSnapshot {
     const val ALLOW_IMAGES = "parallel_allow_images"
     const val SHOW_REASONING = "parallel_show_reasoning"
     private const val PREFIX = "parallel-snapshot:"
+    private const val UPLOADED_SNAPSHOT = "parallel_uploaded_snapshot"
+
+    /** Provider-side file IDs still retain and validate the original backed-up bytes. */
+    fun uploadedFile(fileId: String, ref: ResponseAttachment) = JsonObject().apply {
+        addProperty("file_id", fileId)
+        addProperty(UPLOADED_SNAPSHOT, attachmentReference(ref))
+    }
 
     fun text(role: String, text: String): ParallelInputPart.Text = message(JsonObject().apply {
         addProperty("role", role); addProperty("content", text)
@@ -65,6 +72,12 @@ internal object ParallelChatSnapshot {
         val consumed = HashSet<String>()
         fun resolve(value: com.google.gson.JsonElement, field: String? = null): com.google.gson.JsonElement = when {
             value.isJsonObject -> value.asJsonObject.deepCopy().also { obj ->
+                if (field == "file" && obj.has("file_id") && obj.has(UPLOADED_SNAPSHOT)) {
+                    val reference = obj.remove(UPLOADED_SNAPSHOT).asString
+                    val part = request.prompt.single { it.attachment?.let(::attachmentReference) == reference }
+                    require(part.attachment!!.matches(request.attachmentBytes.getValue(part.partId))) { "snapshot_attachment_unavailable" }
+                    consumed += part.partId
+                }
                 obj.entrySet().toList().forEach { (key, child) -> obj.add(key, resolve(child, key)) }
             }
             value.isJsonArray -> JsonArray().also { out -> value.asJsonArray.forEach { out.add(resolve(it, field)) } }

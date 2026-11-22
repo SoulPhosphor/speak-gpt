@@ -45,7 +45,10 @@ object GeneratedImageFiles {
     /** The hashes of the generated-image files referenced by [messages] —
      *  collected BEFORE the messages are removed. */
     fun referencedHashes(messages: List<Map<String, Any?>>): Set<String> =
-        messages.mapNotNull { GeneratedImageMetadata.referencedFileHash(it) }.toSet()
+        messages.flatMap { message ->
+            listOfNotNull(GeneratedImageMetadata.referencedFileHash(message)) +
+                org.teslasoft.assistant.conversation.responsegroups.ResponseGroupImages.metadata(message).mapNotNull { it.fileHash }
+        }.toSet()
 
     /** Deletes each candidate file unless any stored chat message still
      *  references its hash. Call after the deletion has been persisted. */
@@ -83,8 +86,10 @@ object GeneratedImageFiles {
                         return@launch
                     }
                     for (message in history.messages) {
-                        val hash = GeneratedImageMetadata.referencedFileHash(message)
-                        if (hash != null) remaining.remove(hash)
+                        val group = org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.read(message)
+                        if (group is org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Invalid ||
+                            group is org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Unsupported) return@launch
+                        remaining.removeAll(referencedHashes(listOf(message)))
                     }
                 }
                 if (remaining.isEmpty()) return@launch

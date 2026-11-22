@@ -58,6 +58,7 @@ internal class ParallelRequestCoordinator(
     private val keepAlive: (ResponseGroupTarget) -> AutoCloseable = { AutoCloseable {} }
 ) {
     private val requests = ConcurrentHashMap<String, Running>()
+    private val pendingStops = ConcurrentHashMap.newKeySet<String>()
     private val checkpointLock = Mutex()
     private val checkpointTimes = ConcurrentHashMap<ResponseGroupTarget, Long>()
     private data class Checkpoint(val running: Running, val change: (ResponseGroup?) -> ResponseGroup)
@@ -117,7 +118,7 @@ internal class ParallelRequestCoordinator(
         }
         val versionId = UUID.randomUUID().toString()
         val fields = oldSlot.versions.single { it.versionId == oldSlot.canonicalVersionId }.fields
-            .filterKeys { it in setOf("activeMemoryAttribution") } +
+            .filterKeys { it in setOf("activeMemoryAttribution", "reasoningLevel", org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY) } +
             mapOf("message" to "", "state" to MessageCompletionState.STREAMING)
         val newSlot = oldSlot.copy(versions = oldSlot.versions + ResponseVersion(versionId, fields,
             listOf(ResponseAttempt.pending(nowMs()))), canonicalVersionId = versionId, foregroundVersionId = versionId)
@@ -130,12 +131,31 @@ internal class ParallelRequestCoordinator(
         launch(prepared)
     }
 
-    /** An explicit per-request cancellation primitive; later UI decides which requests Stop targets. */
+    /** Nonblocking signal, also retained across the durable-reservation/registration interval. */
+    fun signalCancel(requestId: String) {
+        pendingStops.add(requestId)
+        requests[requestId]?.job?.cancel(ParallelUserStop())
+    }
+
+    /** Single-request callers may also wait until the complete owned chain has drained. */
     suspend fun cancel(requestId: String) {
+        signalCancel(requestId)
         val running = requests[requestId] ?: return
         val job = running.registered.await()
         job.cancel(ParallelUserStop())
+        pendingStops.remove(requestId)
         job.join()
+    }
+
+    /** Join the whole owned chain, including tool continuations and late usage observers, before mutation. */
+    suspend fun cancelOwned(target: ResponseGroupTarget? = null, slotId: String? = null, versionId: String? = null) {
+        val jobs = requests.values.filter { running ->
+            (target == null || running.request.target == target) &&
+                (slotId == null || running.request.slotId == slotId) &&
+                (versionId == null || running.request.versionId == versionId)
+        }.map { it.registered.await() }.distinct()
+        jobs.forEach { it.cancel(ParallelUserStop()) }
+        jobs.joinAll()
     }
 
     /** Save retry only. Never executes a transport, reloads prices, or mints another request ID. */
@@ -201,6 +221,8 @@ internal class ParallelRequestCoordinator(
                 var running = first
                 try {
                     yield()
+                    first.registered.await()
+                    if (pendingStops.remove(first.request.requestId)) throw ParallelUserStop()
                     coroutineScope {
                         while (true) {
                             val attempt = running
@@ -240,6 +262,8 @@ internal class ParallelRequestCoordinator(
                             require(requests.putIfAbsent(request.requestId, next) == null)
                             owned.add(next)
                             running = next
+                            if (pendingStops.remove(request.requestId)) next.job!!.cancel(ParallelUserStop())
+                            currentCoroutineContext().ensureActive()
                             if (!retryWithoutTools) {
                                 val extra = tools!!.execute(request, attempt.toolMessage!!,
                                     reserveImage = {
@@ -280,8 +304,10 @@ internal class ParallelRequestCoordinator(
             }.also { job ->
                 first.job = job
                 first.registered.complete(job)
+                if (pendingStops.contains(first.request.requestId)) job.cancel(ParallelUserStop())
                 job.invokeOnCompletion {
                     owned.forEach { running ->
+                        pendingStops.remove(running.request.requestId)
                         if (!running.unsaved) requests.remove(running.request.requestId, running)
                         else running.request = running.request.copy(prompt = emptyList(), attachmentBytes = emptyMap())
                     }

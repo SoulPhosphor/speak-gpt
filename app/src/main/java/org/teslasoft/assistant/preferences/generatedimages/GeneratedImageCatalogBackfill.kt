@@ -57,7 +57,20 @@ object GeneratedImageCatalogBackfill {
                 continue
             }
 
-            for (message in history.messages) {
+            if (history.messages.any { message ->
+                    when (org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.read(message)) {
+                        is org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Invalid,
+                        is org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Unsupported -> true
+                        else -> false
+                    }
+                }) { allAuthoritative = false; continue }
+            val imageSources = history.messages.flatMap { message ->
+                if (!message.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY)) listOf(message)
+                else org.teslasoft.assistant.conversation.responsegroups.ResponseGroupImages.metadata(message).map { image ->
+                    HashMap(message).apply { put(GeneratedImageMetadata.KEY, image.toJson()) }
+                }
+            }
+            for (message in imageSources) {
                 val metadata = GeneratedImageMetadata.fromJson(
                     message[GeneratedImageMetadata.KEY]?.toString()
                 )

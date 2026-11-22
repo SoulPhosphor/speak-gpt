@@ -100,6 +100,27 @@ class ParallelRequestCoordinatorTest {
         }
     }
 
+    @Test fun stopBetweenDurableReservationAndRegistrationCannotLaunchThatRequest() = runBlocking {
+        withTimeout(10_000) {
+            val g = group(2)
+            val store = Store(g.userMessageId, g.assistantMessageId)
+            val seen = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val engine = ParallelRequestCoordinator(this, store, { _, _ -> null }, { request -> ParallelTransport { _, output ->
+                seen += request.slotId
+                output.text("retained sibling")
+            } }, { TokenPricingCatalog(it.assignment.modelId) })
+            val stopped = g.slots.first().versions.single().attempts.single().requestId
+            engine.cancel(stopped)
+            engine.dispatch("chat", g) {}.await()
+            val saved = store.read(ResponseGroupTarget("chat", g.assistantMessageId, g.groupId))
+            assertEquals(listOf(g.slots[1].slotId), seen)
+            assertEquals("stopped", saved.slots[0].versions.single().fields["state"])
+            assertEquals("done", saved.slots[1].versions.single().fields["state"])
+            assertEquals(stopped, saved.slots[0].versions.single().attempts.single().requestId)
+            assertTrue(engine.unsavedRequestIds().isEmpty())
+        }
+    }
+
     @Test fun fourEndpointsCompleteOutOfOrderWithoutTextReasoningOrPromptLeakage() = runBlocking {
         withTimeout(10_000) {
             val f = Fixture(group(), this)
@@ -131,6 +152,27 @@ class ParallelRequestCoordinatorTest {
             assertEquals("answer-0", f.store.rows.last()["message"])
             assertEquals(originalIds, ResponseGroupEdits.usage(f.saved()).map { it.requestId }.toSet())
             assertTrue(f.engine.unsavedRequestIds().isEmpty())
+        }
+    }
+
+    @Test fun cancelOwnedJoinsATerminalCheckpointWithoutCancellingItsSibling() = runBlocking {
+        withTimeout(10_000) {
+            val f = Fixture(group(2), this)
+            val run = f.start()
+            val selected = f.g.slots.first()
+            f.lanes.getValue(selected.slotId).done(23)
+            while (f.store.commits.receive().slots.first().versions.single().fields["state"] != "done") { }
+            // The transport has finished, but the owned job still waits for its pricing observer.
+            f.engine.cancelOwned(f.target, selected.slotId)
+            assertEquals("done", f.version(0).fields["state"])
+            assertEquals("streaming", f.version(1).fields["state"])
+            f.prices.getValue(f.g.slots[1].slotId).complete(TokenPricingCatalog("same-model"))
+            f.lanes.getValue(f.g.slots[1].slotId).done()
+            run.await()
+            assertEquals(23, ResponseGroupEdits.usage(f.saved()).first().inputTokens)
+            assertEquals(run.requestIds, ResponseGroupEdits.usage(f.saved()).map { it.requestId })
+            assertTrue(f.engine.unsavedRequestIds().isEmpty())
+            assertEquals(2, f.calls)
         }
     }
 

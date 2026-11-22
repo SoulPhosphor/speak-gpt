@@ -135,6 +135,25 @@ class ResponseGroupStorageInstrumentedTest {
         assertEquals(previous, read())
     }
 
+    @Test fun deletingOnlyUserRowsKeepsOwnedRepliesWritableAfterReopen() {
+        val original = read()
+        val owned = original.filter { it.containsKey(ResponseGroupCodec.KEY) }.map(::group)
+        val deleted = original.filterNot { MessageIdentity.idOf(it) in owned.map { g -> g.userMessageId } }
+        assertEquals(ChatStorageHealth.WriteOutcome.OK, prefs.saveChatHistory(context, chatId, deleted, synchronous = true))
+        val reopened = read()
+        assertEquals(deleted, reopened)
+        assertEquals(owned, reopened.filter { it.containsKey(ResponseGroupCodec.KEY) }.map(::group))
+        val row = reopened.last()
+        val group = group(row)
+        val browsed = ResponseGroupEdits.browse(group, group.slots[1].slotId, group.slots[1].canonicalVersionId)
+        assertTrue(ResponseGroupStore.replace(context, chatId, ResponseGroupTarget(chatId, group.assistantMessageId, group.groupId),
+            row[ResponseGroupCodec.KEY] as String, browsed) {} is ResponseGroupStore.Result.Saved)
+        val next = read() + listOf(hashMapOf<String, Any>("message_id" to UUID.randomUUID().toString(), "isBot" to false, "message" to "next user"))
+        assertEquals(ChatStorageHealth.WriteOutcome.OK, prefs.saveChatHistory(context, chatId, next, synchronous = true))
+        assertEquals(group.input, group(read()[reopened.lastIndex]).input)
+        assertEquals(group.userMessageId, group(read()[reopened.lastIndex]).userMessageId)
+    }
+
     @Test fun recoveryBackupAndRestoreAsCopyKeepAllSnapshotsAttachmentsSelectionsAndRequestIds() {
         verifyBackupAndRestore(rows())
     }

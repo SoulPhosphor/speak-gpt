@@ -257,5 +257,30 @@ class ResponseGroupTest {
         rejected { ResponseGroupHistory.validateConversation(history() + history()) }
     }
 
+    @Test fun deletingVisibleUserRowsPreservesHistoricalOwnershipAndFrozenInputs() {
+        val original = history()
+        val groups = original.filter { it.containsKey(ResponseGroupCodec.KEY) }.map(::group)
+        val userIds = groups.map { it.userMessageId }.toSet()
+        val deleted = original.filterNot { MessageIdentity.idOf(it) in userIds }
+        assertNotEquals(ResponseGroupHistory.fingerprint(original), ResponseGroupHistory.fingerprint(deleted))
+        ResponseGroupHistory.validateSavedTransition(original, deleted)
+        ResponseGroupHistory.validateConversation(deleted)
+        val targetGroup = group(deleted.last())
+        val browsed = ResponseGroupEdits.browse(targetGroup, targetGroup.slots[1].slotId,
+            targetGroup.slots[1].canonicalVersionId)
+        val changed = ResponseGroupHistory.replace("chat", deleted, target(targetGroup),
+            deleted.last()[ResponseGroupCodec.KEY] as String, browsed)
+        assertEquals(targetGroup.input, group(changed.after).input)
+        assertEquals(ids(targetGroup), ids(group(changed.after)))
+        assertEquals(targetGroup.userMessageId, group(changed.after).userMessageId)
+        val restored: List<HashMap<String, Any>> = gson.fromJson(gson.toJson(changed.messages),
+            object : TypeToken<List<HashMap<String, Any>>>() {}.type)
+        ResponseGroupHistory.validateConversation(restored)
+        assertEquals(groups.map { it.input }, restored.filter { it.containsKey(ResponseGroupCodec.KEY) }.map { group(it).input })
+        val wrongRole = original.map { HashMap(it) }
+        wrongRole.single { MessageIdentity.idOf(it) == groups.first().userMessageId }["isBot"] = true
+        rejected { ResponseGroupHistory.validateSavedTransition(original, wrongRole) }
+    }
+
     private fun ids(g: ResponseGroup): List<String> = g.slots.flatMap { s -> s.versions.flatMap { v -> v.attempts.map { it.requestId } } }
 }

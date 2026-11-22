@@ -30,7 +30,7 @@ object ResponseGroupHistory {
         require(before[ResponseGroupCodec.KEY] == expectedEnvelope && target.groupId == group.groupId &&
             target.assistantMessageId == group.assistantMessageId) { "stale_target" }
         val user = messages.take(index).lastOrNull { it["isBot"] != true && it["isBot"]?.toString() != "true" }
-        require(user?.let(MessageIdentity::idOf) == group.userMessageId) { "user_identity" }
+        validateUserReference(messages.map(MessageIdentity::idOf).toSet(), user?.let(MessageIdentity::idOf), group)
         val after = ResponseGroupEdits.install(before, group)
         val changed = ChatVersionProjection.fields(before) != ChatVersionProjection.fields(after)
         require(!changed || index == messages.lastIndex || discardDescendants) { "branch_confirmation_required" }
@@ -45,9 +45,10 @@ object ResponseGroupHistory {
         val groups = messages.filter { it.containsKey(ResponseGroupCodec.KEY) }
         if (groups.isEmpty()) return null
         return org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection.fingerprint(
-            com.google.gson.Gson().toJson(groups.map {
-                listOf(it["message_id"], it[ResponseGroupCodec.KEY], ChatVersionProjection.fields(it))
-            })
+            com.google.gson.Gson().toJson(listOf(
+                messages.map { listOf(MessageIdentity.idOf(it), it["isBot"]?.toString()) },
+                groups.map { listOf(it["message_id"], it[ResponseGroupCodec.KEY], ChatVersionProjection.fields(it)) }
+            ))
         )
     }
 
@@ -66,19 +67,30 @@ object ResponseGroupHistory {
         validateConversation(after)
     }
 
+    /** A deleted visible user row does not delete a response's immutable original input or identity.
+     * When present, the source row must still be the correctly ordered user that owns this group.
+     * Historical ownership survives ordinary Delete Message, bulk deletion, backups and restored copies.
+     */
+    private fun validateUserReference(rowIds: Set<String>, precedingUserId: String?, group: ResponseGroup) {
+        if (group.userMessageId !in rowIds) return
+        require(precedingUserId == group.userMessageId) { "user_identity" }
+    }
+
     /** IDs may repeat in another chat's restored copy, never within this conversation. */
     fun validateConversation(messages: List<Map<String, Any>>) {
         val ownedIds = HashSet<String>()
         val rowIds = messages.mapNotNull { it[MessageIdentity.KEY]?.toString() }
-        require(rowIds.size == rowIds.toSet().size) { "duplicate_message_identity" }
-        messages.forEachIndexed { index, row ->
-            val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return@forEachIndexed
-            val user = messages.take(index).lastOrNull { it["isBot"] != true && it["isBot"]?.toString() != "true" }
-            require(user?.let(MessageIdentity::idOf) == group.userMessageId) { "user_identity" }
+        val presentIds = rowIds.toSet()
+        require(rowIds.size == presentIds.size) { "duplicate_message_identity" }
+        var precedingUserId: String? = null
+        messages.forEach { row ->
+            if (row["isBot"] != true && row["isBot"]?.toString() != "true") precedingUserId = MessageIdentity.idOf(row)
+            val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return@forEach
+            validateUserReference(presentIds, precedingUserId, group)
             val ids = listOf(group.groupId) + group.input.parts.map { it.partId } + group.slots.flatMap { slot ->
                 listOf(slot.slotId) + slot.versions.flatMap { version -> listOf(version.versionId) + version.attempts.flatMap { listOfNotNull(it.requestId, it.imageJobId) } }
             }
-            require(ids.all { ownedIds.add(it) && it !in rowIds }) { "duplicate_group_identity" }
+            require(ids.all { ownedIds.add(it) && it !in presentIds }) { "duplicate_group_identity" }
         }
     }
 }
