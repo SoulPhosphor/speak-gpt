@@ -176,6 +176,11 @@ object Archivist {
 
     /** The chat changed in a part already read, more often than a scan
      *  should keep starting over; the chat is left for a later scan. */
+    /** The chat changed while the filing requests ran (Stage 6B.3);
+     *  nothing was filed. [alreadyRead] when a message already read changed. */
+    private class SourceChangedDuringFilingException(val alreadyRead: Boolean) :
+        Exception("the chat changed while filing")
+
     private class SourceKeepsChangingException :
         Exception("already-read messages kept changing during the scan")
 
@@ -1553,6 +1558,14 @@ object Archivist {
                     context, store, conversation, working, messages, maxSuggestions, filingMemo,
                     modelTransport, model, temperature
                 )
+                // The filing requests took time: the chat is checked again so
+                // an edit made meanwhile is read before anything is filed.
+                val chatNow = rangeMessages(readRangeSource(context, store, chatId), range)
+                val unreadNow = checkpoint.nextUnread(chatNow)
+                if (!checkpoint.stillValid(chatNow)) throw SourceChangedDuringFilingException(alreadyRead = true)
+                if (unreadNow != null &&
+                    ScanSourceRows.build(chatId, chatNow, unreadNow.first, unreadNow.second, resolveScope).isNotEmpty()
+                ) throw SourceChangedDuringFilingException(alreadyRead = false)
                 val preparedMemories = reconciled.prepared
                 val preparedRules = prepareRuleDrafts(context, store, sourceModel, staged.flatMap { it.rules })
                 val stored = store.commitScanRange(
@@ -1577,6 +1590,13 @@ object Archivist {
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
+        } catch (e: SourceChangedDuringFilingException) {
+            // Read the chat again: from its bookmark when already-read
+            // messages changed, otherwise just the newly finished part.
+            messages = readRangeSource(context, store, chatId)
+            inRange = rangeMessages(messages, range)
+            if (e.alreadyRead) restart()
+            continue@publish
         } catch (e: ScannerDependencyChangedException) {
             // A saved memory changed between the check and the filing
             // transaction: nothing was written; decide again.

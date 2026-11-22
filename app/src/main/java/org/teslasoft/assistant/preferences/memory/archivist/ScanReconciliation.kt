@@ -418,6 +418,9 @@ class ScanFilingPlanner(
 
         val pairs = ArrayList<ComparisonPair>()
         val pairKeys = HashMap<Pair<Int, String>, Triple<String, String, String>>()
+        // The memory version each pair sent: a "covered" answer is about that
+        // version, so the decision depends on it, never on a later one.
+        val pairDependencies = HashMap<Pair<Int, String>, MemoryDependency>()
         var wordingBudget = ScanComparisonRequest.MAX_WORDING_TOKENS_PER_REQUEST
         for (d in drafts) {
             var perDraft = 0
@@ -462,6 +465,7 @@ class ScanFilingPlanner(
                 } else pairs.last { it.draftId == d.draftId }.wording
                 pairs.add(ComparisonPair(d.draftId, memoryId, d.content, label, current.record.content, wording))
                 pairKeys[d.draftId to memoryId] = key
+                pairDependencies[d.draftId to memoryId] = MemoryDependencies.of(current.record, current.wordingHash)
                 perDraft++
             }
         }
@@ -485,9 +489,8 @@ class ScanFilingPlanner(
                     val isCovered = key in answer
                     pairKeys[key]?.let { memo.decisions[it] = isCovered }
                     if (isCovered && key.first !in covered) {
-                        val current = currentMemory(key.second) ?: continue
                         covered.add(key.first)
-                        dependencies.add(MemoryDependencies.of(current.record, current.wordingHash))
+                        dependencies.add(pairDependencies.getValue(key))
                     }
                 }
             }

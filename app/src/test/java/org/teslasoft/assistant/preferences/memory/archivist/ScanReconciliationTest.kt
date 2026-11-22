@@ -186,6 +186,23 @@ class ScanReconciliationTest {
         assertEquals(listOf(listOf(1)), plan.units)
     }
 
+    @Test fun aCoveredAnswerDependsOnTheMemoryVersionThatWasSentNotALaterOne() {
+        val sent = memory("m1", "Has a cat called Pepper.")
+        val memories = HashMap(mapOf("m1" to sent))
+        val plan = runBlocking {
+            planner(memories, compare = { pairs ->
+                // The user edits the memory while the request is out.
+                memories["m1"] = sent.copy(content = "Had a cat called Pepper, who has died.")
+                pairs.map { it.draftId to it.memoryId }.toSet()
+            }).plan(listOf(draft(1, "Mentioned her cat Pepper again.", listOf(meaning("m1")))), cap = 0)
+        }
+        assertEquals(setOf(1), plan.covered)
+        val dependency = plan.dependencies.single()
+        assertEquals(MemoryDependencies.fingerprint(sent), dependency.fingerprint)
+        // So the filing-time recheck sees the edit and the decision is made again.
+        assertFalse(MemoryDependencies.holds(dependency, memories.getValue("m1"), discarded = false))
+    }
+
     // ---- Failures lose nothing ----
 
     @Test fun aFailedComparisonFilesEveryProposalLinkedForReview() {
