@@ -43,6 +43,7 @@ object ChatOutlineRunner {
 
     private val starters = HashMap<String, Starter>()
     private val pending = HashMap<String, Request>()
+    private val last = HashMap<String, Request>()
 
     @Synchronized
     fun register(chatId: String, starter: Starter) {
@@ -61,7 +62,10 @@ object ChatOutlineRunner {
         mode: SummarizerController.OutlineMode,
         redoIndex: Int = -1,
         promptId: String? = null
-    ): Boolean = starters[chatId]?.start(mode, redoIndex, promptId) ?: false
+    ): Boolean {
+        if (chatId.isNotBlank()) last[chatId] = Request(mode, redoIndex, promptId)
+        return starters[chatId]?.start(mode, redoIndex, promptId) ?: false
+    }
 
     @Synchronized
     fun hasStarter(chatId: String): Boolean = starters.containsKey(chatId)
@@ -74,8 +78,16 @@ object ChatOutlineRunner {
         redoIndex: Int = -1,
         promptId: String? = null
     ) {
-        if (chatId.isNotBlank()) pending[chatId] = Request(mode, redoIndex, promptId)
+        if (chatId.isNotBlank()) {
+            pending[chatId] = Request(mode, redoIndex, promptId)
+            last[chatId] = Request(mode, redoIndex, promptId)
+        }
     }
+
+    /** The run last asked for in this chat, for Retry on the outline's error
+     *  pop-up; null when none was asked for since the app started. */
+    @Synchronized
+    fun lastRequest(chatId: String): Request? = last[chatId]
 
     @Synchronized
     fun takePending(chatId: String): Request? = pending.remove(chatId)
