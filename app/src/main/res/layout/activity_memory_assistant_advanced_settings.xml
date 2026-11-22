@@ -133,6 +133,34 @@
                     android:maxLength="10" />
             </LinearLayout>
 
+            <LinearLayout style="@style/Widget.App.Row.Number">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_scanner_earlier_average_tokens" />
+                    <TextView style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/memory_scanner_earlier_average_tokens_hint" />
+                </LinearLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_scanner_earlier_average_tokens"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:ems="6"
+                    android:maxLength="10" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Row.Number">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_scanner_earlier_maximum_tokens" />
+                    <TextView style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/memory_scanner_earlier_maximum_tokens_hint" />
+                </LinearLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_scanner_earlier_maximum_tokens"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:ems="6"
+                    android:maxLength="10" />
+            </LinearLayout>
+
             <!-- ============ Minimum Importance ============ -->
             <LinearLayout
                 android:id="@+id/row_min_importance"

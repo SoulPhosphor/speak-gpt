@@ -94,6 +94,7 @@ A memory may carry at most one Memory Type from the current, user-owned list pro
 - Use only supplied target_refs whose target kind matches the proposal scope. Never invent a target or target reference.
 - Do not repeat what is already obviously permanent app configuration; propose what was NEW in this conversation.
 - Observations, not conclusions: "has twice described X right before Y", not "the user has a problem with Y".
+- Keep the decisions, reasons, details, and outcomes that will matter later. When the situation changed, preserve meaningful history and make the latest supported status clear.
 
 ## model_rules
 Only when the user repeatedly corrected the SAME habit of the AI model in this conversation (style, format, tone — the machine's own defects), propose a short imperative rule that would fix it, e.g. "Do not end responses with a follow-up question." Otherwise leave the array empty.

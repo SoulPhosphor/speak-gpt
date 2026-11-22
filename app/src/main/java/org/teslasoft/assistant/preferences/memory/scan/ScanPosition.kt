@@ -66,7 +66,10 @@ data class ScanCheckpoint(
     val partialMessageId: String? = null,
     val partialOffset: Int = 0,
     val partialFingerprint: String? = null,
-    val sectionsDone: Int = 0
+    val sectionsDone: Int = 0,
+    /** The next scan-local working-draft ID (Stage 6B.1), so an ID is never
+     *  reused within the range, even after a pause or interruption. */
+    val nextDraftId: Int = 1
 ) {
     val isEmpty: Boolean get() = readFingerprints.isEmpty() && partialMessageId == null
 
@@ -117,7 +120,7 @@ data class ScanCheckpoint(
                 read[message.id] = message.fingerprint
             }
         }
-        return ScanCheckpoint(read, partialId, partialAt, partialFp, sectionsDone + 1)
+        return ScanCheckpoint(read, partialId, partialAt, partialFp, sectionsDone + 1, nextDraftId)
     }
 
     fun encode(): String = JSONObject().apply {
@@ -130,6 +133,7 @@ data class ScanCheckpoint(
             put("partialFingerprint", partialFingerprint)
         }
         put("sections", sectionsDone)
+        put("next_draft", nextDraftId)
     }.toString()
 
     companion object {
@@ -148,7 +152,8 @@ data class ScanCheckpoint(
                     partialMessageId = o.optString("partial", "").takeIf { it.isNotBlank() },
                     partialOffset = o.optInt("offset", 0),
                     partialFingerprint = o.optString("partialFingerprint", "").takeIf { it.isNotBlank() },
-                    sectionsDone = o.optInt("sections", 0)
+                    sectionsDone = o.optInt("sections", 0),
+                    nextDraftId = o.optInt("next_draft", 1).coerceAtLeast(1)
                 )
             } catch (_: Exception) {
                 ScanCheckpoint()

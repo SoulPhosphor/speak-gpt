@@ -31,7 +31,9 @@ internal data class ArchivistModelRequest(
     val conversationData: String,
     val model: String,
     val temperature: Double,
-    /** One for the normal request, two for the single bounded JSON repair. */
+    /** One for the normal request, two for the single bounded JSON repair,
+     *  [ArchivistRequestExecutor.DRAFT_EDIT_REPAIR_ATTEMPT] for the targeted
+     *  working-draft repair. */
     val attempt: Int
 )
 
@@ -42,6 +44,7 @@ internal class ArchivistClearlyTruncatedException : Exception(
 
 internal object ArchivistRequestExecutor {
     const val MAX_PARSE_ATTEMPTS = 2
+    const val DRAFT_EDIT_REPAIR_ATTEMPT = 3
 
     private const val REPAIR_PROTOCOL = """
 
@@ -50,6 +53,48 @@ The previous response was not readable as the required JSON object. Analyze the
 same delimited data again and return exactly one JSON object in the app-owned
 schema. Do not add prose or Markdown fences. This is the final repair attempt.
 """
+
+    /** The targeted working-draft repair instruction (Stage 6B.1). The
+     *  problem lines are app-written; any reference in them was checked. */
+    internal fun draftEditRepairProtocol(problems: List<String>): String = buildString {
+        append("\n\n## App-Owned Draft Edit Repair — mandatory\n")
+        append("These draft edits or withdrawals from the previous response could not be applied:\n")
+        problems.forEach { append("- ").append(it).append('\n') }
+        append(
+            "Return exactly one JSON object with only \"draft_edits\" and \"withdrawn_drafts\" that fix them, " +
+                "using only the supplied D references these problems name. Each draft may be named at most once. " +
+                "Return empty arrays to leave those drafts unchanged. Do not add prose or Markdown fences."
+        )
+    }
+
+    /**
+     * One narrow request to fix working-draft operations that failed
+     * validation: the same request with the repair instruction added. Null
+     * when the reply cannot be read; transport failures propagate.
+     */
+    suspend fun draftEditRepair(
+        systemPrompt: String,
+        conversationData: String,
+        problems: List<String>,
+        model: String,
+        temperature: Double,
+        transport: ArchivistModelTransport
+    ): Pair<List<ArchivistResponseParser.RawDraftEdit>, List<String>>? {
+        val raw = transport.complete(
+            ArchivistModelRequest(
+                systemPrompt = systemPrompt + draftEditRepairProtocol(problems),
+                conversationData = conversationData,
+                model = model,
+                temperature = temperature,
+                attempt = DRAFT_EDIT_REPAIR_ATTEMPT
+            )
+        )
+        return try {
+            ArchivistResponseParser.parseDraftOperations(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     suspend fun associative(
         basePrompt: String,

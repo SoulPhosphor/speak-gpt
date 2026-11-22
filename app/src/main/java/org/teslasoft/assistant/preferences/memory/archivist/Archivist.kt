@@ -133,11 +133,16 @@ object Archivist {
         INTERRUPT
     }
 
+    /** One request's result: its changes to the working drafts, and its
+     *  model-rule and Lorebook proposals. */
     private data class ParsedChunk(
-        val memories: List<ArchivistResponseParser.DraftMemory> = emptyList(),
+        val drafts: SectionDraftChanges = SectionDraftChanges(),
         val rules: List<ArchivistResponseParser.DraftRule> = emptyList(),
         val loreEntries: List<ArchivistResponseParser.DraftLoreEntry> = emptyList()
     )
+
+    /** The user's Earlier Context token amounts (Stage 6B.1). */
+    internal data class EarlierBudget(val average: Int, val maximum: Int)
 
     private data class PreparedMemories(
         val records: List<org.teslasoft.assistant.preferences.memory.MemoryRecord>,
@@ -596,6 +601,9 @@ object Archivist {
      *  changed while it was being read. */
     private const val MAX_SOURCE_RESTARTS = 3
 
+    /** Room for the earlier/new section headings and their instruction. */
+    private const val EARLIER_FRAMING_TOKENS = 96
+
     private fun newRunRow(kind: String, analysisType: String) = ArchivistRunRecord(
         runId = MemoryStore.newId("run-"),
         startedAt = Instant.now().toString(),
@@ -842,6 +850,9 @@ object Archivist {
         val temperature = prefs.getArchivistTemperature().toDouble()
         val scannerAverageTokens = prefs.getMemoryScannerAverageTokens()
         val scannerMaximumTokens = prefs.getMemoryScannerMaximumTokens()
+        val earlierBudget = EarlierBudget(
+            prefs.getMemoryScannerEarlierAverageTokens(), prefs.getMemoryScannerEarlierMaximumTokens()
+        )
         val verifiedContextTokens = endpoint.contextWindowTokens?.takeIf {
             endpoint.contextWindowModelId == model
         }
@@ -986,7 +997,7 @@ object Archivist {
                     scanRange(
                         context, store, range, chatName, lorebookMode, basePrompt, memoryTypes,
                         modelTransport, model, temperature, maxSuggestions,
-                        scannerAverageTokens, scannerMaximumTokens, verifiedContextTokens,
+                        scannerAverageTokens, scannerMaximumTokens, earlierBudget, verifiedContextTokens,
                         runRow.runId, prefs, emit, ::progressRowWith,
                         onCommitted = { commit ->
                             memoryIds.addAll(commit.memoryIds)
@@ -1221,6 +1232,7 @@ object Archivist {
         maxSuggestions: Int,
         scannerAverageTokens: Int,
         scannerMaximumTokens: Int,
+        earlierBudget: EarlierBudget,
         verifiedContextTokens: Int?,
         runId: String,
         prefs: Preferences,
@@ -1249,8 +1261,13 @@ object Archivist {
         var messages = readRangeSource(context, store, chatId)
         var inRange = rangeMessages(messages, range)
         val staged = ArrayList<ParsedChunk>()
+        var working = WorkingDrafts()
         if (checkpoint.stillValid(inRange)) {
-            staged.add(restoreStaged(store.stagedScanCandidates(range.rangeId)))
+            val saved = store.stagedScanCandidates(range.rangeId)
+            staged.add(restoreStaged(saved))
+            working = WorkingDrafts.restore(
+                saved.filter { it.stream == "memory" }.map { it.payloadJson }, checkpoint.nextDraftId
+            )
         } else {
             store.restartScanRange(range.rangeId)
             checkpoint = ScanCheckpoint()
@@ -1262,6 +1279,7 @@ object Archivist {
             store.restartScanRange(range.rangeId)
             checkpoint = ScanCheckpoint()
             staged.clear()
+            working = WorkingDrafts()
         }
 
         reading@ while (true) {
@@ -1279,11 +1297,19 @@ object Archivist {
                 ScanContext.labelParts(list, { id -> inRange.firstOrNull { it.id == id }?.text }, maximum)
             }
             val chunk = chunks.first().let { it.copy(rows = labelAt(it.rows, scannerMaximumTokens)) }
-            val earlier = staged.toList()
+            val earlierRules = staged.flatMap { it.rules }
+            val workingBefore = working
             val chatNow = messages
-            val earlierFor: (ScanSourceRow) -> List<ScanSourceRow> = { first ->
-                ScanContext.earlierExcerpts(chatNow, first, resolveScope)
+            val earlierFor: (ScanSourceRow, Int, Int) -> List<ScanSourceRow> = { first, average, maximum ->
+                ScanContext.earlierExcerpts(chatNow, first, resolveScope, average, maximum)
             }
+            // After a confirmed size rejection, the repeated earlier text
+            // shrinks with the section, so it never stands in the way of
+            // reading the unread messages.
+            var earlierCeiling = Int.MAX_VALUE
+            // Earlier text the last attempt actually sent, in tokens.
+            var lastEarlierTokens = 0
+            var retryWithoutEarlier = false
             // Every message the section traverses, sent or not (hidden,
             // unfinished, a companion not taking part), as it was before the
             // request: a change to any of them while the request is in flight
@@ -1295,9 +1321,15 @@ object Archivist {
                 analyze = { requestChunk, successfulSubChunks ->
                     analyzeChunk(
                         context, store, prefs, chatName, lorebookMode, conversationBasePrompt,
-                        memoryTypes, requestChunk, earlier + successfulSubChunks, modelTransport,
-                        model, temperature, verifiedContextTokens, earlierFor
-                    )
+                        memoryTypes, requestChunk,
+                        earlierRules + successfulSubChunks.flatMap { it.rules },
+                        successfulSubChunks.fold(workingBefore) { w, p -> w.applying(p.drafts) },
+                        modelTransport, model, temperature, verifiedContextTokens, earlierFor,
+                        EarlierBudget(
+                            minOf(earlierBudget.average, earlierCeiling),
+                            minOf(earlierBudget.maximum, earlierCeiling)
+                        )
+                    ) { lastEarlierTokens = it }
                 },
                 shouldShrink = { error ->
                     ArchivistRetryPolicy.isVerifiedContextRejection(error, capturedErrorBody)
@@ -1309,19 +1341,27 @@ object Archivist {
                                 ArchivistRequestBudget.MIN_RUNTIME_TRANSCRIPT_TOKENS,
                                 failedChunk.estimatedTranscriptTokens / 2
                             )
+                    earlierCeiling = minOf(earlierCeiling, nextTarget)
                     // After a confirmed size rejection the single-message
                     // maximum comes down with the target, so an oversized
                     // message is split too (lossless, Stage 6A).
-                    ArchivistConversationChunker.split(
+                    val smaller = ArchivistConversationChunker.split(
                         failedChunk.rows, nextTarget, nextTarget, allowanceTokens = 0
                     ).map { it.copy(rows = labelAt(it.rows, nextTarget)) }
-                }
+                    // A section that cannot be split further is sent again
+                    // without the earlier text that came with it.
+                    retryWithoutEarlier = smaller.singleOrNull() == failedChunk && lastEarlierTokens > 0
+                    if (retryWithoutEarlier) earlierCeiling = 0
+                    smaller
+                },
+                retrySameAllowed = { retryWithoutEarlier }
             )
             val parsed = ParsedChunk(
-                memories = retried.flatMap { it.memories },
                 rules = retried.flatMap { it.rules },
                 loreEntries = retried.flatMap { it.loreEntries }
             )
+            val workingAfter = retried.fold(workingBefore) { w, p -> w.applying(p.drafts) }
+            val failedEdits = retried.sumOf { it.drafts.failedEdits }
             // Changes made while the request was in flight: an outdated reply
             // is discarded, never saved.
             messages = readRangeSource(context, store, chatId)
@@ -1343,11 +1383,20 @@ object Archivist {
                 continue
             }
             checkpoint = checkpoint.advancedTo(inRange, endIndex, readThrough.end)
+                .copy(nextDraftId = workingAfter.nextId)
+            // The whole working collection, its edits and passage references,
+            // and the exact next unread position are saved together.
             store.saveScanSection(
                 range.rangeId, checkpoint.sectionsDone, stagedCandidates(parsed), checkpoint.encode(),
-                ArchivistCandidateBoundary::mergeRepeatPayload
+                workingDrafts = if (lorebookMode) null else workingAfter.drafts.map(::stagedDraft),
+                mergeRepeat = ArchivistCandidateBoundary::mergeRepeatPayload
             )
             staged.add(parsed)
+            working = workingAfter
+            if (failedEdits > 0) {
+                MemoryLog.log(context, "Archivist", "warn",
+                    "chat=$chatId: $failedEdits draft edit(s) failed validation and were not applied")
+            }
             emit(checkpoint.sectionsDone, checkpoint.sectionsDone + chunks.size - 1)
         }
 
@@ -1389,7 +1438,7 @@ object Archivist {
                 ChatCommit(chatId, stored.lorebookSuggestionIds, emptyList(), prepared.duplicatesSkipped, sourceRange)
             } else {
                 val preparedMemories = prepareMemoryDrafts(
-                    context, store, conversation, staged.flatMap { it.memories }, maxSuggestions
+                    context, store, conversation, working.drafts.map { it.memory }, maxSuggestions
                 )
                 val preparedRules = prepareRuleDrafts(context, store, sourceModel, staged.flatMap { it.rules })
                 val stored = store.commitScanRange(
@@ -1438,8 +1487,6 @@ object Archivist {
     /** The working drafts a range saved before it was paused or
      *  interrupted, rebuilt from their encrypted payloads. */
     private fun restoreStaged(candidates: List<StagedAnalysisCandidate>): ParsedChunk = ParsedChunk(
-        memories = candidates.filter { it.stream == "memory" }
-            .mapNotNull { ArchivistCandidateBoundary.memoryFromPayload(it.payloadJson) },
         rules = candidates.filter { it.stream == "model_rule" }
             .mapNotNull { ArchivistCandidateBoundary.ruleFromPayload(it.payloadJson) },
         loreEntries = candidates.filter { it.stream == "lore" }
@@ -1457,18 +1504,23 @@ object Archivist {
         conversationBasePrompt: String,
         memoryTypes: List<Pair<String, String>>,
         requestChunk: ArchivistRequestChunk,
-        allEarlier: List<ParsedChunk>,
+        earlierRules: List<ArchivistResponseParser.DraftRule>,
+        working: WorkingDrafts,
         modelTransport: ArchivistModelTransport,
         model: String,
         temperature: Double,
         verifiedContextTokens: Int?,
-        earlierFor: (ScanSourceRow) -> List<ScanSourceRow>
+        earlierFor: (ScanSourceRow, Int, Int) -> List<ScanSourceRow>,
+        earlierBudget: EarlierBudget,
+        /** Told how many tokens of earlier text this request carries. */
+        earlierSent: (Int) -> Unit = {}
     ): ParsedChunk {
         val rows = requestChunk.rows
         val chatId = rows.first().chatId
         val scene = ArchivistSceneContext.from(rows.first())
         val companionName = scene.companionId?.let { store.getCompanion(it)?.currentName }
-        var rendered = ArchivistPrompt.userMessage(chatName, companionName, rows, earlierFor(rows.first()))
+        val sectionOnly = ArchivistPrompt.userMessage(chatName, companionName, rows)
+        val sources = rows.map { PassageRef(it.messageId, it.start, it.end) }
 
         val protocol: ArchivistRequestProtocol?
         val requestSystemPrompt: String
@@ -1504,10 +1556,9 @@ object Archivist {
                     typeName = hit.memory.typeId?.let { typeNames[it] }
                 )
             }
-            val earlierMemoryCandidates = ArchivistCandidateBoundary.collect(allEarlier.map { it.memories })
-                .memories.map { draft -> earlierCandidateForPrompt(store, typeNames, draft) }
-            val earlierRuleCandidates = allEarlier
-                .flatMap { it.rules }
+            val earlierMemoryCandidates = working.drafts
+                .map { draft -> earlierCandidateForPrompt(store, typeNames, draft.memory).copy(draftId = draft.id) }
+            val earlierRuleCandidates = earlierRules
                 .distinctBy { MemoryMatch.normalizeContent(it.text) }
                 .map {
                     ArchivistEarlierCandidate(
@@ -1519,7 +1570,8 @@ object Archivist {
                 scene = scene,
                 existingMemories = existingContext,
                 validTargets = validTargetCatalog(store, scene, retrievalScope, retrievedRecords),
-                earlierCandidates = earlierMemoryCandidates + earlierRuleCandidates
+                earlierCandidates = earlierMemoryCandidates + earlierRuleCandidates,
+                sectionText = rows.joinToString("\n") { it.text }
             )
             protocol = builtProtocol
             // Request order for provider caching (Stage 6A): the fixed
@@ -1539,13 +1591,25 @@ object Archivist {
             verifiedContextTokens = verifiedContextTokens,
             requestHeadroomTokens = requestHeadroom
         )
+        // The new section and the working drafts come first; earlier chat
+        // text gets only the room left, within the user's Earlier Context
+        // amounts.
+        val sectionOnlyTokens = IncludeTextPolicy.estimateTokens(sectionOnly.text)
+        val earlierRoom = if (verifiedContextTokens == null) Int.MAX_VALUE
+            else safeTranscriptTarget - sectionOnlyTokens - EARLIER_FRAMING_TOKENS
+        val earlierMaximum = minOf(earlierBudget.maximum, earlierRoom)
+        val earlierAverage = minOf(earlierBudget.average, earlierMaximum)
+        val earlier = if (earlierAverage > 0) earlierFor(rows.first(), earlierAverage, earlierMaximum) else emptyList()
+        var rendered = if (earlier.isEmpty()) sectionOnly
+            else ArchivistPrompt.userMessage(chatName, companionName, rows, earlier)
         var renderedTranscriptTokens = IncludeTextPolicy.estimateTokens(rendered.text)
         if (verifiedContextTokens != null && renderedTranscriptTokens > safeTranscriptTarget) {
             // A tight request gives up the earlier context first; the new
             // section is always sent whole.
-            rendered = ArchivistPrompt.userMessage(chatName, companionName, rows)
+            rendered = sectionOnly
             renderedTranscriptTokens = IncludeTextPolicy.estimateTokens(rendered.text)
         }
+        earlierSent(if (rendered === sectionOnly) 0 else earlier.sumOf { IncludeTextPolicy.estimateTokens(it.text) })
         if (verifiedContextTokens != null && renderedTranscriptTokens > safeTranscriptTarget) {
             throw ArchivistShrinkRequiredException(
                 nextTargetTokens = safeTranscriptTarget,
@@ -1587,7 +1651,29 @@ object Archivist {
                     MemoryLog.log(context, "Archivist", "warn",
                         "chat=$chatId: ${parsed.dropped} proposal(s) failed validation and were dropped")
                 }
-                ParsedChunk(memories = parsed.memories, rules = parsed.rules)
+                val (operations, unresolved) = WorkingDraftEdits.resolve(
+                    parsed.draftEdits, parsed.withdrawnDrafts, protocol.draftIdByRef,
+                    working.drafts.map { it.id }.toSet(), WorkingDraftEdits.samePlacement(working)
+                ) { problems ->
+                    ArchivistRequestExecutor.draftEditRepair(
+                        systemPrompt = requestSystemPrompt,
+                        conversationData = rendered.text + protocolText,
+                        problems = problems,
+                        model = model,
+                        temperature = temperature,
+                        transport = modelTransport
+                    )
+                }
+                ParsedChunk(
+                    drafts = SectionDraftChanges(
+                        operations = operations,
+                        alternatives = unresolved.first,
+                        newDrafts = parsed.memories,
+                        sources = sources,
+                        failedEdits = unresolved.second
+                    ),
+                    rules = parsed.rules
+                )
             }
         } catch (e: Exception) {
             if (e is ArchivistClearlyTruncatedException ||
@@ -1610,24 +1696,20 @@ object Archivist {
         }
     }
 
+    /** A working draft as saved in the encrypted scan staging. */
+    private fun stagedDraft(draft: WorkingDraft): StagedAnalysisCandidate = StagedAnalysisCandidate(
+        stream = "memory",
+        targetType = draft.memory.scope.takeIf {
+            it in setOf("companion", "project", "world", "campaign", "rp_character")
+        },
+        targetId = draft.memory.targetIds.firstOrNull() ?: draft.memory.scene?.targetIdFor(draft.memory.scope),
+        candidateHash = ArchivistCandidateBoundary.candidateHash(draft.memory),
+        payloadJson = WorkingDrafts.payload(draft)
+    )
+
+    /** A section's model-rule and Lorebook proposals for the staging. */
     private fun stagedCandidates(chunk: ParsedChunk): List<StagedAnalysisCandidate> {
         val out = ArrayList<StagedAnalysisCandidate>()
-        val memories = ArchivistCandidateBoundary.collectFlat(chunk.memories).memories
-        for (draft in memories) {
-            val targetId = draft.targetIds.firstOrNull()
-                ?: draft.scene?.targetIdFor(draft.scope)
-            out.add(
-                StagedAnalysisCandidate(
-                    stream = "memory",
-                    targetType = draft.scope.takeIf {
-                        it in setOf("companion", "project", "world", "campaign", "rp_character")
-                    },
-                    targetId = targetId,
-                    candidateHash = ArchivistCandidateBoundary.candidateHash(draft),
-                    payloadJson = ArchivistCandidateBoundary.payload(draft)
-                )
-            )
-        }
         for (rule in chunk.rules.distinctBy { MemoryMatch.normalizeContent(it.text) }) {
             out.add(
                 StagedAnalysisCandidate(

@@ -317,4 +317,51 @@ class ArchivistResponseParserTest {
     fun loreNoJsonObjectThrows() {
         ArchivistResponseParser.parseLore("no json here")
     }
+
+    @Test
+    fun workingDraftOperationsAreReadAsReturnedForKotlinToValidate() {
+        val parsed = ArchivistResponseParser.parse(
+            """{"memories":[],"draft_edits":[
+                {"replaces":["D4"," d2 "],"content":"  Combined prose  ","tags":["a","A","b"]},
+                {"replaces":["D9"],"content":"Copied example","type_id":"","tags":[]},
+                {"replaces":["D1"],"content":"Same type"}
+              ],"withdrawn_drafts":["D3","D3",""]}"""
+        )
+        assertEquals(3, parsed.draftEdits.size)
+        val combined = parsed.draftEdits[0]
+        assertEquals(listOf("D4", "d2"), combined.refs)
+        assertEquals("Combined prose", combined.content)
+        assertEquals(listOf("a", "b"), combined.tags)
+        assertNull(combined.typeId)
+        // A blank Type or empty tags copied from the example keep the draft's own.
+        assertNull(parsed.draftEdits[1].typeId)
+        assertNull(parsed.draftEdits[1].tags)
+        assertNull(parsed.draftEdits[2].tags)
+        assertEquals(listOf("D3"), parsed.withdrawnDrafts)
+    }
+
+    @Test
+    fun aResponseWithoutDraftOperationsHasNone() {
+        val parsed = ArchivistResponseParser.parse("""{"memories":[]}""")
+        assertTrue(parsed.draftEdits.isEmpty())
+        assertTrue(parsed.withdrawnDrafts.isEmpty())
+    }
+
+    @Test
+    fun aRepairResponseReadsOnlyDraftOperations() {
+        val (edits, withdrawn) = ArchivistResponseParser.parseDraftOperations(
+            """Sure: {"memories":[{"content":"ignored","scope":"global"}],"draft_edits":[{"replaces":["D1"],"content":"Fixed"}],"withdrawn_drafts":[]}"""
+        )
+        assertEquals("Fixed", edits.single().content)
+        assertTrue(withdrawn.isEmpty())
+    }
+
+    @Test
+    fun aCombinationNamingManyDraftsKeepsEveryReference() {
+        val refs = (1..15).joinToString(",") { "\"D$it\"" }
+        val parsed = ArchivistResponseParser.parse(
+            """{"draft_edits":[{"replaces":[$refs],"content":"All of them"}]}"""
+        )
+        assertEquals((1..15).map { "D$it" }, parsed.draftEdits.single().refs)
+    }
 }

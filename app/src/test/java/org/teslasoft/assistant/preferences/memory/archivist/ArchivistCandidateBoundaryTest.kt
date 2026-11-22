@@ -124,14 +124,15 @@ class ArchivistCandidateBoundaryTest {
     }
 
     @Test
-    fun runtimeProtocolCarriesBoundedEarlierCandidatesWithoutStableIds() {
-        val earlier = (1..14).map {
+    fun runtimeProtocolShowsWorkingDraftsWithScanReferencesAndNoStableIds() {
+        val earlier = (1..60).map {
             ArchivistEarlierCandidate(
-                content = "Earlier candidate $it",
+                content = if (it == 3) "The greenhouse heater broke" else "Earlier candidate $it",
                 scope = "project",
                 targetNames = listOf("Memory Repair"),
                 typeName = "Fact",
-                tags = emptyList()
+                tags = emptyList(),
+                draftId = it
             )
         }
         val protocol = ArchivistRuntimeProtocol.create(
@@ -140,17 +141,20 @@ class ArchivistCandidateBoundaryTest {
             validTargets = listOf(
                 ArchivistTarget("stable-project-id", "project", "Memory Repair", "active")
             ),
-            earlierCandidates = earlier
+            earlierCandidates = earlier,
+            sectionText = "The greenhouse heater works again"
         )
         val rendered = ArchivistRuntimeProtocol.render(protocol)
 
-        assertEquals(
-            ArchivistRuntimeProtocol.MAX_EARLIER_CANDIDATES_IN_PROMPT,
-            protocol.earlierCandidates.size
-        )
-        assertTrue(rendered.contains("already_proposed_this_run_data"))
-        assertTrue(rendered.contains("Earlier candidate 14"))
+        assertEquals(ArchivistRuntimeProtocol.MAX_WORKING_DRAFTS_IN_PROMPT, protocol.earlierCandidates.size)
+        assertTrue(rendered.contains("working_drafts_data"))
+        // Over the limit, the draft related to the section is kept even
+        // though it is old, and the newest drafts fill the rest.
+        assertTrue(rendered.contains("\"ref\":\"D3\""))
+        assertTrue(rendered.contains("Earlier candidate 60"))
         assertFalse(rendered.contains("Earlier candidate 1\""))
+        assertEquals(3, protocol.draftIdByRef["D3"])
+        assertFalse(protocol.draftIdByRef.containsKey("D1"))
         assertFalse(rendered.contains("stable-project-id"))
     }
 
@@ -173,8 +177,9 @@ class ArchivistCandidateBoundaryTest {
         )
 
         val rendered = ArchivistRuntimeProtocol.render(protocol)
-        assertTrue(rendered.contains("\"stream\":\"model_rule\""))
+        assertTrue(rendered.contains("already_proposed_model_rules_data"))
         assertTrue(rendered.contains("Answer in complete sentences."))
+        assertTrue(protocol.draftIdByRef.isEmpty())
     }
 
     @Test

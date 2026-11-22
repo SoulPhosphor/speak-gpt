@@ -100,8 +100,27 @@ object ArchivistResponseParser {
         val memories: List<DraftMemory>,
         val rules: List<DraftRule>,
         /** Rows rejected by validation or the defensive bounds. */
-        val dropped: Int
+        val dropped: Int,
+        /** Edits to this scan's working drafts, exactly as returned; Kotlin
+         *  validates every reference before anything changes (Stage 6B.1). */
+        val draftEdits: List<RawDraftEdit> = emptyList(),
+        /** Working-draft references the model asked to withdraw, as returned. */
+        val withdrawnDrafts: List<String> = emptyList()
     )
+
+    /** One returned working-draft edit before validation: the references it
+     *  names, its complete new prose, and an optional Type and tags. */
+    data class RawDraftEdit(
+        val refs: List<String>,
+        val content: String,
+        /** A new Type id, or null to keep the draft's Type. */
+        val typeId: String?,
+        /** New tags, or null (absent or empty) to keep the draft's tags. */
+        val tags: List<String>?
+    )
+
+    /** Defensive bounds on working-draft operations in one response. */
+    const val MAX_DRAFT_EDITS_PER_RESPONSE = 40
 
     fun parse(raw: String): Parsed = parse(raw, null)
 
@@ -130,16 +149,7 @@ object ArchivistResponseParser {
                     dropped++; continue
                 }
                 if (memories.size >= MAX_MEMORIES_PER_CONVERSATION) { dropped++; continue }
-                val tags = ArrayList<String>()
-                o.optJSONArray("tags")?.let { arr ->
-                    for (t in 0 until arr.length()) {
-                        val tag = arr.optString(t).trim()
-                        if (tag.isNotEmpty() && tag.length <= 64 &&
-                            tags.none { it.equals(tag, ignoreCase = true) } &&
-                            tags.size < MAX_TAGS_PER_MEMORY
-                        ) tags.add(tag)
-                    }
-                }
+                val tags = readTags(o).orEmpty()
 
                 val returnedTargetRefs = readRefs(
                     o, "target_refs", "target_ref", MAX_TARGET_REFS_PER_MEMORY
@@ -212,7 +222,63 @@ object ArchivistResponseParser {
             }
         }
 
-        return Parsed(memories, rules, dropped)
+        val operations = readDraftOperations(json)
+        return Parsed(memories, rules, dropped, operations.first, operations.second)
+    }
+
+    /**
+     * The working-draft operations of a targeted draft-edit repair response
+     * (Stage 6B.1): only "draft_edits" and "withdrawn_drafts" are read.
+     * Throws when the response holds no JSON object.
+     */
+    fun parseDraftOperations(raw: String): Pair<List<RawDraftEdit>, List<String>> =
+        readDraftOperations(JSONObject(extractJsonObject(raw)))
+
+    private fun readDraftOperations(json: JSONObject): Pair<List<RawDraftEdit>, List<String>> {
+        val edits = ArrayList<RawDraftEdit>()
+        json.optJSONArray("draft_edits")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                if (edits.size >= MAX_DRAFT_EDITS_PER_RESPONSE) break
+                val o = arr.optJSONObject(i) ?: continue
+                // Every named reference is kept: a combination is checked
+                // whole, never cut down to a different operation.
+                val refs = readRefs(o, "replaces", "replace", Int.MAX_VALUE)
+                edits.add(
+                    RawDraftEdit(
+                        refs = refs,
+                        content = o.optString("content").trim(),
+                        // A copied example's blank Type or empty tags never
+                        // clear what the draft already has.
+                        typeId = o.optString("type_id").trim().ifEmpty { null }?.takeIf { it != "null" },
+                        tags = readTags(o)?.takeIf { it.isNotEmpty() }
+                    )
+                )
+            }
+        }
+        val withdrawn = ArrayList<String>()
+        json.optJSONArray("withdrawn_drafts")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                if (withdrawn.size >= MAX_DRAFT_EDITS_PER_RESPONSE) break
+                val ref = arr.optString(i).trim()
+                if (ref.isNotEmpty() && ref !in withdrawn) withdrawn.add(ref)
+            }
+        }
+        return edits to withdrawn
+    }
+
+    /** A proposal's tags, trimmed, de-duplicated and bounded; null when the
+     *  object has no "tags" field. */
+    private fun readTags(o: JSONObject): List<String>? {
+        val arr = o.optJSONArray("tags") ?: return null
+        val tags = ArrayList<String>()
+        for (t in 0 until arr.length()) {
+            val tag = arr.optString(t).trim()
+            if (tag.isNotEmpty() && tag.length <= 64 &&
+                tags.none { it.equals(tag, ignoreCase = true) } &&
+                tags.size < MAX_TAGS_PER_MEMORY
+            ) tags.add(tag)
+        }
+        return tags
     }
 
     private fun readRefs(

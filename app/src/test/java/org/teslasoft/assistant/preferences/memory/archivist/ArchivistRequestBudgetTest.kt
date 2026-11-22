@@ -145,6 +145,44 @@ class ArchivistRequestBudgetTest {
     }
 
     @Test
+    fun anUnsplittableSectionIsRetriedOnlyWhenTheCallerChangedTheRequest() = runBlocking {
+        // The section cannot be split; the first attempt carried earlier
+        // text, so it is sent again without it and succeeds.
+        var earlierSent = true
+        var attempts = 0
+        val outputs = ArchivistBoundedShrinkExecutor.execute(
+            initial = 1,
+            analyze = { value, _ ->
+                attempts++
+                if (earlierSent) throw ArchivistShrinkRequiredException(1, "context")
+                value
+            },
+            shouldShrink = ArchivistRetryPolicy::isVerifiedContextRejection,
+            shrink = { value, _ -> listOf(value) },
+            retrySameAllowed = { earlierSent.also { earlierSent = false } }
+        )
+        assertEquals(listOf(1), outputs)
+        assertEquals(2, attempts)
+
+        // Without a change, the same section is not sent again.
+        attempts = 0
+        try {
+            ArchivistBoundedShrinkExecutor.execute(
+                initial = 1,
+                analyze = { _, _ ->
+                    attempts++
+                    throw ArchivistShrinkRequiredException(1, "context")
+                },
+                shouldShrink = ArchivistRetryPolicy::isVerifiedContextRejection,
+                shrink = { value, _ -> listOf(value) }
+            )
+        } catch (_: ArchivistShrinkRequiredException) {
+            // expected
+        }
+        assertEquals(1, attempts)
+    }
+
+    @Test
     fun clearTruncationDetectionDoesNotMislabelCompleteOrEmptyExtraction() {
         assertTrue(
             ArchivistRetryPolicy.looksClearlyTruncated(
