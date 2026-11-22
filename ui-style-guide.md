@@ -1125,6 +1125,15 @@ message, `dialog_dropdown_line_gap` above it) holding
 `Widget.App.Dropdown.CanonicalValue.Fill`. Current users: Chat Outline's
 Outline Prompt line and its Redo This Outline pop-up.
 
+#### Selected model picker card
+
+`Widget.App.ModelPicker.Card` draws `bg_saved_model_card`. Every card, selected
+or not, uses the `colorSurfaceContainerHigh` fill. The selected (activated)
+card adds only a dashed outline, like a coupon's cut line, in the Quick Settings
+outline color (`colorOutlineVariant`) and stroke width
+(`quick_settings_segment_stroke_width`); the dash and gap come from
+`model_picker_selected_dash_length` and `model_picker_selected_dash_gap`.
+
 #### Compact provider dropdown in a model picker card
 
 `Widget.App.ModelPicker.SubtitleLine` holds a saved model card's subtitle:
