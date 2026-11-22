@@ -6,7 +6,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.setup.ExperimentalSetup
 import org.teslasoft.assistant.preferences.Preferences
 
-/** Runs before any composer/history mutation. Stage 4 must replace the readiness block with owned dispatch. */
+/** Runs before composer/history mutation. Valid parallel setup proceeds to the owned controller. */
 internal object ExperimentalSetupGuard {
     fun block(context: Context, preferences: Preferences?, handsFree: Boolean = false): Boolean {
         preferences ?: return false
@@ -19,7 +19,7 @@ internal object ExperimentalSetupGuard {
                 val unavailable = SetupModelResolver.unavailable(context, setup)
                 if (unavailable.isNotEmpty()) context.getString(R.string.experimental_setup_unavailable,
                     unavailable.joinToString { "${it.modelId} (${it.endpointLabel})" })
-                else context.getString(R.string.experimental_parallel_not_ready)
+                else return false
             }
         }
         MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)

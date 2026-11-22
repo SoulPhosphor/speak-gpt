@@ -111,7 +111,7 @@ object ExperimentalSetupCodec {
     }
 }
 
-/** Public entry remains closed until Stage 4 supplies response tabs and send integration. */
+/** Stage 4 supplies owned send integration, durable tabs and independent request controls. */
 object ExperimentalSetupAvailability {
-    const val PUBLIC_SETUP_ENABLED = false
+    const val PUBLIC_SETUP_ENABLED = true
 }

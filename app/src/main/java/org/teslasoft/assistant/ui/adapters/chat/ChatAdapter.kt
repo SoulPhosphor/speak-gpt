@@ -97,6 +97,8 @@ import java.text.DateFormat
 import java.text.NumberFormat
 import java.util.Date
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.chat.parallel.ParallelReplyEditing
+import org.teslasoft.assistant.ui.chat.parallel.ParallelReplyEditTarget
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
@@ -785,6 +787,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val bubbleName: TextView? = itemView.findViewById(R.id.bubble_name)
         private var boundGeneratedImagePath: String? = null
         private var boundGeneratedImageKey: String? = null
+        private var boundParallelImageText: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
         private val btnMore: ImageButton? = itemView.findViewById(R.id.btn_more)
@@ -887,11 +890,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // the user has paged to an older version it is that version's content
             // and metadata laid over the message, without disturbing the stored
             // canonical version used for context and saving.
-            val display = displayVariantMap(chatMessage)
+            val parallelRead = if (chatMessage.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY))
+                org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.read(chatMessage) else null
+            val display = displayVariantMap(chatMessage, parallelRead)
             boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
-            boundDisplayedVariantIndex = displayedVariantIndex(chatMessage)
+            boundDisplayedVariantIndex = displayedVariantIndex(chatMessage, parallelRead)
 
-            val isGeneratedImage = display["message"].toString().startsWith("~file:")
+            val parallelImage = chatMessage.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY) &&
+                GeneratedImageMetadata.fromJson(display[GeneratedImageMetadata.KEY]?.toString())?.fileHash != null
+            val isGeneratedImage = parallelImage || display["message"].toString().startsWith("~file:")
+            boundParallelImageText = display["message"]?.toString()?.takeIf { parallelImage && it.isNotBlank() }
+            val imageOnly = isGeneratedImage && boundParallelImageText == null
             btnEdit.visibility = if (isGeneratedImage) View.GONE else if (chatMessage["isBot"] == true) View.GONE else View.VISIBLE
             btnMore?.visibility = View.VISIBLE
             if (isGeneratedImage) btnShare.isEnabled = false
@@ -908,11 +917,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateShareButton(chatMessage)
             updateSpeakButton(display, position)
             updateStatusMarker(display)
-            updateMessageMeta(display, isGeneratedImage, chatMessage)
+            updateMessageMeta(display, imageOnly, chatMessage)
             updateReasoning(display, position)
-            updateReasoningIndicator(display, isGeneratedImage)
+            updateReasoningIndicator(display, imageOnly)
             updateActiveMemories(display)
-            updateVersionNav(chatMessage, position)
+            val parallel = org.teslasoft.assistant.ui.chat.parallel.ParallelResponseTabs.bind(itemView, chatMessage, !bulkActionMode,
+                browse = { slot, version -> keepingActionBarInPlace { listener?.onParallelBrowse(bindingAdapterPosition.takeUnless { it == RecyclerView.NO_POSITION } ?: position, slot, version) } },
+                stop = { slot -> listener?.onParallelStop(position, slot) },
+                savePending = listener?.hasParallelUnsaved(position) == true,
+                retrySave = { listener?.onParallelRetrySave() }, preparedRead = parallelRead)
+            if (parallel) versionNav?.visibility = View.GONE else updateVersionNav(chatMessage, position)
 
             btnDetails.setOnClickListener { anchor ->
                 if (!bulkActionMode) showMessageDetailsPopup(anchor, display, chatMessage)
@@ -992,14 +1006,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnImageCopy.setOnClickListener { btnCopy.callOnClick() }
 
             if (isGeneratedImage) {
-                if (chatMessage["isBot"] == true) {
-                    message.visibility = View.GONE
-                }
+                if (parallelImage && display["message"]?.toString()?.isNotBlank() == true) {
+                    message.visibility = View.VISIBLE
+                    applyMarkdown(display)
+                } else if (chatMessage["isBot"] == true) message.visibility = View.GONE
                 // Share and Copy move onto the image's own action row, so hide
                 // the action-bar copies. Share visibility for a bot message was
                 // already set VISIBLE by updateShareButton above.
-                btnShare.visibility = View.GONE
-                btnCopy.visibility = View.GONE
+                btnShare.visibility = if (imageOnly) View.GONE else View.VISIBLE
+                btnCopy.visibility = if (imageOnly) View.GONE else View.VISIBLE
+                if (!imageOnly) {
+                    btnShare.isEnabled = true
+                    btnShare.setOnClickListener { sharePlainText(context, display["message"].toString()) }
+                }
                 processGeneratedImageFile(display)
             } else {
                 boundGeneratedImagePath = null
@@ -1259,6 +1278,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             expectedText: String,
             count: Int
         ): Boolean {
+            org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.storeEstimate(sourceMessage, displayMessage, variantIndex, expectedText, count)?.let {
+                if (it) listener?.onTokenEstimateStored()
+                return it
+            }
             val variants = parseVariants(sourceMessage[KEY_VARIANTS]?.toString())
             if (variants.size >= 2) {
                 val variant = variants.getOrNull(variantIndex) ?: return false
@@ -1440,7 +1463,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * version's reply and metadata while the original keeps the canonical
          * fields the conversation and saving use.
          */
-        private fun displayVariantMap(chatMessage: HashMap<String, Any>): HashMap<String, Any> {
+        private fun displayVariantMap(chatMessage: HashMap<String, Any>, parallelRead: org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead? = null): HashMap<String, Any> {
+            if (chatMessage.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY))
+                return org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.display(chatMessage, parallelRead)
             val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
             if (variants.size < 2) return chatMessage
             val canonical = canonicalIndexOf(chatMessage, variants.size)
@@ -1451,7 +1476,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             return copy
         }
 
-        private fun displayedVariantIndex(chatMessage: Map<String, Any>): Int {
+        private fun displayedVariantIndex(chatMessage: Map<String, Any>, parallelRead: org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead? = null): Int {
+            org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.displayIndex(chatMessage, parallelRead)?.let { return it }
             val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
             if (variants.size < 2) return 0
             val canonical = canonicalIndexOf(chatMessage, variants.size)
@@ -1574,7 +1600,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * guarantee.
          */
         private fun keepingActionBarInPlace(action: () -> Unit) {
-            val nav = versionNav
+            val nav = itemView.findViewById<View>(R.id.parallel_response_controls)?.takeIf { it.visibility == View.VISIBLE } ?: versionNav
             val recyclerView = itemView.parent as? RecyclerView
             if (nav == null || recyclerView == null) {
                 action()
@@ -3354,10 +3380,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 })
                 .into(generatedImage)
 
-            btnShare.setOnClickListener {
+            val imageShare = View.OnClickListener {
                 val imageType = url.substringAfter("data:image/").substringBefore(";")
                 shareBase64Image(context, url, imageType)
             }
+            if (boundParallelImageText != null) btnImageShare.setOnClickListener(imageShare)
+            else btnShare.setOnClickListener(imageShare)
             btnShare.isEnabled = true
         }
 
@@ -3514,8 +3542,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun openEditDialog(chatMessage: HashMap<String, Any>, position: Int) {
-            val dialog = EditMessageDialogFragment.newInstance(chatMessage["message"].toString(), position)
-            dialog.setStateChangedListener(this@ChatAdapter)
+            val read = org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.read(chatMessage)
+            val group = (read as? org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Valid)?.group
+            if (group == null && read != org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead.Absent) return
+            val target = group?.let(ParallelReplyEditing::target)
+            val text = group?.let(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupEdits::foregroundFields)?.get("message")
+                ?: chatMessage["message"].toString()
+            val dialog = EditMessageDialogFragment.newInstance(text, position)
+            dialog.setStateChangedListener(if (target == null) this@ChatAdapter else object : EditMessageDialogFragment.StateChangesListener {
+                override fun onEdit(prompt: String, position: Int) { listener?.onParallelEdit(target, prompt) }
+                override fun onDelete(position: Int) {
+                    val current = dataArray.indexOfFirst { it["message_id"] == target.assistantMessageId }
+                    if (current >= 0) this@ChatAdapter.onDelete(current)
+                }
+            })
             dialog.show(context.supportFragmentManager, "EditMessageDialogFragment")
         }
 
@@ -3542,6 +3582,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Mirror onDelete's guard: a stale dialog position (the list changed
         // while the edit dialog was open) must not index past the array.
         if (position < 0 || position >= dataArray.size) return
+        if (dataArray[position].containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY)) return
         // Editing only changes this message's stored text (owner spec, Aug 16
         // 2026). It never truncates later messages — that is what Regenerate
         // and Make Current do. Attachments on the message are kept.
@@ -3584,6 +3625,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     interface OnUpdateListener {
+        fun hasParallelUnsaved(position: Int): Boolean = false
+        fun onParallelRetrySave() {}
+        fun onParallelBrowse(position: Int, slotId: String, versionId: String) {}
+        fun onParallelStop(position: Int, slotId: String?) {}
+        fun onParallelEdit(target: ParallelReplyEditTarget, text: String) {}
         fun onRetryClick()
 
         /** Regenerate the assistant turn at [position]. On the latest turn this

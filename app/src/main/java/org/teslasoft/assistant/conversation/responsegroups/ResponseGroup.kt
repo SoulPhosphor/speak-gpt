@@ -47,7 +47,9 @@ data class ResponseVersion(
     val versionId: String,
     /** Same field contract as ordinary regenerated replies, never sibling models. */
     val fields: Map<String, String>,
-    val attempts: List<ResponseAttempt>
+    val attempts: List<ResponseAttempt>,
+    /** User-edited image reminder; never replaces the original provider/image receipt. */
+    val imageSummaryEdited: String? = null
 )
 
 @Keep
