@@ -48,6 +48,7 @@ import org.teslasoft.assistant.preferences.memory.MemoryCandidate
 import org.teslasoft.assistant.preferences.memory.MemoryCandidateValidator
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryMatch
+import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.SCOPE_COMPANION
@@ -55,6 +56,7 @@ import org.teslasoft.assistant.preferences.memory.StagedAnalysisCandidate
 import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.preferences.memory.matching.ScannerClues
+import org.teslasoft.assistant.preferences.memory.matching.ScannerMatch
 import org.teslasoft.assistant.preferences.memory.matching.ScannerMatching
 import org.teslasoft.assistant.preferences.damaged.DamagedChatLog
 import org.teslasoft.assistant.preferences.damaged.DamagedChatRepair
@@ -141,7 +143,9 @@ object Archivist {
     private data class ParsedChunk(
         val drafts: SectionDraftChanges = SectionDraftChanges(),
         val rules: List<ArchivistResponseParser.DraftRule> = emptyList(),
-        val loreEntries: List<ArchivistResponseParser.DraftLoreEntry> = emptyList()
+        val loreEntries: List<ArchivistResponseParser.DraftLoreEntry> = emptyList(),
+        /** Validated "already covered" entries (Stage 6B.3). */
+        val covered: List<CoveredEntry> = emptyList()
     )
 
     /** The user's Earlier Context token amounts (Stage 6B.1). */
@@ -165,7 +169,9 @@ object Archivist {
         val memoryIds: List<String>,
         val ruleIds: List<String>,
         val duplicatesSkipped: Int,
-        val sourceRange: ScanSourceRanges.Range?
+        val sourceRange: ScanSourceRanges.Range?,
+        /** Filed suggestions whose draft edits could not be reconciled. */
+        val keptForReview: Int = 0
     )
 
     /** The chat changed in a part already read, more often than a scan
@@ -227,7 +233,11 @@ object Archivist {
         /** Chat scans run between this run's conversations that ended in a
          *  stop ("cancelled"), so the caller can refine their records the same
          *  way it refines this run's. */
-        val stoppedChatScanRunIds: List<String> = emptyList()
+        val stoppedChatScanRunIds: List<String> = emptyList(),
+        /** Filed suggestions with a draft edit that could not be reconciled
+         *  (Stage 6B.3): an unapplied edit or withdrawal, or two linked
+         *  wordings kept for review. */
+        val keptForReview: Int = 0
     ) {
         val notConfigured: Boolean get() = outcome == "not_configured"
     }
@@ -604,6 +614,15 @@ object Archivist {
      *  changed while it was being read. */
     private const val MAX_SOURCE_RESTARTS = 3
 
+    /** Times a conversation's retellings are read again because a saved
+     *  memory that covered them changed (Stage 6B.3) before the
+     *  conversation is left for a later scan. */
+    private const val MAX_COVERED_REREADS = 2
+
+    /** Filing attempts after a saved memory changed between the check and
+     *  the filing transaction (Stage 6B.3). */
+    private const val MAX_FILING_ATTEMPTS = 3
+
     /** Room for the earlier/new section headings and their instruction. */
     private const val EARLIER_FRAMING_TOKENS = 96
 
@@ -877,6 +896,7 @@ object Archivist {
         val genResults = ArrayList<GenErrorResult>()
         var failureBody: String? = null
         var duplicatesSkipped = 0
+        var keptForReview = 0
         var runError: String? = null
         var runErrorFailure: ArchivistFailure? = null
         var stopped: StopKind? = null
@@ -1006,6 +1026,7 @@ object Archivist {
                             memoryIds.addAll(commit.memoryIds)
                             ruleIds.addAll(commit.ruleIds)
                             duplicatesSkipped += commit.duplicatesSkipped
+                            keptForReview += commit.keptForReview
                             analyzedChatIds.add(range.chatId)
                             commit.sourceRange?.let { sourceRanges.add(it) }
                         }
@@ -1082,6 +1103,7 @@ object Archivist {
                 outcome = if (pausing) "paused" else "cancelled",
                 failureReason = if (pausing) null else ArchivistFailure.INTERRUPTED,
                 duplicatesSkipped = duplicatesSkipped,
+                keptForReview = keptForReview,
                 error = if (pausing) null else "interrupted",
                 analysisType = analysisType,
                 apiProvider = apiProviderName,
@@ -1165,6 +1187,7 @@ object Archivist {
             outcome = outcome,
             failureReason = dominantReason,
             duplicatesSkipped = duplicatesSkipped,
+            keptForReview = keptForReview,
             error = runError,
             analysisType = analysisType,
             genError = dominantGen,
@@ -1259,7 +1282,9 @@ object Archivist {
         )
         val resolveScope = scopeResolver(store)
 
-        // Scoped match evidence for 6B.3 (Stage 6B.2); never sent to the AI.
+        // Scoped match evidence (Stage 6B.2): the section's Pending and
+        // Archived matches are shown to the AI, and each draft's evidence
+        // decides its filing (Stage 6B.3).
         val matching = if (lorebookMode) null else ScannerMatching(
             store, Librarian.getInstance(context), range.rangeId,
             scopeFor = { scene -> reconciliationScope(store, prefs, scene) }
@@ -1273,11 +1298,17 @@ object Archivist {
         var inRange = rangeMessages(messages, range)
         val staged = ArrayList<ParsedChunk>()
         var working = WorkingDrafts()
+        // Retellings the scanner AI left out because a saved memory covers
+        // them (Stage 6B.3), saved with the checkpoint.
+        var covered: List<CoveredEntry> = emptyList()
         if (checkpoint.stillValid(inRange)) {
             val saved = store.stagedScanCandidates(range.rangeId)
             staged.add(restoreStaged(saved))
             working = WorkingDrafts.restore(
                 saved.filter { it.stream == "memory" }.map { it.payloadJson }, checkpoint.nextDraftId
+            )
+            covered = CoveredEntries.merge(
+                saved.filter { it.stream == CoveredEntries.STREAM }.mapNotNull { CoveredEntries.fromPayload(it.payloadJson) }
             )
         } else {
             store.restartScanRange(range.rangeId)
@@ -1291,28 +1322,22 @@ object Archivist {
             checkpoint = ScanCheckpoint()
             staged.clear()
             working = WorkingDrafts()
+            covered = emptyList()
         }
 
-        reading@ while (true) {
-        while (true) {
-            currentCoroutineContext().ensureActive()
-            val next = checkpoint.nextUnread(inRange) ?: break
-            val rows = ScanSourceRows.build(chatId, inRange, next.first, next.second, resolveScope)
-            if (rows.isEmpty()) break
-            val chunks = ArchivistConversationChunker.split(
-                rows, initialTranscriptTarget, scannerMaximumTokens, initialAllowance
-            )
-            emit(checkpoint.sectionsDone, checkpoint.sectionsDone + chunks.size)
-            // Pieces of a split message carry "part k of n" of that message.
-            val labelAt: (List<ScanSourceRow>, Int) -> List<ScanSourceRow> = { list, maximum ->
-                ScanContext.labelParts(list, { id -> inRange.firstOrNull { it.id == id }?.text }, maximum)
-            }
-            val chunk = chunks.first().let { it.copy(rows = labelAt(it.rows, scannerMaximumTokens)) }
+        // Pieces of a split message carry "part k of n" of that message.
+        val labelAt: (List<ScanSourceRow>, Int) -> List<ScanSourceRow> = { list, maximum ->
+            ScanContext.labelParts(list, { id -> inRange.firstOrNull { it.id == id }?.text }, maximum)
+        }
+
+        /** One section's request, made smaller after a confirmed size
+         *  rejection; the results of each request it took, in order. */
+        suspend fun requestSection(
+            chunk: ArchivistRequestChunk,
+            workingBefore: WorkingDrafts,
+            sectionMatches: List<ScannerMatch>
+        ): List<ParsedChunk> {
             val earlierRules = staged.flatMap { it.rules }
-            val workingBefore = working
-            val sectionEvidence = matching?.let { m ->
-                matchingEvidence { m.beforeSection(chunk.rows, workingBefore, stillActive) }
-            }
             val chatNow = messages
             val earlierFor: (ScanSourceRow, Int, Int) -> List<ScanSourceRow> = { first, average, maximum ->
                 ScanContext.earlierExcerpts(chatNow, first, resolveScope, average, maximum)
@@ -1324,13 +1349,7 @@ object Archivist {
             // Earlier text the last attempt actually sent, in tokens.
             var lastEarlierTokens = 0
             var retryWithoutEarlier = false
-            // Every message the section traverses, sent or not (hidden,
-            // unfinished, a companion not taking part), as it was before the
-            // request: a change to any of them while the request is in flight
-            // means the section must be read again.
-            val traversedEnd = inRange.indexOfFirst { it.id == chunk.rows.last().messageId }
-            val traversedBefore = inRange.subList(next.first, traversedEnd + 1).map { it.id to it.fingerprint }
-            val retried = ArchivistBoundedShrinkExecutor.execute<ArchivistRequestChunk, ParsedChunk>(
+            return ArchivistBoundedShrinkExecutor.execute<ArchivistRequestChunk, ParsedChunk>(
                 initial = chunk,
                 analyze = { requestChunk, successfulSubChunks ->
                     analyzeChunk(
@@ -1342,7 +1361,8 @@ object Archivist {
                         EarlierBudget(
                             minOf(earlierBudget.average, earlierCeiling),
                             minOf(earlierBudget.maximum, earlierCeiling)
-                        )
+                        ),
+                        sectionMatches
                     ) { lastEarlierTokens = it }
                 },
                 shouldShrink = { error ->
@@ -1370,9 +1390,40 @@ object Archivist {
                 },
                 retrySameAllowed = { retryWithoutEarlier }
             )
+        }
+
+        // Requests already made for this conversation's filing, so a retry
+        // after a saved memory changed never repeats them (Stage 6B.3).
+        val filingMemo = ScanFilingPlanner.Memo()
+        var coveredRereads = 0
+        var filingAttempts = 0
+        publish@ while (true) {
+        reading@ while (true) {
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val next = checkpoint.nextUnread(inRange) ?: break
+            val rows = ScanSourceRows.build(chatId, inRange, next.first, next.second, resolveScope)
+            if (rows.isEmpty()) break
+            val chunks = ArchivistConversationChunker.split(
+                rows, initialTranscriptTarget, scannerMaximumTokens, initialAllowance
+            )
+            emit(checkpoint.sectionsDone, checkpoint.sectionsDone + chunks.size)
+            val chunk = chunks.first().let { it.copy(rows = labelAt(it.rows, scannerMaximumTokens)) }
+            val workingBefore = working
+            val sectionEvidence = matching?.let { m ->
+                matchingEvidence { m.beforeSection(chunk.rows, workingBefore, stillActive) }
+            }
+            // Every message the section traverses, sent or not (hidden,
+            // unfinished, a companion not taking part), as it was before the
+            // request: a change to any of them while the request is in flight
+            // means the section must be read again.
+            val traversedEnd = inRange.indexOfFirst { it.id == chunk.rows.last().messageId }
+            val traversedBefore = inRange.subList(next.first, traversedEnd + 1).map { it.id to it.fingerprint }
+            val retried = requestSection(chunk, workingBefore, sectionEvidence?.matches.orEmpty())
             val parsed = ParsedChunk(
                 rules = retried.flatMap { it.rules },
-                loreEntries = retried.flatMap { it.loreEntries }
+                loreEntries = retried.flatMap { it.loreEntries },
+                covered = CoveredEntries.merge(retried.flatMap { it.covered })
             )
             val workingApplied = retried.fold(workingBefore) { w, p -> w.applying(p.drafts) }
             val workingAfter = matching?.let { m ->
@@ -1402,7 +1453,8 @@ object Archivist {
             checkpoint = checkpoint.advancedTo(inRange, endIndex, readThrough.end)
                 .copy(nextDraftId = workingAfter.nextId)
             // The whole working collection, its edits and passage references,
-            // and the exact next unread position are saved together.
+            // the already-covered entries and the exact next unread position
+            // are saved together.
             store.saveScanSection(
                 range.rangeId, checkpoint.sectionsDone, stagedCandidates(parsed), checkpoint.encode(),
                 workingDrafts = if (lorebookMode) null else workingAfter.drafts.map(::stagedDraft),
@@ -1410,6 +1462,7 @@ object Archivist {
             )
             staged.add(parsed)
             working = workingAfter
+            covered = CoveredEntries.merge(covered + parsed.covered)
             if (failedEdits > 0) {
                 MemoryLog.log(context, "Archivist", "warn",
                     "chat=$chatId: $failedEdits draft edit(s) failed validation and were not applied")
@@ -1432,6 +1485,48 @@ object Archivist {
         ) continue@reading
         break@reading
         }
+
+        if (!lorebookMode) {
+            // A retelling left out because a saved memory covered it is read
+            // again when that memory has since been edited, removed (other
+            // than the user discarding that exact wording) or moved out of
+            // reach, so its information is never lost (Stage 6B.3).
+            val changed = covered.filterNot { coveredStillHolds(store, it) }
+            if (changed.isNotEmpty()) {
+                if (coveredRereads >= MAX_COVERED_REREADS) {
+                    throw ScannerDependencyChangedException(changed.map { it.dependency.memoryId })
+                }
+                coveredRereads++
+                MemoryLog.log(context, "Archivist", "info",
+                    "chat=$chatId: ${changed.size} suggestion(s) rechecked because a matched memory changed during the scan")
+                covered = covered.filter { it !in changed }
+                val rows = rereadRows(chatId, inRange, changed.flatMap { it.passages }, resolveScope)
+                val chunks = if (rows.isEmpty()) emptyList() else ArchivistConversationChunker.split(
+                    rows, initialTranscriptTarget, scannerMaximumTokens, initialAllowance
+                )
+                for (part in chunks) {
+                    currentCoroutineContext().ensureActive()
+                    val chunk = part.copy(rows = labelAt(part.rows, scannerMaximumTokens))
+                    val before = working
+                    val evidence = matching?.let { m ->
+                        matchingEvidence { m.beforeSection(chunk.rows, before, stillActive) }
+                    }
+                    val results = requestSection(chunk, before, evidence?.matches.orEmpty())
+                    val applied = results.fold(before) { w, p -> w.applying(p.drafts) }
+                    working = matching?.let { m ->
+                        matchingEvidence { m.afterSection(before, applied, evidence, stillActive) }
+                    } ?: applied
+                    covered = CoveredEntries.merge(covered + results.flatMap { it.covered })
+                    staged.add(ParsedChunk(rules = results.flatMap { it.rules }))
+                }
+                // The chat and the saved memories are checked again first.
+                continue@publish
+            }
+            // Deferred lookups run before filing; a draft never compared is
+            // never treated as having no match.
+            matching?.let { m -> matchingEvidence { m.completeLookups(working, stillActive) } }?.let { working = it }
+        }
+
         val ids = messages.map { it.id }
         val bookmarkEnd = ScanChatStatus.lastSettled(inRange)
         val endIndexInChat = if (bookmarkEnd == null) {
@@ -1454,9 +1549,11 @@ object Archivist {
                 )
                 ChatCommit(chatId, stored.lorebookSuggestionIds, emptyList(), prepared.duplicatesSkipped, sourceRange)
             } else {
-                val preparedMemories = prepareMemoryDrafts(
-                    context, store, conversation, working.drafts.map { it.memory }, maxSuggestions
+                val reconciled = reconcileMemoryDrafts(
+                    context, store, conversation, working, messages, maxSuggestions, filingMemo,
+                    modelTransport, model, temperature
                 )
+                val preparedMemories = reconciled.prepared
                 val preparedRules = prepareRuleDrafts(context, store, sourceModel, staged.flatMap { it.rules })
                 val stored = store.commitScanRange(
                     range, newBookmark, preparedMemories.records, preparedRules, emptyList(),
@@ -1467,15 +1564,33 @@ object Archivist {
                             preparedRules.map { it.ruleId }, 0, sourceRange
                         )
                     ),
-                    sourcesByMemoryId = preparedMemories.sourcesByMemoryId
+                    sourcesByMemoryId = preparedMemories.sourcesByMemoryId,
+                    // Every decision that relied on a saved memory is checked
+                    // again inside the filing transaction.
+                    dependencies = reconciled.dependencies + covered.map { it.dependency }
                 )
-                ChatCommit(chatId, stored.memoryIds, stored.ruleIds, preparedMemories.duplicatesSkipped, sourceRange)
+                reconciled.logLines.forEach { MemoryLog.log(context, "Archivist", "info", "chat=$chatId: $it") }
+                ChatCommit(
+                    chatId, stored.memoryIds, stored.ruleIds, preparedMemories.duplicatesSkipped, sourceRange,
+                    keptForReview = reconciled.keptForReview
+                )
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: ScannerDependencyChangedException) {
+            // A saved memory changed between the check and the filing
+            // transaction: nothing was written; decide again.
+            filingAttempts++
+            MemoryLog.log(context, "Archivist", "info",
+                "chat=$chatId: ${e.memoryIds.size} suggestion(s) rechecked because a matched memory changed during the scan")
+            if (filingAttempts > MAX_FILING_ATTEMPTS) throw e
+            continue@publish
         } catch (e: Exception) {
             throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
         }
         onCommitted(commit)
         return commit
+        }
     }
 
     /** Match evidence is never allowed to stop a scan: a lookup that fails
@@ -1539,12 +1654,17 @@ object Archivist {
         verifiedContextTokens: Int?,
         earlierFor: (ScanSourceRow, Int, Int) -> List<ScanSourceRow>,
         earlierBudget: EarlierBudget,
+        /** What the section's lookup found (Stage 6B.2); its Pending and
+         *  Archived matches are shown to the AI (Stage 6B.3). */
+        sectionMatches: List<ScannerMatch> = emptyList(),
         /** Told how many tokens of earlier text this request carries. */
         earlierSent: (Int) -> Unit = {}
     ): ParsedChunk {
         val rows = requestChunk.rows
         val chatId = rows.first().chatId
         val scene = ArchivistSceneContext.from(rows.first())
+        // The saved memories this request shows, as read for it.
+        var shownRecords: Map<String, MemoryRecord> = emptyMap()
         val companionName = scene.companionId?.let { store.getCompanion(it)?.currentName }
         val sectionOnly = ArchivistPrompt.userMessage(chatName, companionName, rows)
         val sources = rows.map { PassageRef(it.messageId, it.start, it.end) }
@@ -1571,7 +1691,7 @@ object Archivist {
                         "(${d.eligible} eligible; ${d.withVector} current vectors)"
                 )
             }
-            val targetNames = store.activeMemoryTargetNames()
+            val targetNames = store.activeMemoryTargetNames(MemoryDependencies.COVERING_STATUSES)
             val typeNames = memoryTypes.associate { it.first to it.second }
             // Memories this section's replies actually used are clues (Stage
             // 6B.2): those still Active and eligible here join the results.
@@ -1580,10 +1700,34 @@ object Archivist {
                 val eligible = store.activeMemoriesForScope(retrievalScope).associateBy { it.memoryId }
                 clueIds.mapNotNull { eligible[it] }
             }
+            // Pending and Archived matches join the list with their status
+            // (Stage 6B.3): Pending ones share the first places with Active
+            // memories, Archived ones only fill places left over. Each is
+            // reread so its current status is the one shown.
+            val selected = ScannerPromptMatches.select(sectionMatches)
+            val pendingRecords = selected.pendingIds.mapNotNull { id ->
+                store.getMemory(id)?.takeIf { it.status == "draft" }
+            }
             val promptMemories = ScannerClues.forPrompt(
-                retrieved.map { it.memory }, clues, ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT
+                retrieved.map { it.memory }, clues,
+                ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT - pendingRecords.size
             ) { it.memoryId }
-            val retrievedRecords = promptMemories.mapNotNull { memory -> store.getMemory(memory.memoryId) }
+            val activeRecords = promptMemories.mapNotNull { memory -> store.getMemory(memory.memoryId) }
+            val archivedRecords = selected.archivedIds.mapNotNull { id ->
+                store.getMemory(id)?.takeIf { it.status == "archived" }
+            }.take(
+                (ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT - promptMemories.size - pendingRecords.size)
+                    .coerceAtLeast(0)
+            )
+            val retrievedRecords = activeRecords + pendingRecords + archivedRecords
+            fun existing(record: MemoryRecord, status: String) = ArchivistExistingMemory(
+                stableId = record.memoryId,
+                content = record.content,
+                scope = record.scope,
+                targetNames = targetNames[record.memoryId].orEmpty(),
+                typeName = record.typeId?.let { typeNames[it] },
+                status = status
+            )
             val existingContext = promptMemories.map { memory ->
                 ArchivistExistingMemory(
                     stableId = memory.memoryId,
@@ -1592,7 +1736,9 @@ object Archivist {
                     targetNames = targetNames[memory.memoryId].orEmpty(),
                     typeName = memory.typeId?.let { typeNames[it] }
                 )
-            }
+            } + pendingRecords.map { existing(it, ArchivistExistingMemory.STATUS_PENDING) } +
+                archivedRecords.map { existing(it, ArchivistExistingMemory.STATUS_ARCHIVED) }
+            shownRecords = retrievedRecords.associateBy { it.memoryId }
             val earlierMemoryCandidates = working.drafts
                 .map { draft -> earlierCandidateForPrompt(store, typeNames, draft.memory).copy(draftId = draft.id) }
             val earlierRuleCandidates = earlierRules
@@ -1688,28 +1834,36 @@ object Archivist {
                     MemoryLog.log(context, "Archivist", "warn",
                         "chat=$chatId: ${parsed.dropped} proposal(s) failed validation and were dropped")
                 }
+                val unresolvedIds = HashSet<Int>()
                 val (operations, unresolved) = WorkingDraftEdits.resolve(
                     parsed.draftEdits, parsed.withdrawnDrafts, protocol.draftIdByRef,
-                    working.drafts.map { it.id }.toSet(), WorkingDraftEdits.samePlacement(working)
-                ) { problems ->
-                    ArchivistRequestExecutor.draftEditRepair(
-                        systemPrompt = requestSystemPrompt,
-                        conversationData = rendered.text + protocolText,
-                        problems = problems,
-                        model = model,
-                        temperature = temperature,
-                        transport = modelTransport
-                    )
-                }
+                    working.drafts.map { it.id }.toSet(), WorkingDraftEdits.samePlacement(working),
+                    repair = { problems ->
+                        ArchivistRequestExecutor.draftEditRepair(
+                            systemPrompt = requestSystemPrompt,
+                            conversationData = rendered.text + protocolText,
+                            problems = problems,
+                            model = model,
+                            temperature = temperature,
+                            transport = modelTransport
+                        )
+                    },
+                    unresolvedIds = unresolvedIds
+                )
                 ParsedChunk(
                     drafts = SectionDraftChanges(
                         operations = operations,
                         alternatives = unresolved.first,
                         newDrafts = parsed.memories,
                         sources = sources,
-                        failedEdits = unresolved.second
+                        failedEdits = unresolved.second,
+                        unresolvedIds = unresolvedIds,
+                        shownMemoryIds = protocol.memories.map { it.memory.stableId }
                     ),
-                    rules = parsed.rules
+                    rules = parsed.rules,
+                    covered = CoveredEntries.validate(parsed.alreadyCovered, protocol.memoryIdByAlias, rows) { id ->
+                        shownRecords[id]?.let { MemoryDependencies.of(it, MemoryStore.draftRejectionHash(it.content)) }
+                    }
                 )
             }
         } catch (e: Exception) {
@@ -1768,6 +1922,19 @@ object Archivist {
                     targetId = null,
                     candidateHash = ArchivistCandidateBoundary.loreHash(entry),
                     payloadJson = ArchivistCandidateBoundary.payload(entry)
+                )
+            )
+        }
+        // "Already covered" entries (Stage 6B.3): IDs, offsets and
+        // fingerprints only, saved with the checkpoint.
+        for (entry in chunk.covered) {
+            out.add(
+                StagedAnalysisCandidate(
+                    stream = CoveredEntries.STREAM,
+                    targetType = null,
+                    targetId = null,
+                    candidateHash = CoveredEntries.hash(entry),
+                    payloadJson = CoveredEntries.payload(entry)
                 )
             )
         }
@@ -1960,10 +2127,22 @@ object Archivist {
         return PreparedLore(records, duplicates)
     }
 
+    /** A proposal that passed filing validation: its resolved placement,
+     *  Type and validated candidate. [index] is its place in the input. */
+    private class ValidDraft(
+        val index: Int,
+        val draft: ArchivistResponseParser.DraftMemory,
+        val candidate: MemoryMatch.Candidate,
+        val valid: MemoryCandidate
+    )
+
+    private class DraftValidation(val valid: List<ValidDraft>, val duplicates: Int)
+
     /** Returns how many candidates were skipped as duplicates of memories
      *  that already exist ("Archivist found only memories that already
      *  exist" needs the distinction). A store insert failure aborts the
-     *  conversation as reason E (save failed). */
+     *  conversation as reason E (save failed). Drafts are filed in arrival
+     *  order; the scanner itself files through [reconcileMemoryDrafts]. */
     private fun prepareMemoryDrafts(
         context: Context,
         store: MemoryStore,
@@ -1973,14 +2152,126 @@ object Archivist {
     ): PreparedMemories {
         if (drafts.isEmpty()) return PreparedMemories(emptyList(), emptyMap(), 0)
         val collected = ArchivistCandidateBoundary.collectFlat(drafts)
-        var duplicates = collected.exactDuplicatesRemoved
-        val tokenReader = org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter.reader(context)
-        val finalParts = StagedMemoryParts(tokenReader)
-        val records = finalParts.records
-        val relationshipHints = finalParts.relationshipHints
-        val sources = linkedMapOf<String, List<org.teslasoft.assistant.preferences.memory.MemorySource>>()
+        val validation = validateMemoryDrafts(context, store, conversation, collected.memories)
+        return fileValidDrafts(
+            context, store, conversation, validation.valid.map { listOf(it) }, maxSuggestions,
+            emptyMap(), validation.duplicates + collected.exactDuplicatesRemoved
+        ).first
+    }
+
+    /** What reconciliation prepared for one conversation's filing. */
+    private class ReconciledMemories(
+        val prepared: PreparedMemories,
+        /** Saved memories the decisions depend on, checked at commit. */
+        val dependencies: List<MemoryDependency>,
+        val keptForReview: Int,
+        /** Owner-approved Event Log lines, written once the filing commits. */
+        val logLines: List<String>
+    )
+
+    /**
+     * Stage 6B.3 filing: validates the working drafts, leaves out those that
+     * only repeat a saved memory, links genuine updates to the memory they
+     * update, keeps linked alternatives together in one cap slot, ranks the
+     * units across the whole scan when there are more than the cap, and
+     * prepares the records. Model requests happen here, outside the filing
+     * transaction; [memo] keeps their answers across retries.
+     */
+    private suspend fun reconcileMemoryDrafts(
+        context: Context,
+        store: MemoryStore,
+        conversation: Conversation,
+        working: WorkingDrafts,
+        messages: List<ScanMessage>,
+        maxSuggestions: Int,
+        memo: ScanFilingPlanner.Memo,
+        transport: ArchivistModelTransport,
+        model: String,
+        temperature: Double
+    ): ReconciledMemories {
+        val drafts = working.drafts
+        if (drafts.isEmpty()) return ReconciledMemories(PreparedMemories(emptyList(), emptyMap(), 0), emptyList(), 0, emptyList())
+        val validation = validateMemoryDrafts(context, store, conversation, drafts.map { it.memory })
+        val validByDraftId = validation.valid.associateBy { drafts[it.index].id }
+        val workingById = drafts.associateBy { it.id }
+        val filing = validation.valid.map { v ->
+            val d = drafts[v.index]
+            FilingDraft(
+                draftId = d.id,
+                content = d.memory.content,
+                placement = MemoryMatch.placementKey(v.candidate.scope, v.candidate.targetIds),
+                relatedMemoryIds = d.memory.relatedExistingMemoryIds,
+                shownMemoryIds = d.shownMemoryIds.toSet(),
+                alternativeOf = d.alternativeOf,
+                unresolvedEdit = d.unresolvedEdit,
+                matches = d.evidence?.proposal?.matches.orEmpty().filter { it.memoryId != null }
+            )
+        }
+        val textById = messages.associate { it.id to it.text }
+        val planner = ScanFilingPlanner(
+            currentMemory = { id ->
+                store.getMemory(id)?.let { CurrentMemory(it, MemoryStore.draftRejectionHash(it.content)) }
+            },
+            wordingOf = { draftId, maxTokens ->
+                ScanFilingWording.of(workingById[draftId]?.sources.orEmpty(), textById, maxTokens)
+            },
+            compare = { pairs ->
+                val rendered = ScanComparisonRequest.render(pairs)
+                val raw = transport.complete(
+                    ArchivistModelRequest(
+                        ScanComparisonRequest.SYSTEM, rendered.data, model, temperature,
+                        ArchivistRequestExecutor.COMPARISON_ATTEMPT
+                    )
+                )
+                ScanComparisonRequest.coveredPairs(raw, rendered, pairs.map { it.draftId to it.memoryId }.toSet())
+            },
+            rank = { units, limit ->
+                val raw = transport.complete(
+                    ArchivistModelRequest(
+                        ScanRankingRequest.system(limit), ScanRankingRequest.render(units), model, temperature,
+                        ArchivistRequestExecutor.RANKING_ATTEMPT
+                    )
+                )
+                ScanRankingRequest.kept(raw, units.size, limit)
+            },
+            memo = memo
+        )
+        val plan = planner.plan(filing, maxSuggestions)
+        val units = plan.units.map { unit -> unit.mapNotNull { validByDraftId[it] } }
+        val links = plan.memoryLinks.mapNotNull { (draftId, ids) -> validByDraftId[draftId]?.let { it.index to ids } }.toMap()
+        val (prepared, filedUnits) = fileValidDrafts(
+            context, store, conversation, units, maxSuggestions, links,
+            validation.duplicates + plan.covered.size
+        )
+        val keptForReview = filedUnits.count { unit ->
+            unit.size > 1 || unit.any { v -> drafts[v.index].let { it.unresolvedEdit || it.alternativeOf.isNotEmpty() } }
+        }
+        val logLines = buildList {
+            if (plan.covered.isNotEmpty()) {
+                add("${plan.covered.size} repeated suggestion(s) not filed; already covered by saved memories")
+            }
+            if (plan.comparisonFailedDrafts > 0) {
+                add("comparison request failed; ${plan.comparisonFailedDrafts} suggestion(s) filed for review with their matches")
+            }
+            if (plan.rankingFailed) add("ranking request failed; suggestions ranked on the device")
+        }
+        return ReconciledMemories(prepared, plan.dependencies, keptForReview, logLines)
+    }
+
+    /**
+     * Validates proposals for filing, in order: placement and Type resolved,
+     * exact duplicates of existing memories and of earlier proposals counted,
+     * previously discarded wording and malformed candidates left out.
+     */
+    private fun validateMemoryDrafts(
+        context: Context,
+        store: MemoryStore,
+        conversation: Conversation,
+        drafts: List<ArchivistResponseParser.DraftMemory>
+    ): DraftValidation {
+        var duplicates = 0
+        val valid = ArrayList<ValidDraft>()
         val stagedIdentities = HashSet<String>()
-        var acceptedProposals = 0
         // The current user-owned Type ids: a suggestion is honored only if it
         // names one of these, otherwise the memory files as No Type (never
         // dropped). Legacy `kind` is not consulted.
@@ -1996,14 +2287,7 @@ object Archivist {
         val campaignIdsNow = campaigns.map { it.campaignId }.toSet()
         val projectIdsNow = projects.map { it.projectId }.toSet()
         val companionIdsNow = companions.map { it.companionId }.toSet()
-        for ((index, d) in collected.memories.withIndex()) {
-            if (maxSuggestions > 0 && acceptedProposals >= maxSuggestions) {
-                MemoryLog.log(
-                    context, "Archivist", "info",
-                    "chat=${conversation.chatId}: cap $maxSuggestions reached, ${collected.memories.size - index} draft(s) not filed"
-                )
-                break
-            }
+        for ((index, d) in drafts.withIndex()) {
             // Resolve placement once: the target sets are both the Possible
             // Match identity (scope + sorted target IDs) and the record's links.
             val worldIds = resolvedDraftTargets(d, "world") {
@@ -2039,10 +2323,9 @@ object Archivist {
             // normalized match with the same placement AND the same Type, on an
             // active or pending memory, is a true duplicate that must not create
             // a second draft. Everything else — a different Type, an archived or
-            // superseded exact match, or a semantic near-match — is filed and
-            // surfaces as a Possible Match at review time. Type identity is the
-            // stable type_id (the source of truth), placement-aware and
-            // title-independent.
+            // superseded exact match, or a semantic near-match — goes on to
+            // reconciliation and review. Type identity is the stable type_id
+            // (the source of truth), placement-aware and title-independent.
             val candidate = MemoryMatch.Candidate(
                 content = d.content,
                 scope = d.scope,
@@ -2069,11 +2352,11 @@ object Archivist {
                     "chat=${conversation.chatId}: previously rejected draft not refiled")
                 continue
             }
-            // Build a VALIDATED candidate and file it through the one canonical
-            // Pending filing service (Phase 2, items 5/6/8). The Memory Assistant
-            // is just one transport wrapper: it resolves scope/targets/Type above,
-            // then converges on the same validated candidate and the same filer
-            // the computer-import and manual paths use. The candidate carries no
+            // Build a VALIDATED candidate for the one canonical Pending filing
+            // service (Phase 2, items 5/6/8). The Memory Assistant is just one
+            // transport wrapper: it resolves scope/targets/Type above, then
+            // converges on the same validated candidate and the same filer the
+            // computer-import and manual paths use. The candidate carries no
             // importance (the factory always files a proposal at 0), no source
             // authorship, and no provenance — the memory keeps none of them.
             val filingResult: CandidateResult<out MemoryCandidate> = if (d.scope == SCOPE_COMPANION) {
@@ -2107,61 +2390,149 @@ object Archivist {
                         "chat=${conversation.chatId}: candidate quarantined (${filingResult.error}) — not filed"
                     )
                 }
-                is CandidateResult.Valid -> {
-                    val record =
-                        org.teslasoft.assistant.preferences.memory.PendingMemoryRecordFactory.build(
-                            filingResult.candidate,
-                            org.teslasoft.assistant.preferences.memory.MemoryId
-                                .generate(org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
-                            MemoryStore.nowIso()
-                        )
-                    // Apply the suggestion cap to original proposals. All parts
-                    // of an accepted proposal are filed, with no second cap.
-                    val beforeParts = records.size
-                    val parts = if (tokenReader == null) {
-                        listOf(org.teslasoft.assistant.preferences.memory.librarian.MemoryProposalSplitter.Part(
-                            record.content, d.tags))
-                    } else {
-                        org.teslasoft.assistant.preferences.memory.librarian.MemoryProposalSplitter.split(
-                            record.content, d.tags, tokenReader)
-                    }
-                    for ((partIndex, part) in parts.withIndex()) {
-                        val splitRecord = record.copy(
-                            memoryId = if (partIndex == 0) record.memoryId else
-                                org.teslasoft.assistant.preferences.memory.MemoryId.generate(
-                                    org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
-                            content = part.content,
-                            tagsJson = org.json.JSONArray(part.tags).toString()
-                        )
-                        // Re-running a conversation must not duplicate a part
-                        // already filed, or resurrect a part the user rejected.
-                        // Unsplit proposals already passed this same gate above.
-                        if (parts.size > 1) {
-                            val partCandidate = candidate.copy(content = splitRecord.content)
-                            if (store.classifyCandidate(partCandidate) is MemoryMatch.Outcome.AlreadyPresent ||
-                                store.isDraftRejected(splitRecord.content)) {
-                                duplicates++
-                                continue
-                            }
-                        }
-                        val validHints = d.relatedExistingMemoryIds
-                            .filter { it != splitRecord.memoryId && store.getMemory(it) != null }.distinct()
-                        if (!finalParts.add(splitRecord, validHints)) {
+                is CandidateResult.Valid -> valid.add(ValidDraft(index, d, candidate, filingResult.candidate))
+            }
+        }
+        return DraftValidation(valid, duplicates)
+    }
+
+    /**
+     * Files validated proposals unit by unit, best first, until the cap of
+     * [maxSuggestions] units is reached; a unit whose parts all drop out at
+     * this point lets the next unit through. A unit of several proposals is
+     * a linked pair of alternatives: it takes one slot, and its members are
+     * linked to each other for review. Returns the prepared records and the
+     * units that were filed.
+     */
+    private fun fileValidDrafts(
+        context: Context,
+        store: MemoryStore,
+        conversation: Conversation,
+        units: List<List<ValidDraft>>,
+        maxSuggestions: Int,
+        /** Saved memories to link, by [ValidDraft.index]. */
+        memoryLinks: Map<Int, List<String>>,
+        duplicatesBefore: Int
+    ): Pair<PreparedMemories, List<List<ValidDraft>>> {
+        var duplicates = duplicatesBefore
+        val tokenReader = org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter.reader(context)
+        val finalParts = StagedMemoryParts(tokenReader)
+        val records = finalParts.records
+        val relationshipHints = finalParts.relationshipHints
+        val sources = linkedMapOf<String, List<org.teslasoft.assistant.preferences.memory.MemorySource>>()
+        val filedUnits = ArrayList<List<ValidDraft>>()
+        for ((unitIndex, unit) in units.withIndex()) {
+            if (maxSuggestions > 0 && filedUnits.size >= maxSuggestions) {
+                MemoryLog.log(
+                    context, "Archivist", "info",
+                    "chat=${conversation.chatId}: cap $maxSuggestions reached, " +
+                        "${units.drop(unitIndex).sumOf { it.size }} draft(s) not filed"
+                )
+                break
+            }
+            val filedMembers = ArrayList<Pair<ValidDraft, String>>()
+            for (v in unit) {
+                val d = v.draft
+                val record =
+                    org.teslasoft.assistant.preferences.memory.PendingMemoryRecordFactory.build(
+                        v.valid,
+                        org.teslasoft.assistant.preferences.memory.MemoryId
+                            .generate(org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
+                        MemoryStore.nowIso()
+                    )
+                // The cap counts original proposals. All parts of an accepted
+                // proposal are filed, with no second cap.
+                val parts = if (tokenReader == null) {
+                    listOf(org.teslasoft.assistant.preferences.memory.librarian.MemoryProposalSplitter.Part(
+                        record.content, d.tags))
+                } else {
+                    org.teslasoft.assistant.preferences.memory.librarian.MemoryProposalSplitter.split(
+                        record.content, d.tags, tokenReader)
+                }
+                var firstPartId: String? = null
+                for ((partIndex, part) in parts.withIndex()) {
+                    val splitRecord = record.copy(
+                        memoryId = if (partIndex == 0) record.memoryId else
+                            org.teslasoft.assistant.preferences.memory.MemoryId.generate(
+                                org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
+                        content = part.content,
+                        tagsJson = org.json.JSONArray(part.tags).toString()
+                    )
+                    // Re-running a conversation must not duplicate a part
+                    // already filed, or resurrect a part the user rejected.
+                    // Unsplit proposals already passed this same gate.
+                    if (parts.size > 1) {
+                        val partCandidate = v.candidate.copy(content = splitRecord.content)
+                        if (store.classifyCandidate(partCandidate) is MemoryMatch.Outcome.AlreadyPresent ||
+                            store.isDraftRejected(splitRecord.content)) {
                             duplicates++
                             continue
                         }
-                        sources[splitRecord.memoryId] = listOf(
-                            org.teslasoft.assistant.preferences.memory.MemorySourceRules.conversationOnly(
-                                MemoryStore.newId(org.teslasoft.assistant.preferences.memory.MemorySource.ID_PREFIX),
-                                splitRecord.memoryId, conversation.chatId, MemoryStore.nowIso()
-                            )
-                        )
                     }
-                    if (records.size > beforeParts) acceptedProposals++
+                    val validHints = (d.relatedExistingMemoryIds + memoryLinks[v.index].orEmpty())
+                        .filter { it != splitRecord.memoryId && store.getMemory(it) != null }.distinct()
+                    if (!finalParts.add(splitRecord, validHints)) {
+                        duplicates++
+                        continue
+                    }
+                    if (firstPartId == null) firstPartId = splitRecord.memoryId
+                    sources[splitRecord.memoryId] = listOf(
+                        org.teslasoft.assistant.preferences.memory.MemorySourceRules.conversationOnly(
+                            MemoryStore.newId(org.teslasoft.assistant.preferences.memory.MemorySource.ID_PREFIX),
+                            splitRecord.memoryId, conversation.chatId, MemoryStore.nowIso()
+                        )
+                    )
                 }
+                firstPartId?.let { filedMembers.add(v to it) }
+            }
+            if (filedMembers.isEmpty()) continue
+            filedUnits.add(filedMembers.map { it.first })
+            // Linked alternatives point at each other, so either card shows
+            // the other wording in Possible Match review.
+            for ((_, id) in filedMembers) {
+                val others = filedMembers.map { it.second }.filter { it != id }
+                if (others.isNotEmpty()) relationshipHints[id] = (relationshipHints[id].orEmpty() + others).distinct()
             }
         }
-        return PreparedMemories(records, relationshipHints, duplicates, sources)
+        return PreparedMemories(records, relationshipHints, duplicates, sources) to filedUnits
+    }
+
+    /** Whether a saved memory still covers what an "already covered" entry
+     *  left out: unchanged, or discarded by the user in exactly that wording. */
+    private fun coveredStillHolds(store: MemoryStore, entry: CoveredEntry): Boolean {
+        val current = store.getMemory(entry.dependency.memoryId)
+        return MemoryDependencies.holds(
+            entry.dependency, current,
+            current == null && store.isRejectionHashRecorded(entry.dependency.wordingHash)
+        )
+    }
+
+    /** The passages of [passages] still in the chat, read again as rows in
+     *  chat order, for a retelling that must be reconsidered. */
+    private fun rereadRows(
+        chatId: String,
+        inRange: List<ScanMessage>,
+        passages: List<PassageRef>,
+        resolveScope: (ScanMessageScope?) -> ScanScopeResolution
+    ): List<ScanSourceRow> {
+        val order = HashMap<String, Int>()
+        inRange.forEachIndexed { i, m -> order.putIfAbsent(m.id, i) }
+        val sorted = passages.distinct().filter { it.messageId in order }
+            .sortedWith(compareBy<PassageRef>({ order.getValue(it.messageId) }, { it.start }, { -it.end }))
+        val out = ArrayList<ScanSourceRow>()
+        for (p in sorted) {
+            val last = out.lastOrNull()
+            // A passage inside one already taken adds nothing.
+            if (last != null && last.messageId == p.messageId && p.end <= last.end) continue
+            val index = order.getValue(p.messageId)
+            val row = ScanSourceRows.build(chatId, inRange.subList(index, index + 1), 0, p.start, resolveScope)
+                .firstOrNull() ?: continue
+            val start = if (last != null && last.messageId == p.messageId) maxOf(0, last.end - row.start) else 0
+            val length = (p.end - row.start).coerceAtMost(row.text.length)
+            if (length <= start) continue
+            out.add(row.slice(start, length))
+        }
+        return out
     }
 
     /** Production requests use only stable ids normalized from that exact

@@ -33,7 +33,8 @@ internal data class ArchivistModelRequest(
     val temperature: Double,
     /** One for the normal request, two for the single bounded JSON repair,
      *  [ArchivistRequestExecutor.DRAFT_EDIT_REPAIR_ATTEMPT] for the targeted
-     *  working-draft repair. */
+     *  working-draft repair, [ArchivistRequestExecutor.COMPARISON_ATTEMPT] and
+     *  [ArchivistRequestExecutor.RANKING_ATTEMPT] for the filing requests. */
     val attempt: Int
 )
 
@@ -45,6 +46,9 @@ internal class ArchivistClearlyTruncatedException : Exception(
 internal object ArchivistRequestExecutor {
     const val MAX_PARSE_ATTEMPTS = 2
     const val DRAFT_EDIT_REPAIR_ATTEMPT = 3
+    /** The Stage 6B.3 comparison check and cap ranking requests. */
+    const val COMPARISON_ATTEMPT = 4
+    const val RANKING_ATTEMPT = 5
 
     private const val REPAIR_PROTOCOL = """
 

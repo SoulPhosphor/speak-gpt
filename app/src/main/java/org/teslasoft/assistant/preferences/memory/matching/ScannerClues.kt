@@ -6,9 +6,9 @@ package org.teslasoft.assistant.preferences.memory.matching
 
 /**
  * Memories the chat already used are clues (memory development plan M.2,
- * Stage 6B requirements). The scanner's existing-memory list stays Active
- * only (owner decision, 2026-11-22); recorded clues that are still Active
- * and eligible in the scene join the search results there. A clue already
+ * Stage 6B requirements). Recorded clues that are still Active and
+ * eligible in the scene join the Active search results in the scanner's
+ * existing-memory list. A clue already
  * found by the search keeps its place; the others take up to [MAX_CLUES]
  * places directly after the top search results, so the prompt's memory limit
  * cannot push them all out.

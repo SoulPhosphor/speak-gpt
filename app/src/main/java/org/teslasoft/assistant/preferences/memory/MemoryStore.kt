@@ -75,6 +75,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     private val appContext = context.applicationContext
 
     companion object {
+        /** The exact-wording hash a discarded suggestion is remembered by
+         *  (`rejected_drafts.content_hash`). */
+        fun draftRejectionHash(content: String): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(content.toByteArray(Charsets.UTF_8))
+            return digest.joinToString("") { "%02x".format(it) }
+        }
+
         const val DATABASE_NAME = "companion_memory.db"
         private const val DATABASE_VERSION = 38
 
@@ -3855,6 +3863,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             for (source in sourcesByMemoryId[memory.memoryId].orEmpty()) {
                 insertMemorySourceTx(db, source.copy(memoryId = memory.memoryId))
             }
+        }
+        // Links are written after every memory of the batch exists, so two
+        // new suggestions can be linked to each other (Stage 6B.3 pairs).
+        for (memory in memories) {
             for (existingId in relationshipHintsByMemoryId[memory.memoryId].orEmpty().distinct()) {
                 if (existingId == memory.memoryId ||
                     !rowExists(db, "memories", "memory_id", existingId)
@@ -3899,11 +3911,29 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         lorebookSuggestions: List<LorebookSuggestionRecord>,
         relationshipHintsByMemoryId: Map<String, List<String>> = emptyMap(),
         runProgress: ArchivistRunRecord? = null,
-        sourcesByMemoryId: Map<String, List<MemorySource>> = emptyMap()
+        sourcesByMemoryId: Map<String, List<MemorySource>> = emptyMap(),
+        /** Saved memories the filing decisions depend on (Stage 6B.3): if
+         *  any changed since it was checked, nothing is written and
+         *  [org.teslasoft.assistant.preferences.memory.archivist.ScannerDependencyChangedException]
+         *  is thrown so the decisions are made again. */
+        dependencies: List<org.teslasoft.assistant.preferences.memory.archivist.MemoryDependency> = emptyList()
     ): CommittedChatOutputs {
         val db = writableDatabase
         db.beginTransaction()
         try {
+            val changed = dependencies.filterNot { dependency ->
+                val current = db.query(
+                    "memories", null, "memory_id = ?", arrayOf(dependency.memoryId), null, null, null
+                ).use { if (it.moveToFirst()) readFullMemory(db, it) else null }
+                org.teslasoft.assistant.preferences.memory.archivist.MemoryDependencies.holds(
+                    dependency, current, current == null && rejectionHashRecordedTx(db, dependency.wordingHash)
+                )
+            }
+            if (changed.isNotEmpty()) {
+                throw org.teslasoft.assistant.preferences.memory.archivist.ScannerDependencyChangedException(
+                    changed.map { it.memoryId }
+                )
+            }
             val stored = scanProgressAndRangeCheckTx(db, range)
             insertPreparedOutputsTx(
                 db, memories, rules, lorebookSuggestions, relationshipHintsByMemoryId,
@@ -5151,10 +5181,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      *  keyed by memory id. The memory-doc-v2 lexical document includes them
      *  so a memory is findable by the name of the thing it is about
      *  (counterplan §10 A.2). Five fixed queries, no per-memory N+1. */
-    fun activeMemoryTargetNames(): Map<String, List<String>> {
+    fun activeMemoryTargetNames(
+        /** Memory statuses to include; Active only unless the scanner asks
+         *  for Pending and Archived too (Stage 6B.3). */
+        statuses: Collection<String> = listOf("active")
+    ): Map<String, List<String>> {
+        val statusArgs = statuses.distinct().toTypedArray()
+        if (statusArgs.isEmpty()) return emptyMap()
+        val statusList = statusArgs.joinToString(",") { "?" }
         val out = HashMap<String, ArrayList<String>>()
         fun scan(sql: String) {
-            readableDatabase.rawQuery(sql, emptyArray()).use {
+            readableDatabase.rawQuery(sql, statusArgs).use {
                 while (it.moveToNext()) {
                     val name = it.getString(1) ?: continue
                     if (name.isNotBlank()) out.getOrPut(it.getString(0)) { ArrayList() }.add(name)
@@ -5164,27 +5201,27 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         scan(
             "SELECT mw.memory_id, w.name FROM memory_worlds mw " +
                 "JOIN worlds w ON w.world_id = mw.world_id " +
-                "JOIN memories m ON m.memory_id = mw.memory_id WHERE m.status = 'active'"
+                "JOIN memories m ON m.memory_id = mw.memory_id WHERE m.status IN ($statusList)"
         )
         scan(
             "SELECT mc.memory_id, c.name FROM memory_campaigns mc " +
                 "JOIN campaigns c ON c.campaign_id = mc.campaign_id " +
-                "JOIN memories m ON m.memory_id = mc.memory_id WHERE m.status = 'active'"
+                "JOIN memories m ON m.memory_id = mc.memory_id WHERE m.status IN ($statusList)"
         )
         scan(
             "SELECT mrc.memory_id, rc.name FROM memory_roleplay_characters mrc " +
                 "JOIN roleplay_characters rc ON rc.roleplay_character_id = mrc.roleplay_character_id " +
-                "JOIN memories m ON m.memory_id = mrc.memory_id WHERE m.status = 'active'"
+                "JOIN memories m ON m.memory_id = mrc.memory_id WHERE m.status IN ($statusList)"
         )
         scan(
             "SELECT mco.memory_id, co.current_name FROM memory_companions mco " +
                 "JOIN companions co ON co.companion_id = mco.companion_id " +
-                "JOIN memories m ON m.memory_id = mco.memory_id WHERE m.status = 'active'"
+                "JOIN memories m ON m.memory_id = mco.memory_id WHERE m.status IN ($statusList)"
         )
         scan(
             "SELECT mp.memory_id, p.name FROM memory_projects mp " +
                 "JOIN projects p ON p.project_id = mp.project_id " +
-                "JOIN memories m ON m.memory_id = mp.memory_id WHERE m.status = 'active'"
+                "JOIN memories m ON m.memory_id = mp.memory_id WHERE m.status IN ($statusList)"
         )
         return out
     }
@@ -7808,6 +7845,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
+    /** Whether the user discarded suggested wording with this exact
+     *  rejection hash ([draftRejectionHash]). */
+    fun isRejectionHashRecorded(hash: String): Boolean = rejectionHashRecordedTx(readableDatabase, hash)
+
+    private fun rejectionHashRecordedTx(db: SQLiteDatabase, hash: String): Boolean =
+        db.query(
+            "rejected_drafts", arrayOf("content_hash"), "content_hash = ?", arrayOf(hash), null, null, null
+        ).use { it.moveToNext() }
+
     /** Whether an identical draft (exact content) was deleted before — the
      *  runner skips refiling it. */
     fun isDraftRejected(content: String): Boolean {
@@ -7818,11 +7864,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         ).use { return it.moveToNext() }
     }
 
-    private fun draftContentHash(content: String): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-            .digest(content.toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }
-    }
+    private fun draftContentHash(content: String): String = draftRejectionHash(content)
 
     fun getMemoryChangeLog(memoryId: String): List<ChangeLogEntry> =
         readChangeLog(readableDatabase, memoryId)

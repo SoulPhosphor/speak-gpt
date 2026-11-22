@@ -107,8 +107,19 @@ object ArchivistResponseParser {
          *  validates every reference before anything changes (Stage 6B.1). */
         val draftEdits: List<RawDraftEdit> = emptyList(),
         /** Working-draft references the model asked to withdraw, as returned. */
-        val withdrawnDrafts: List<String> = emptyList()
+        val withdrawnDrafts: List<String> = emptyList(),
+        /** "Already covered" entries exactly as returned (Stage 6B.3); the
+         *  caller validates every message number and memory reference. */
+        val alreadyCovered: List<RawCovered> = emptyList()
     )
+
+    /** One returned "already covered" entry before validation: the message
+     *  numbers where something was repeated and the M reference of the
+     *  existing memory that covers it. */
+    data class RawCovered(val messages: List<Long>, val memoryRef: String)
+
+    /** Defensive bound on "already covered" entries in one response. */
+    const val MAX_COVERED_PER_RESPONSE = 40
 
     /** One returned working-draft edit before validation: the references it
      *  names, its complete new prose, and an optional Type and tags. */
@@ -225,7 +236,33 @@ object ArchivistResponseParser {
         }
 
         val operations = readDraftOperations(json)
-        return Parsed(memories, rules, dropped, operations.first, operations.second)
+        return Parsed(memories, rules, dropped, operations.first, operations.second, readCovered(json))
+    }
+
+    /** The "already_covered" entries: each needs a memory reference and at
+     *  least one whole, positive message number. */
+    private fun readCovered(json: JSONObject): List<RawCovered> {
+        val arr = json.optJSONArray("already_covered") ?: return emptyList()
+        val out = ArrayList<RawCovered>()
+        for (i in 0 until arr.length()) {
+            if (out.size >= MAX_COVERED_PER_RESPONSE) break
+            val o = arr.optJSONObject(i) ?: continue
+            val ref = o.optString("memory_ref").trim()
+            if (ref.isEmpty()) continue
+            val numbers = LinkedHashSet<Long>()
+            o.optJSONArray("messages")?.let { m ->
+                for (k in 0 until m.length()) {
+                    val n = when (val v = m.opt(k)) {
+                        is Number -> v.toDouble().takeIf { it == Math.floor(it) }?.toLong()
+                        is String -> v.trim().toLongOrNull()
+                        else -> null
+                    }
+                    if (n != null && n > 0) numbers.add(n)
+                }
+            }
+            if (numbers.isNotEmpty()) out.add(RawCovered(numbers.toList(), ref))
+        }
+        return out
     }
 
     /**
