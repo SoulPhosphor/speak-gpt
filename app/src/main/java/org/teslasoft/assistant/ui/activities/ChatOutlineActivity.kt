@@ -587,6 +587,17 @@ class ChatOutlineActivity : FragmentActivity() {
 
     /* ------------------------------- runs ---------------------------------- */
 
+    /** Retry on the error pop-up: the same run again, asked for the way it
+     *  was the first time (a redo first asks about unsaved edits, as Redo does). */
+    private fun retryLastRun() {
+        val request = ChatOutlineRunner.lastRequest(chatId) ?: return
+        if (request.mode == OutlineMode.REDO) {
+            withSavedEdits { startRun(OutlineMode.REDO, request.redoIndex, request.promptId) }
+        } else {
+            startRun(request.mode, request.redoIndex, request.promptId)
+        }
+    }
+
     private fun startRun(mode: OutlineMode, redoIndex: Int = -1, promptId: String? = null) {
         if (running) return
         if (!ChatOutlineRunner.hasStarter(chatId) && SummarizerController.isConfigured(this)) {
@@ -764,16 +775,17 @@ class ChatOutlineActivity : FragmentActivity() {
                 append(getString(R.string.compaction_err_provider, it))
             }
         }
-        val actions = LayoutInflater.from(this).inflate(R.layout.dialog_single_action, null)
+        val actions = LayoutInflater.from(this).inflate(R.layout.dialog_retry_okay_actions, null)
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(title)
             .setMessage(message)
             .setView(actions)
             .create()
-        actions.findViewById<MaterialButton>(R.id.btn_dialog_action).apply {
-            setText(R.string.okay)
-            setOnClickListener { dialog.dismiss() }
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_retry).setOnClickListener {
+            dialog.dismiss()
+            retryLastRun()
         }
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_okay).setOnClickListener { dialog.dismiss() }
         dialog.show()
         linkErrorLog(dialog, message)
     }

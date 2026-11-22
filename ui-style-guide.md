@@ -307,7 +307,10 @@ Summarizer Settings centered beneath as an approved exception),
 the Compaction error pop-up (`dialog_compaction_error_actions.xml`, with
 Summarizer Settings centered beneath as an approved exception), and Backup
 Attempts Failed (`dialog_backup_failed_actions.xml`, Cancel then Retry, with
-Change Backup Folder centered beneath as an approved exception).
+Change Backup Folder centered beneath as an approved exception). The shared
+Retry / Okay row for an error pop-up is `dialog_retry_okay_actions.xml` (two
+`AppButton.Primary.Inline` buttons, Retry then Okay); current user: the Chat
+Outline error pop-up.
 
 The styled form of that action area is `Widget.App.Dialog.Actions` (the
 container, inset from the dialog's rounded corners), `Widget.App.Dialog.Actions.EndRow`
@@ -920,7 +923,7 @@ Its Tags box is the standard label-above-box field (`Widget.App.Field.Label.Afte
 
 Its run progress uses the shared progress pop-up (`dialog_compaction_progress.xml`) with the outline's title and completion text.
 
-Its pop-ups use shared families: Outline Number Reached is a standard dialog with `dialog_single_action.xml`; Rename is the name-entry dialog (`dialog_name_entry.xml`); Redo This Outline (`dialog_outline_redo.xml`) is a standard dialog whose custom view holds a `Widget.App.Dialog.DropdownLine` (a `Widget.App.Dropdown.CanonicalValue.Fill` and a `Widget.App.Dropdown.TrailingGear`) above `dialog_two_actions_cancel_first.xml`; Delete This Outline uses the same cancel-first confirmation as the header trash can.
+Its pop-ups use shared families: Outline Number Reached is a standard dialog with `dialog_single_action.xml`; Rename is the name-entry dialog (`dialog_name_entry.xml`); Redo This Outline (`dialog_outline_redo.xml`) is a standard dialog whose custom view holds a `Widget.App.Dialog.DropdownLine` (a `Widget.App.Dropdown.CanonicalValue.Fill` and a `Widget.App.Dropdown.TrailingGear`) above `dialog_two_actions_cancel_first.xml`; Delete This Outline uses the same cancel-first confirmation as the header trash can. A failed outline run shows a standard dialog (title, then its explanation) with `dialog_retry_okay_actions.xml`.
 
 ### Prompt tab row
 
