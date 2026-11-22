@@ -3635,14 +3635,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         chunkOrdinal: Int,
         candidates: List<StagedAnalysisCandidate>,
         checkpointJson: String,
-        /** A repeat of an already staged candidate: the combined payload to
-         *  keep (for example, the repeat's extra tags), or null to keep the
-         *  stored one, so a resumed scan files what an uninterrupted one would. */
-        mergeRepeat: (stream: String, stored: String, repeat: String) -> String? = { _, _, _ -> null },
         /** The range's complete working-draft collection after this section
          *  (Stage 6B.1), replacing the saved one in order; null leaves the
          *  saved memory drafts as they are. */
-        workingDrafts: List<StagedAnalysisCandidate>? = null
+        workingDrafts: List<StagedAnalysisCandidate>? = null,
+        /** A repeat of an already staged candidate: the combined payload to
+         *  keep (for example, the repeat's extra tags), or null to keep the
+         *  stored one, so a resumed scan files what an uninterrupted one would. */
+        mergeRepeat: (stream: String, stored: String, repeat: String) -> String? = { _, _, _ -> null }
     ) {
         val db = writableDatabase
         db.beginTransaction()

@@ -1379,8 +1379,8 @@ object Archivist {
             // and the exact next unread position are saved together.
             store.saveScanSection(
                 range.rangeId, checkpoint.sectionsDone, stagedCandidates(parsed), checkpoint.encode(),
-                ArchivistCandidateBoundary::mergeRepeatPayload,
-                workingDrafts = if (lorebookMode) null else workingAfter.drafts.map(::stagedDraft)
+                workingDrafts = if (lorebookMode) null else workingAfter.drafts.map(::stagedDraft),
+                mergeRepeat = ArchivistCandidateBoundary::mergeRepeatPayload
             )
             staged.add(parsed)
             working = workingAfter
