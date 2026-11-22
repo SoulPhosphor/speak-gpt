@@ -24,8 +24,9 @@ internal object ParallelResponseSelection {
         version.attempts.any { it.state == MessageCompletionState.STREAMING }
     }
 
-    fun display(row: Map<String, Any>): HashMap<String, Any> = ResponseGroupEdits.display(row).also { display ->
-        val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return@also
+    fun display(row: Map<String, Any>, read: ResponseGroupRead? = null): HashMap<String, Any> = HashMap(row).also { display ->
+        val group = ((read ?: ResponseGroupCodec.read(row)) as? ResponseGroupRead.Valid)?.group ?: return@also
+        org.teslasoft.assistant.ui.adapters.chat.ChatAdapter.applyVariant(display, ResponseGroupEdits.foregroundFields(group))
         val slot = group.slots.single { it.slotId == group.foregroundSlotId }
         val version = slot.versions.single { it.versionId == slot.foregroundVersionId }
         val records = version.attempts.flatMap { org.teslasoft.assistant.usage.TokenUsageAccounting.decodeRecords(it.usageRecord) }
@@ -35,14 +36,16 @@ internal object ParallelResponseSelection {
     }
 
     fun canonicalImage(row: Map<String, Any>): String? {
+        // Ordinary text groups do not need to decode their complete original input just for image projection.
+        if ((row[ResponseGroupCodec.KEY] as? String)?.contains("\"imageResult\"") != true) return null
         val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return null
         val slot = group.slots.single { it.slotId == group.primarySlotId }
         return image(slot.versions.single { it.versionId == slot.canonicalVersionId })
     }
     private fun image(version: ResponseVersion): String? = ResponseGroupImages.image(version)
 
-    fun displayIndex(row: Map<String, Any>): Int? {
-        val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return null
+    fun displayIndex(row: Map<String, Any>, read: ResponseGroupRead? = null): Int? {
+        val group = ((read ?: ResponseGroupCodec.read(row)) as? ResponseGroupRead.Valid)?.group ?: return null
         return group.slots.flatMap { slot -> slot.versions.map { slot.slotId to it.versionId } }
             .indexOf(group.foregroundSlotId to group.slots.single { it.slotId == group.foregroundSlotId }.foregroundVersionId)
     }

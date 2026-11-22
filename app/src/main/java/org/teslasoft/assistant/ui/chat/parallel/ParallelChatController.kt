@@ -26,9 +26,10 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         val includes: List<ChatInclude>
         val manualMemoryIds: List<String>
         val unavailable: Boolean
+        val imagineCommandEnabled: Boolean get() = false
         suspend fun prepareBase(raw: String, setup: ExperimentalSetup): ParallelTurnBase
         /** Persist both message rows before composer/attachment transfer. */
-        fun commitTurn(raw: String, group: ResponseGroup): Boolean
+        fun commitTurn(raw: String, base: ParallelTurnBase, group: ResponseGroup): Boolean
         fun save(): Boolean
         fun changed(position: Int, canonical: Boolean)
         fun busy(value: Boolean)
@@ -41,7 +42,8 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     private var selectingBranch = false
     private var pendingSave = false
     private var closed = false
-    private var pendingTurn: Pair<String, String>? = null
+    private data class PendingTurn(val raw: String, val base: ParallelTurnBase, val groupId: String)
+    private var pendingTurn: PendingTurn? = null
     private var preparing = false
     private var sendJob: Job? = null
     val busy get() = active || pendingSave
@@ -60,10 +62,10 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 check(actual.chatId == host.chatId)
                 if (index < 0) {
                     val pending = requireNotNull(pendingTurn)
-                    check(pending.second == target.groupId)
+                    check(pending.groupId == target.groupId)
                     val group = transform(null)
                     check(host.messages.none { it["message_id"] == group.userMessageId || it["message_id"] == group.assistantMessageId })
-                    if (!host.commitTurn(pending.first, group)) throw ParallelPersistenceException("turn_commit_failed")
+                    if (!host.commitTurn(pending.raw, pending.base, group)) throw ParallelPersistenceException("turn_commit_failed")
                     pendingTurn = null
                     preparing = false
                     return@runBlocking group
@@ -120,7 +122,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 SetupModelResolver.unavailable(activity, setup).joinToString { it.modelId }))
             return true
         }
-        if (raw.trimStart().startsWith("/imagine") || setup.models.any { it.modelId.contains(":ft") || it.modelId.contains("ft:") }) {
+        if ((host.imagineCommandEnabled && org.teslasoft.assistant.imagegen.ImagineCommand.isImagineAttempt(raw)) || setup.models.any { it.modelId.contains(":ft") || it.modelId.contains("ft:") }) {
             notice(activity.getString(R.string.parallel_single_required)); return true
         }
         if (beforeSend { send(raw) }) return true
@@ -138,13 +140,15 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 val group = ParallelInput.freeze(userId, assistantId,
                     if (setup.lastMessageOnly) "last_message_only" else "full_history",
                     prepared.context, prepared.current, prepared.slots, setup.models.indexOfFirst { it.id == setup.primaryId }, System.currentTimeMillis())
-                pendingTurn = raw to group.groupId
+                pendingTurn = PendingTurn(raw, base, group.groupId)
                 coordinator.dispatch(host.chatId, group, prepared.commitContext).await()
                 offerSaveRetry()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ParallelPreparationRefused) {
                 notice(e.text)
+            } catch (_: OutOfMemoryError) {
+                notice(activity.getString(R.string.request_prepare_failed_body))
             } catch (_: Exception) {
                 notice(activity.getString(R.string.parallel_prepare_failed))
             } finally {

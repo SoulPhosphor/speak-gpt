@@ -15,9 +15,10 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 internal object ParallelResponseTabs {
     fun bind(root: View, row: Map<String, Any>, enabled: Boolean,
         browse: (String, String) -> Unit, stop: (String?) -> Unit,
-        savePending: Boolean = false, retrySave: () -> Unit = {}): Boolean {
+        savePending: Boolean = false, retrySave: () -> Unit = {},
+        preparedRead: ResponseGroupRead? = null): Boolean {
         val container = root.findViewById<View>(R.id.parallel_response_controls) ?: return false
-        val read = ResponseGroupCodec.read(row)
+        val read = preparedRead ?: ResponseGroupCodec.read(row)
         val group = (read as? ResponseGroupRead.Valid)?.group
         container.visibility = if (read == ResponseGroupRead.Absent) View.GONE else View.VISIBLE
         if (read == ResponseGroupRead.Absent) return false

@@ -157,9 +157,9 @@ class ParallelControllerInstrumentedTest {
                 FrozenPayloadMessage("system", "shared instructions and memory"), FrozenPayloadMessage("user", raw)
             ), 0, null, null, null, null, null, null), emptyList(), emptyList(), 1, emptyMap()) { contextCommits++ }
         }
-        override fun commitTurn(raw: String, group: ResponseGroup): Boolean {
+        override fun commitTurn(raw: String, base: ParallelTurnBase, group: ResponseGroup): Boolean {
             if (failCommit) return false
-            messages.add(hashMapOf("message_id" to group.userMessageId, "isBot" to false, "message" to raw))
+            messages.add(hashMapOf("message_id" to group.userMessageId, "isBot" to false, "message" to (base.storedMessage ?: raw)))
             messages.add(ResponseGroupEdits.install(mapOf("message_id" to group.assistantMessageId, "isBot" to true), group))
             if (!save()) return false
             rawInput = ""

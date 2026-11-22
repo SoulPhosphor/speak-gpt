@@ -888,9 +888,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // the user has paged to an older version it is that version's content
             // and metadata laid over the message, without disturbing the stored
             // canonical version used for context and saving.
-            val display = displayVariantMap(chatMessage)
+            val parallelRead = if (chatMessage.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY))
+                org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.read(chatMessage) else null
+            val display = displayVariantMap(chatMessage, parallelRead)
             boundMessageId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(chatMessage)
-            boundDisplayedVariantIndex = displayedVariantIndex(chatMessage)
+            boundDisplayedVariantIndex = displayedVariantIndex(chatMessage, parallelRead)
 
             val parallelImage = chatMessage.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY) &&
                 GeneratedImageMetadata.fromJson(display[GeneratedImageMetadata.KEY]?.toString())?.fileHash != null
@@ -921,7 +923,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 browse = { slot, version -> keepingActionBarInPlace { listener?.onParallelBrowse(bindingAdapterPosition.takeUnless { it == RecyclerView.NO_POSITION } ?: position, slot, version) } },
                 stop = { slot -> listener?.onParallelStop(position, slot) },
                 savePending = listener?.hasParallelUnsaved(position) == true,
-                retrySave = { listener?.onParallelRetrySave() })
+                retrySave = { listener?.onParallelRetrySave() }, preparedRead = parallelRead)
             if (parallel) versionNav?.visibility = View.GONE else updateVersionNav(chatMessage, position)
 
             btnDetails.setOnClickListener { anchor ->
@@ -1459,9 +1461,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * version's reply and metadata while the original keeps the canonical
          * fields the conversation and saving use.
          */
-        private fun displayVariantMap(chatMessage: HashMap<String, Any>): HashMap<String, Any> {
+        private fun displayVariantMap(chatMessage: HashMap<String, Any>, parallelRead: org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead? = null): HashMap<String, Any> {
             if (chatMessage.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY))
-                return org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.display(chatMessage)
+                return org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.display(chatMessage, parallelRead)
             val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
             if (variants.size < 2) return chatMessage
             val canonical = canonicalIndexOf(chatMessage, variants.size)
@@ -1472,8 +1474,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             return copy
         }
 
-        private fun displayedVariantIndex(chatMessage: Map<String, Any>): Int {
-            org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.displayIndex(chatMessage)?.let { return it }
+        private fun displayedVariantIndex(chatMessage: Map<String, Any>, parallelRead: org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRead? = null): Int {
+            org.teslasoft.assistant.ui.chat.parallel.ParallelResponseSelection.displayIndex(chatMessage, parallelRead)?.let { return it }
             val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
             if (variants.size < 2) return 0
             val canonical = canonicalIndexOf(chatMessage, variants.size)

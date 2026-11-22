@@ -103,7 +103,9 @@ class ParallelResponseUiInstrumentedTest {
     private fun themed(night: Int = Configuration.UI_MODE_NIGHT_NO): Context {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val config = Configuration(context.resources.configuration).apply { uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or night }
-        return ContextThemeWrapper(context.createConfigurationContext(config), R.style.Theme_App)
+        return ContextThemeWrapper(context.createConfigurationContext(config), R.style.Theme_App).apply {
+            theme.applyStyle(R.style.ThemeOverlay_Phosphor_Violet, true)
+        }
     }
     private fun onMain(action: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(action)
 }

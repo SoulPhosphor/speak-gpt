@@ -805,8 +805,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         override val includes get() = pendingIncludes.toList()
         override val manualMemoryIds get() = memoryAttachments.ids()
         override val unavailable get() = chatStorageUnavailable || deletingChat
+        override val imagineCommandEnabled get() = preferences?.getImagineCommandGlobal() == true || explicitImagineDraft
         override suspend fun prepareBase(raw: String, setup: ExperimentalSetup): ParallelTurnBase {
             val stored = prefix + raw + endSeparator
+            val companionLabel = currentCompanionLabel()
+            val memoryScope = org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.current(preferences).encode()
             val canonical = ArrayList(canonicalConversationSnapshot()).apply {
                 add(CanonicalConversationMessage(false, stored, pendingIncludes.map { it.forSentMessage() }))
             }
@@ -818,27 +821,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     val projection = freezeConversationProjection(eligible, experimentalSummarizerState(setup.usesLastMessageOnly), selected.modelId, snapshotPdfs = true)
                     val frozen = buildFrozenRegularRequest(projection, stored, selected.modelId, preferences!!.getMaxTokens(),
                         memoryAttachments.ids(), includeModelRules = false)
-                    check(RequestCapacity.canAssemble(RequestCapacity.measure(frozen.payload), RequestHeapState.current()))
                     ParallelTurnBase(frozen.payload.copy(logitBias = if (preferences?.getLogitBiasesConfigId().isNullOrEmpty() ||
                         preferences?.getLogitBiasesConfigId() == "null") logitBiasPreferences?.getLogitBiasesMap()?.toMap() else null),
                         frozen.nativePdfs, eligible.flatMap { it.includes },
                         frozen.stablePrefixCount,
                         ActiveMemoryAttribution.encode(frozen.activeMemoryReferences)?.let { mapOf(ActiveMemoryAttribution.MESSAGE_KEY to it) }.orEmpty() +
-                            mapOf(org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY to
-                                org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.current(preferences).encode()), frozen.commitContext)
+                            mapOf(org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY to memoryScope),
+                        storedMessage = stored, companionLabel = companionLabel, commitContext = frozen.commitContext)
                 }
             } finally { releaseRequestImagePayloads() }
         }
-        override fun commitTurn(raw: String, group: ResponseGroup): Boolean {
+        override fun commitTurn(raw: String, base: ParallelTurnBase, group: ResponseGroup): Boolean {
             val before = ArrayList(messages)
-            val user = hashMapOf<String, Any>("message_id" to group.userMessageId, "message" to (prefix + raw + endSeparator), "isBot" to false,
+            val user = hashMapOf<String, Any>("message_id" to group.userMessageId, "message" to (base.storedMessage ?: raw), "isBot" to false,
                 ChatAdapter.KEY_MESSAGE_TIME to System.currentTimeMillis().toString())
             stampUserIdentity(user)
             val manual = memoryAttachments.ids()
             memoryAttachments.attachTo(user, manual)
             if (pendingIncludes.isNotEmpty()) user[INCLUDES_KEY] = ChatInclude.listToJson(pendingIncludes.map { it.forSentMessage() })
             val assistant = hashMapOf<String, Any>("message_id" to group.assistantMessageId, "message" to "", "isBot" to true,
-                ChatAdapter.KEY_COMPANION_NAME to currentCompanionLabel(), MessageCompletionState.KEY_STATE to MessageCompletionState.STREAMING)
+                ChatAdapter.KEY_COMPANION_NAME to base.companionLabel.orEmpty(), MessageCompletionState.KEY_STATE to MessageCompletionState.STREAMING)
             ResponseGroupEdits.canonicalFields(group)[org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY]?.let {
                 user[org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope.KEY] = it
             }

@@ -31,6 +31,8 @@ internal data class ParallelTurnBase(
     val includes: List<ChatInclude>,
     val stableSystemMessages: Int,
     val attribution: Map<String, String>,
+    val storedMessage: String? = null,
+    val companionLabel: String? = null,
     val commitContext: () -> Unit
 )
 internal data class PreparedParallelTurn(val slots: List<ParallelSlotInput>,
@@ -51,9 +53,13 @@ internal object ParallelTurnPreparation {
         val pdfReferences = HashMap<String, ResponseAttachment>()
         val pdfFallbacks = HashMap<String, String>()
         val commonMeasurement = RequestCapacity.measure(base.payload)
-        check(RequestCapacity.canAssemble(SerializedRequestMeasurement(
-            commonMeasurement.requestCharacters * setup.models.size,
-            commonMeasurement.serializedUtf8Bytes * setup.models.size), RequestHeapState.current()))
+        val aggregateMeasurement = SerializedRequestMeasurement(commonMeasurement.requestCharacters * setup.models.size,
+            commonMeasurement.serializedUtf8Bytes * setup.models.size)
+        if (!RequestCapacity.canAssemble(aggregateMeasurement, RequestHeapState.current())) {
+            Runtime.getRuntime().gc()
+            if (!RequestCapacity.canAssemble(aggregateMeasurement, RequestHeapState.current()))
+                throw ParallelPreparationRefused(context.getString(R.string.request_prepare_failed_body))
+        }
         for (selection in setup.models) {
             val endpoint = endpoints.getValue(selection.endpointId)
             val settings = selection.settings()

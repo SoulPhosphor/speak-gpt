@@ -35,7 +35,7 @@ class ParallelPreparationInstrumentedTest {
     @Test fun commonPromptLayersFreezeOnceWithIndependentRoutingSamplingAndOriginalRegenerationInput() = runBlocking {
         Preferences.getPreferences(context, chatId).setChatApplyModelRules(false)
         val models = (0 until 4).map { index ->
-            val endpoint = ApiEndpointObject("Fixture $index", "https://fixture-$index.invalid/v1", "synthetic-not-a-credential",
+            val endpoint = ApiEndpointObject("Fixture $index", "https://openrouter.ai/api/v1/", "synthetic-not-a-credential",
                 id = "stage4-${UUID.randomUUID()}", identity = ApiEndpointObject.IDENTITY_OPENROUTER)
             ApiEndpointPreferences.getApiEndpointPreferences(context).setApiEndpoint(context, endpoint)
             endpointIds += endpoint.id
