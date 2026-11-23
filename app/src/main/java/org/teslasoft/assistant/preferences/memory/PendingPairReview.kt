@@ -9,6 +9,8 @@ data class PendingPairSnapshot(
 ) {
     val records: List<MemoryRecord> get() = listOf(proposal, related)
     val ids: Set<String> get() = records.map { it.memoryId }.toSet()
+    val isLinkedAlternative: Boolean get() =
+        related.memoryId in links[proposal.memoryId].orEmpty() && proposal.memoryId in links[related.memoryId].orEmpty()
     fun holds(current: (String) -> MemoryRecord?, currentLinks: (String) -> Set<String>): Boolean =
         ids.size == 2 && records.all { shown ->
             shown.status == "draft" && current(shown.memoryId)?.let { live ->

@@ -7,7 +7,7 @@
     <com.google.android.material.button.MaterialButton android:id="@+id/pair_save"
         style="@style/AppButton.Primary.Inline.MemoryPair" android:text="@string/mem_pair_save" />
     <LinearLayout android:id="@+id/pair_editor" style="@style/Widget.App.MemoryPair.Column" android:visibility="gone">
-        <TextView style="@style/Widget.App.Field.Label" android:text="@string/mem_edit_label_content" />
+        <TextView android:labelFor="@id/pair_content" style="@style/Widget.App.Field.Label" android:text="@string/mem_edit_label_content" />
         <androidx.appcompat.widget.AppCompatEditText android:id="@+id/pair_content"
             style="@style/Widget.App.MemoryPair.Field" android:inputType="textMultiLine|textCapSentences" />
         <com.google.android.material.button.MaterialButton android:id="@+id/pair_edit_save"

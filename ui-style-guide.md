@@ -2170,7 +2170,9 @@ The field's complete-input token meter is the card's existing `MemoryTokenMeter`
 `AppButton.Primary.Inline.MemoryPair` and `.Destructive.Inline.MemoryPair` keep
 the established roles and label-sized widths, adding only the shared
 `memory_pair_action_gap`. `MemoryPair.Page` inherits `Page.Content` for the
-explanation and Keep Both Pending block before Additional Matches.
+explanation and Keep Both Pending block before Additional Matches. The link
+explanation appears only for a reciprocal linked pair; ordinary Pending matches
+are not falsely described as having a stored link.
 
 Additional Pending cards expose Review This Pair using the same inline action
 family. Save confirmation uses `dialog_two_actions.xml`; Discard and Cancel

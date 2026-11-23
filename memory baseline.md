@@ -1117,9 +1117,13 @@ before inflating that actual layout. No production theme or appearance changed.
 
 The synthetic inputs are in `ScannerEvaluationFixtures.kt`; all request text is
 built by the production `ArchivistPrompt` and `ArchivistRuntimeProtocol` code.
-Expected outcomes were withheld from extraction. Thirteen independent responses
+Expected outcomes were withheld from extraction. `request-fingerprints.json`
+binds each response to the exact generated instruction/data strings; a changed
+prompt or input requires a new evaluation. Thirteen independent responses
 are frozen unchanged in `app/src/test/resources/scanner_evaluation/` and replayed
-through the production parser and working-draft/matching/filing helpers. This
+through the production parser and working-draft/matching/filing helpers. Two more
+independent responses exercise the actual comparison and cap-ranking prompts
+(`ScannerConditionalEvaluationTest`), making 15 model requests in this corpus. This
 measures the current scanner contract; it is not a historical before/after
 benchmark of the retired scanner, and it does not retune search thresholds.
 
@@ -1162,7 +1166,8 @@ correctness checks; physical-phone contention latency remains unmeasured.
 | Measurement | Evidence and limits |
 | --- | --- |
 | Extraction requests / repairs | 13 frozen extraction responses, one per input; all parse without a repair |
-| Input/output volume | Per-case estimates from `IncludeTextPolicy`, printed by the replay test; estimates are not provider token bills |
+| Conditional model responses | One comparison response labels the retelling covered and the new Archived detail new; one ranking response keeps both linked wordings as P1 at cap one |
+| Input/output volume | Extraction total: 41,861 estimated input and 1,562 estimated output tokens from `IncludeTextPolicy`; per-case values are printed by the replay test. These estimates are not provider token bills |
 | Conditional comparisons / ranking | Controlled tests distinguish a shown match (zero extra comparisons), a later match (one, reused on recheck), and over-cap ranking; no live-provider frequency claim |
 | Native vector reuse / lookup time | Assertions and per-run emulator timings in the normal Android Checks instrumentation log; no phone performance claim |
 | Full scan duration | Not measured with a live provider; replay/lookup time excludes model generation |

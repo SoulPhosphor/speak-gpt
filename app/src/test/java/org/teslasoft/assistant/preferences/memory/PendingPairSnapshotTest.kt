@@ -11,6 +11,9 @@ class PendingPairSnapshotTest {
     private val pair = PendingPairSnapshot(a, b, links)
     private fun holds(records: Map<String, MemoryRecord>, hints: Map<String, Set<String>> = links) = pair.holds({records[it]}, {hints[it].orEmpty()})
     @Test fun pairAndBothLinkDirectionsMustStillMatch() {
+        assertTrue(pair.isLinkedAlternative)
+        assertFalse(pair.copy(links=emptyMap()).isLinkedAlternative)
+        assertFalse(pair.copy(links=mapOf("a" to setOf("b"))).isLinkedAlternative)
         assertTrue(holds(mapOf("a" to a, "b" to b)))
         assertFalse(holds(mapOf("a" to a)))
         assertFalse(holds(mapOf("a" to a, "b" to b), links + ("a" to emptySet())))

@@ -34,6 +34,7 @@ class ScannerEndToEndEvaluationTest {
         assertEquals(13, ScannerEvaluationFixtures.cases.size)
         val export = System.getenv("SCANNER_EVALUATION_EXPORT")?.let(::File)?.apply { mkdirs() }
         for (c in ScannerEvaluationFixtures.cases) {
+            ScannerEvaluationRequests.assertCurrent(c.id,c.request())
             val parsed = replay(c.id)
             assertTrue(parsed.rules.isEmpty())
             export?.resolve("${c.id}.json")?.writeText(c.request().toString(2))

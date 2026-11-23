@@ -62,6 +62,7 @@ internal class PendingPairReviewController(
     fun addKeepBoth(parent: LinearLayout) {
         val view = activity.layoutInflater.inflate(R.layout.view_pending_pair_keep, parent, false)
         parent.addView(view)
+        view.findViewById<View>(R.id.pair_keep_hint).visibility = if (snapshot.isLinkedAlternative) View.VISIBLE else View.GONE
         button(view, R.id.pair_keep) { apply(PendingPairAction.KEEP_BOTH) }
     }
 

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,15 +49,15 @@ class ScannerReviewEvaluationInstrumentedTest {
     }
     private fun evaluate(context:Context,store:MemoryStore,model:EmbeddingModel,embeddings:Boolean) {
         val emptyProtocol=ArchivistRuntimeProtocol.create(ArchivistSceneContext(null,null,null,null,null),emptyList(),emptyList())
-        val originalRaw=context.assets.open("scanner_evaluation/short.response.json").bufferedReader().use{it.readText()}
+        val originalRaw=InstrumentationRegistry.getInstrumentation().context.assets.open("scanner_evaluation/short.response.json").bufferedReader().use{it.readText()}
         val original=ArchivistResponseParser.parse(originalRaw,emptyProtocol).memories.single()
         val oldText=original.content
         val old=record("old",oldText)
         store.commitScanRange(range(store,"first"),emptyList(),listOf(old),emptyList(),emptyList())
         val protocol=ArchivistRuntimeProtocol.create(ArchivistSceneContext(null,null,null,null,null),
             listOf(ArchivistExistingMemory("old",oldText,"real_life",emptyList(),"Fact","pending")),emptyList())
-        val raw=context.assets.open("scanner_evaluation/new-decision.response.json").bufferedReader().use{it.readText()}
-        val repeatedRaw=context.assets.open("scanner_evaluation/retelling.response.json").bufferedReader().use{it.readText()}
+        val raw=InstrumentationRegistry.getInstrumentation().context.assets.open("scanner_evaluation/new-decision.response.json").bufferedReader().use{it.readText()}
+        val repeatedRaw=InstrumentationRegistry.getInstrumentation().context.assets.open("scanner_evaluation/retelling.response.json").bufferedReader().use{it.readText()}
         val repeated=ArchivistResponseParser.parse(repeatedRaw,protocol)
         assertTrue(repeated.memories.isEmpty())
         val repeatedText="I volunteer at Cedar Observatory on Saturday mornings because choir occupies my weekday evenings."
@@ -124,7 +125,8 @@ class ScannerReviewEvaluationInstrumentedTest {
         override fun generate(record:ComparisonRecord):FloatArray {
             reads++
             val vector=queue.run(EmbeddingQueue.Priority.BACKGROUND){control->model.embed(record.document,false,model.storedTextTokenLimit,control)}
-            if(record.memoryId!=null)assertTrue(ScannerComparisonCache.putFiled(store.writableDatabase,record.memoryId,modelKey,record.fingerprint,VectorMath.toBlob(vector)))
+            val id=record.memoryId
+            if(id!=null)assertTrue(ScannerComparisonCache.putFiled(store.writableDatabase,id,modelKey,record.fingerprint,VectorMath.toBlob(vector)))
             else drafts[record.key+record.fingerprint]=vector
             return vector
         }

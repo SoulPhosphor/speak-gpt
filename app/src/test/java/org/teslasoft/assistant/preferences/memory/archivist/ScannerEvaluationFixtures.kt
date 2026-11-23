@@ -46,3 +46,15 @@ internal object ScannerEvaluationFixtures {
         Case("companion-instruction", listOf("For you specifically, Companion B, when we plan our observatory outings together, remind me to bring the brass C7 key. This is our outing routine, not a rule for my other companions.", "I will use that reminder for our outings."), existing = saved(), companion = "comp-b", targets = targetB)
     )
 }
+
+/** Binds every frozen response to the exact generated instruction/data text
+ * used when it was collected. Prompt changes require a new evaluation. */
+internal object ScannerEvaluationRequests {
+    fun assertCurrent(id:String,request:JSONObject) {
+        val expected=JSONObject(javaClass.classLoader!!.getResourceAsStream("scanner_evaluation/request-fingerprints.json")!!
+            .bufferedReader().use{it.readText()}).getString(id)
+        val bytes=(request.getString("system")+"\u0000"+request.getString("user")).toByteArray(Charsets.UTF_8)
+        val actual=java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(""){"%02x".format(it)}
+        org.junit.Assert.assertEquals("$id prompt or input changed; collect a new independent response",expected,actual)
+    }
+}
