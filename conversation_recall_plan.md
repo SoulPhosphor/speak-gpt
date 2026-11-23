@@ -1067,6 +1067,18 @@ They are never mixed into a passage.
 - Only the canonical reply version used in AI requests. Browsing an
   alternative reply changes neither index eligibility nor the canonical
   version. Confirm the canonical field and promotion hooks in Steps 7–13.
+  **Confirmed in code (Step 8):** the reply version the AI is sent is the
+  one the stored message's top-level fields mirror. `message` (with
+  `state`, `memoryScope` and the other per-version fields in
+  `ChatAdapter.VARIANT_FIELDS`) always holds the version at
+  `canonicalVariant` for a regenerated reply, and the primary slot's
+  `canonicalVersionId` for a parallel response group
+  (`ResponseGroupCodec` refuses a row whose top-level fields do not match).
+  Browsing changes only `displayVariant` or the group's foreground choice.
+  The Summarizer snapshot's `Entry.text` is built from that top-level
+  `message`, and the index reads the stored message's top-level `state`,
+  hidden mark and `memoryScope` (`IndexSourceMessage.from`). Promotion
+  hooks are not connected until Step 10.
 - Never a message hidden from the AI (G.5a rule 1).
 
 **Attached documents and images are not indexed in this work (Owner,
@@ -3828,3 +3840,4 @@ request. Detailed results stay in the file named by G.16.
 
 - Stage 6D — dedicated Pending-pair review actions (`PendingPairReviewController`, `PendingPairSnapshot`), preserving links and Pending status on keep/edit, discarding only the named suggestion, and activating only an explicitly saved suggestion; both displayed records and relationship sets are rechecked atomically, and legacy approval actions reject Pending targets. Thirteen independent synthetic extraction responses are replayed through production prompt/parsing/draft/matching/filing code; native embedding/cache and encrypted-store review coverage runs in ordinary Android Checks. Detailed results and outstanding phone/provider measurements are in `memory baseline.md`. PR: [Stage 6D branch](https://github.com/SoulPhosphor/speak-gpt/pulls?q=is%3Apr+head%3Afeature%2Fscanner-stage6d). Stage 7 is not implemented.
 - Stage 7A, Step 7 — the passage cutter (`conversation/index/PassageCutter.kt`): one message's text, a target size and a supplied size function give ordered, non-overlapping passage positions covering every character exactly once, with the cutter version. Pieces are split only when too large, at paragraphs, then lines, then between words (the platform's word boundaries for writing without spaces), then between user-perceived characters, and last between code points; never at periods; neighbouring pieces are joined while the measured text fits. Connected to nothing: no storage, search text, token counter, screen or log. Every G.5b "With the cutter, in Step 7" test is in `PassageCutterTest`. Stage 7B (Step 8) is next.
+- Stage 7B, Step 8 — the passage stores and per-message updating (`conversation/index/`): a separate SQLCipher database (`conversation_index.db`, its own key) with passages (positions, exchange, speaker, time, chat position, fingerprints, scope or unknown, cutter version, vector model), waiting vector rows keyed by search-text fingerprint, model and size, a word index with no stored content and no word positions (FTS5 `content=''`, `detail=none`), and one index-state row per chat. `ConversationIndexUpdater` compares eligible messages (permanent ID, visible to the AI, finished, the canonical version) by ID and original-text fingerprint and replaces, restamps or removes one message per transaction, rechecking the recorded chat version and the compared state inside it; stale or failed runs leave the chat marked for refresh. Search text is the passage with up to a given number of words from the passage before it in the same message, measured with the model's tokenizer and the speaker in the title slot; vectors unused by any passage are removed. No vectors are made and nothing calls the updater yet. The speaker title words and the overlap word count are passed in and are decided before Step 10 connects indexing. Tests: `IndexEligibilityTest`, `PassageSearchTextTest`, `ConversationIndexUpdaterTest`, `ConversationIndexStoreInstrumentedTest` (real tokenizer and encrypted store).

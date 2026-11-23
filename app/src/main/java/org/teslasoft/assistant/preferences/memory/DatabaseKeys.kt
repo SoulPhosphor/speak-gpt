@@ -53,6 +53,10 @@ object DatabaseKeys {
      * never shares a passphrase with authoritative chat or memory storage. */
     const val KEY_CHAT_SEARCH = "chat_search_db_key_hex"
 
+    /** conversation_index.db — derived conversation-recall index (passages,
+     * word index, vectors). Its own key, like the other derived stores. */
+    const val KEY_CONVERSATION_INDEX = "conversation_index_db_key_hex"
+
     /** chats.db — encrypted per-message chat storage. Separate from memory
      * (different reset/restore lifecycle) and from the disposable search index. */
     const val KEY_CHATS = "chats_db_key_hex"

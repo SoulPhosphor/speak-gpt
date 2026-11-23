@@ -80,6 +80,16 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 | Whether legacy approval actions may affect a selected memory | Recheck the displayed fingerprint and reject every Pending target inside the existing resolution transaction | `PendingPairReviewInstrumentedTest.ordinaryPendingMatchesHaveTheSameProtectionAndLegacyActionsRejectAllPendingTargets` |
 | Whether another action may run while an edit or confirmation is open | Lock pair actions, navigation, importance edits and legacy controls; Cancel restores the original meter and Pending content | `PendingPairReviewInstrumentedTest.actualControlsEditAndCancelWithoutDispatchingAWritingOperation` |
 
+### Changes during waits — Stage 7B
+
+| Decision | Detect changes during the wait | Verification |
+| --- | --- | --- |
+| Whether an update may start for the recorded chat version | Compare the chat's current version with the recorded one before any write | `ConversationIndexUpdaterTest.aResultForAnOlderChatVersionIsDiscarded` |
+| Which messages are new, changed, moved or gone (compared by permanent ID and original-text fingerprint) | Each message write rechecks, inside its transaction, the chat version and that the message's stored stamp is still the one compared; otherwise nothing is written | `ConversationIndexStoreInstrumentedTest.aResultThatFinishesAfterTheChatChangedIsThrownAway`; `ConversationIndexUpdaterTest.aChatThatChangesDuringTheUpdateKeepsThePreviousStateForUnwrittenMessages` |
+| A message's passages, keywords and waiting vector rows, built while cutting and measuring | Replaced in one transaction; a failure part-way rolls back to the previous rows | `ConversationIndexStoreInstrumentedTest.anUpdateInterruptedInsideAMessageLeavesItsPreviousRows`; `ConversationIndexUpdaterTest.aFailureHalfwayLeavesEveryMessageWholeAndTheChatMarkedForRefresh` |
+| Whether a vector row is still used | Unused rows are removed in the same transaction that removes their last passage | `ConversationIndexStoreInstrumentedTest.aSharedSearchTextKeepsItsVectorUntilTheLastPassageUsingItGoes` |
+| That the index describes the recorded chat version | The finishing transaction rechecks the chat version and that the indexed messages are exactly those written; otherwise the chat stays marked for refresh | `ConversationIndexUpdaterTest.aChatThatChangesDuringTheUpdateKeepsThePreviousStateForUnwrittenMessages`; `cancellingBetweenMessagesWritesNothingMore` |
+
 ### External services and costs
 
 - Obtain model catalogs, capabilities, voice lists, prices, and other provider-controlled information from the provider or an authorized live source. Do not hard-code data that providers can change.
