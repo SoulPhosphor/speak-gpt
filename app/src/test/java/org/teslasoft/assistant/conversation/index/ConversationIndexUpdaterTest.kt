@@ -5,6 +5,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.conversation.index.SpeakerTitlePolicy.Companion.COMPANION
+import org.teslasoft.assistant.conversation.index.SpeakerTitlePolicy.Companion.HUMAN
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope
 
@@ -88,7 +90,7 @@ class ConversationIndexUpdaterTest {
         vectorModel = "test-model-8",
         vectorDimensions = 8,
         hardLimit = 400,
-        prefixFor = { "title: test-label-${it.stored} | text: " },
+        prefixFor = { "title: $it | text: " },
         countModelInput = { text -> text.split(Regex("\\s+")).count { it.isNotEmpty() } + 2 }
     )
 
@@ -263,5 +265,49 @@ class ConversationIndexUpdaterTest {
             storage.messages.getValue("chat").keys
         )
         assertEquals(setOf("u1", "a4"), storage.messages.getValue("chat").keys)
+    }
+
+    @Test fun defaultTitlesAreHumanAndCompanion() {
+        run(chat())
+        val indexed = storage.messages.getValue("chat")
+        assertEquals("Human", indexed.getValue("u1").stamp.speakerTitle)
+        assertEquals("Companion", indexed.getValue("a1").stamp.speakerTitle)
+        assertTrue(indexed.getValue("a1").passages.all { it.modelInput.startsWith("title: Companion | text: ") })
+        assertTrue(indexed.getValue("u1").passages.all { it.modelInput.startsWith("title: Human | text: ") })
+    }
+
+    @Test fun eachMessageCanHaveItsOwnTitleFromItsRecordedName() {
+        // A test policy: the name recorded on the message, else the default label.
+        val named = SpeakerTitlePolicy { it.recordedSpeakerName ?: SpeakerTitlePolicy.DEFAULT.titleFor(it) }
+        val updater = ConversationIndexUpdater(storage, reader, 40, 5, named)
+        val messages = listOf(
+            user("u1", "Hello both of you.").copy(recordedSpeakerName = "Sam"),
+            reply("a1", "Hello Sam.").copy(recordedSpeakerName = "Ash"),
+            reply("a2", "Hello Sam.").copy(recordedSpeakerName = "Rowan"),
+            reply("a3", "Hello Sam.")
+        )
+        updater.update("chat", "v1", messages, { version })
+        val indexed = storage.messages.getValue("chat")
+        assertEquals("Sam", indexed.getValue("u1").stamp.speakerTitle)
+        assertEquals("Ash", indexed.getValue("a1").stamp.speakerTitle)
+        assertEquals("Rowan", indexed.getValue("a2").stamp.speakerTitle)
+        assertEquals("Companion", indexed.getValue("a3").stamp.speakerTitle)
+        // The same words under different titles are different search texts.
+        val fingerprints = listOf("a1", "a2", "a3").map { indexed.getValue(it).passages.single().searchFingerprint }
+        assertEquals(3, fingerprints.toSet().size)
+
+        // The recorded name stays with each message, so nothing is cut again
+        // until a message's own title changes.
+        val writes = storage.writes
+        assertEquals(ConversationIndexUpdater.Outcome.Updated(0, 0, 0, 4), updater.update("chat", "v1", messages, { version }))
+        assertEquals(writes, storage.writes)
+        val retitled = messages.toMutableList().also { it[1] = it[1].copy(recordedSpeakerName = "Ash Grey") }
+        assertEquals(ConversationIndexUpdater.Outcome.Updated(1, 0, 0, 3), updater.update("chat", "v1", retitled, { version }))
+    }
+
+    @Test fun aTitleThatIsNotOnePlainLineIsRefused() {
+        val broken = ConversationIndexUpdater(storage, reader, 40, 5) { "Ash | admin" }
+        assertTrue(broken.update("chat", "v1", chat(), { version }) is ConversationIndexUpdater.Outcome.Failed)
+        assertTrue(storage.messages["chat"].isNullOrEmpty())
     }
 }

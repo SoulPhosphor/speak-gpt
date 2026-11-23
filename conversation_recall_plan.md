@@ -1770,9 +1770,19 @@ reach companion-only material.
   (G.5b cutter rule 7). These words are used only in that slot and in
   approved user-facing wording; API message roles and existing internal role
   values are unchanged, and the Memory Context Helper keeps the providers'
-  normal roles, with identity context supplied separately where needed. The
-  values are passed in when indexing is connected (Step 10); Step 8 holds no
-  label.
+  normal roles, with identity context supplied separately where needed.
+  Step 8 uses them as the default title (`SpeakerTitlePolicy.DEFAULT`).
+- **Per-message titles (Owner, 2026-11-23):** each message's passages get
+  their own title from a title policy, and the title is recorded on the
+  passages, so identity-aware titles can be tested without redesigning the
+  index. An identity-aware title uses the speaker of that message and the
+  name recorded on the message when it was written
+  (`IndexSourceMessage.recordedSpeakerName`, from `userName` or
+  `companionName`), not the identity's current display name, so a later
+  rename does not re-embed the identity's history unless that is decided
+  explicitly. The title is supplementary search information; permanent IDs
+  remain authoritative for associations and scope. Which titles are used is
+  decided by the Steps 14–15 evaluation.
 
 ## G.8 Context assembly: what the AI actually receives (Proposed)
 
@@ -3530,6 +3540,20 @@ carry-over. It does not reactivate Step 3's previous-message search.
   numbers, each sample checked on its own as in Step 0, and
   `conversation_recall_baseline.md` is created with every sample's
   "found" and "left out" results plus totals by situation.
+- **Speaker-title evaluation (Owner, 2026-11-23).** Index the same chats
+  three ways and score each with the real model: **A** generic titles only
+  (Human/Companion); **B** titles that also carry the speaker's recorded name
+  (for example "Companion: Ash"); **C** generic titles with the search limited
+  by the permanent identity IDs when a question names an identity; and B with
+  C together. Measure (1) questions that name a companion, Glamour or
+  roleplay identity, (2) ordinary topic questions with no name, to see
+  whether names cost accuracy, and (3) whether ID filtering, names, or both
+  work best. The test chats must include an identity that changes inside a
+  conversation, an identity renamed later, two characters with the same
+  name, and a roleplay name replacing a Glamour name; Step 6's set is
+  extended where these are missing. Results go in
+  `conversation_recall_baseline.md`; the title policy is chosen from them,
+  and Human/Companion stay the default until then.
 
 ### Step 15: the inspector and the measurements (Careful)
 
@@ -3545,7 +3569,8 @@ carry-over. It does not reactivate Step 3's previous-message search.
   labels are shown to the owner as one list.
 - **Done when:** the retrieval-related numbers in G.15 have measured
   starting values recorded in `conversation_recall_baseline.md`, with
-  search time on the owner's phone. Assembly-related measurements and
+  search time on the owner's phone. The speaker-title evaluation in Step 14 is
+  shown in the inspector with which title each passage was read under. Assembly-related measurements and
   inspector fields wait for Step 16.
 
 ### Step 16: context assembly (Hard)
@@ -3872,4 +3897,4 @@ request. Detailed results stay in the file named by G.16.
 
 - Stage 6D — dedicated Pending-pair review actions (`PendingPairReviewController`, `PendingPairSnapshot`), preserving links and Pending status on keep/edit, discarding only the named suggestion, and activating only an explicitly saved suggestion; both displayed records and relationship sets are rechecked atomically, and legacy approval actions reject Pending targets. Thirteen independent synthetic extraction responses are replayed through production prompt/parsing/draft/matching/filing code; native embedding/cache and encrypted-store review coverage runs in ordinary Android Checks. Detailed results and outstanding phone/provider measurements are in `memory baseline.md`. PR: [Stage 6D branch](https://github.com/SoulPhosphor/speak-gpt/pulls?q=is%3Apr+head%3Afeature%2Fscanner-stage6d). Stage 7 is not implemented.
 - Stage 7A, Step 7 — the passage cutter (`conversation/index/PassageCutter.kt`): one message's text, a target size and a supplied size function give ordered, non-overlapping passage positions covering every character exactly once, with the cutter version. Pieces are split only when too large, at paragraphs, then lines, then between words (the platform's word boundaries for writing without spaces), then between user-perceived characters, and last between code points; never at periods; neighbouring pieces are joined while the measured text fits. Connected to nothing: no storage, search text, token counter, screen or log. Every G.5b "With the cutter, in Step 7" test is in `PassageCutterTest`. Stage 7B (Step 8) is next.
-- Stage 7B, Step 8 — the passage stores and per-message updating (`conversation/index/`): a separate SQLCipher database (`conversation_index.db`, its own key) with passages (positions, exchange, speaker, time, chat position, fingerprints, scope or unknown, cutter version, vector model), waiting vector rows keyed by search-text fingerprint, model and size, a word index with no stored content and no word positions (FTS5 `content=''`, `detail=none`), and one index-state row per chat. `ConversationIndexUpdater` compares eligible messages (permanent ID, visible to the AI, finished, the canonical version) by ID and original-text fingerprint and replaces, restamps or removes one message per transaction, rechecking the recorded chat version and the compared state inside it; stale or failed runs leave the chat marked for refresh. Search text is the passage with up to a given number of words from the passage before it in the same message, measured with the model's tokenizer and the speaker in the title slot; vectors unused by any passage are removed. No vectors are made and nothing calls the updater yet. The speaker title words and the overlap word count are passed in and are decided before Step 10 connects indexing. Tests: `IndexEligibilityTest`, `PassageSearchTextTest`, `ConversationIndexUpdaterTest`, `ConversationIndexStoreInstrumentedTest` (real tokenizer and encrypted store).
+- Stage 7B, Step 8 — the passage stores and per-message updating (`conversation/index/`): a separate SQLCipher database (`conversation_index.db`, its own key) with passages (positions, exchange, speaker, time, chat position, fingerprints, scope or unknown, cutter version, vector model), waiting vector rows keyed by search-text fingerprint, model and size, a word index with no stored content and no word positions (FTS5 `content=''`, `detail=none`), and one index-state row per chat. `ConversationIndexUpdater` compares eligible messages (permanent ID, visible to the AI, finished, the canonical version) by ID and original-text fingerprint and replaces, restamps or removes one message per transaction, rechecking the recorded chat version and the compared state inside it; stale or failed runs leave the chat marked for refresh. Search text is the passage with up to a given number of words from the passage before it in the same message, measured with the model's tokenizer, with a per-message title in the model's title slot (default Human/Companion; the name recorded on each message is available for a later identity-aware title) recorded on its passages; the active Glamour's ID recorded on each message is stored as its nullable Glamour reference; vectors unused by any passage are removed. No vectors are made and nothing calls the updater yet. The overlap word count is passed in and is decided before Step 10 connects indexing. Tests: `IndexEligibilityTest`, `PassageSearchTextTest`, `ConversationIndexUpdaterTest`, `ConversationIndexStoreInstrumentedTest` (real tokenizer and encrypted store).

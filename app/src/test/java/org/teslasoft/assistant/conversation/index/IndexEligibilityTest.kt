@@ -71,6 +71,7 @@ class IndexEligibilityTest {
         assertEquals(MessageCompletionState.DONE, source.completionState)
         assertEquals(scope, source.scope)
         assertEquals(42L, source.timeMillis)
+        assertNull("no name was saved on this reply", source.recordedSpeakerName)
         assertFalse(source.hiddenFromAi)
         assertTrue(IndexEligibility.isEligible(source))
 
@@ -80,6 +81,16 @@ class IndexEligibilityTest {
         assertTrue(hidden.hiddenFromAi)
         assertNull(hidden.scope)
         assertFalse(IndexEligibility.isEligible(hidden))
+    }
+
+    @Test fun theNameSavedOnTheMessageIsItsRecordedSpeakerName() {
+        val reply = hashMapOf<String, Any>("message_id" to "a1", "isBot" to true, "message" to "Hi", "companionName" to " Ash ")
+        assertEquals("Ash", IndexSourceMessage.from(reply, SummarizerController.Entry(true, "Hi", "a1"))!!.recordedSpeakerName)
+        val user = hashMapOf<String, Any>(
+            "message_id" to "u1", "isBot" to false, "message" to "Hi",
+            "userName" to "Sam", "userNameSource" to "glamour:g-1"
+        )
+        assertEquals("Sam", IndexSourceMessage.from(user, SummarizerController.Entry(false, "Hi", "u1"))!!.recordedSpeakerName)
     }
 
     @Test fun anEntryForAnotherMessageIsRefused() {

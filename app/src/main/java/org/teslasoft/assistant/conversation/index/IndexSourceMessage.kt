@@ -8,6 +8,7 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.MessageIdentity
 import org.teslasoft.assistant.preferences.MessageVisibility
 import org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope
+import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.util.summarizer.SummarizerController
 
 /** Who wrote a message, as recorded on its passages and in its search text. */
@@ -38,7 +39,15 @@ data class IndexSourceMessage(
     val hiddenFromAi: Boolean,
     val completionState: String?,
     val timeMillis: Long?,
-    val scope: ScanMessageScope?
+    val scope: ScanMessageScope?,
+    /**
+     * The speaker name saved on the message when it was written (the user
+     * name it was sent under, or the companion name of the reply): its
+     * historical name, not the identity's current display name. Null when
+     * none was saved. Supplementary only; permanent IDs in [scope] are the
+     * identity.
+     */
+    val recordedSpeakerName: String? = null
 ) {
     companion object {
         /**
@@ -63,9 +72,29 @@ data class IndexSourceMessage(
                 hiddenFromAi = MessageVisibility.isHidden(stored),
                 completionState = stored[MessageCompletionState.KEY_STATE]?.toString(),
                 timeMillis = entry.timeMillis,
-                scope = ScanMessageScope.read(stored)
+                scope = ScanMessageScope.read(stored),
+                recordedSpeakerName = stored[
+                    if (entry.isBot) ChatSpeakerNames.COMPANION_NAME_KEY else ChatSpeakerNames.USER_NAME_KEY
+                ]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
             )
         }
+    }
+}
+
+/**
+ * The title given to the embedding model for a message's passages (G.5b
+ * cutter rule 7). Each message gets its own, so identity-aware titles can be
+ * tested later (Steps 14–15). API message roles are never affected.
+ */
+fun interface SpeakerTitlePolicy {
+    fun titleFor(message: IndexSourceMessage): String
+
+    companion object {
+        const val HUMAN = "Human"
+        const val COMPANION = "Companion"
+
+        /** The owner's default (2026-11-23): Human for the user, Companion for the AI. */
+        val DEFAULT = SpeakerTitlePolicy { if (it.isBot) COMPANION else HUMAN }
     }
 }
 

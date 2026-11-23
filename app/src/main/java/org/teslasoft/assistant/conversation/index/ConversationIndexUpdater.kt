@@ -24,7 +24,8 @@ class ConversationIndexUpdater(
     private val storage: ConversationIndexStorage,
     private val reader: SearchTextReader,
     private val targetTokens: Int,
-    private val overlapWords: Int
+    private val overlapWords: Int,
+    private val titles: SpeakerTitlePolicy = SpeakerTitlePolicy.DEFAULT
 ) {
     init {
         require(targetTokens in 1..reader.hardLimit) { "targetTokens must be within the model's limit" }
@@ -85,7 +86,7 @@ class ConversationIndexUpdater(
                     }
                     else -> {
                         val built = PassageSearchText.build(
-                            message.modelText, stamp.speaker, reader, targetTokens, overlapWords
+                            message.modelText, stamp.speakerTitle, reader, targetTokens, overlapWords
                         )
                         check(built.cutterVersion == stamp.cutterVersion)
                         val entries = MessageEntries(id, stamp, built.passages)
@@ -126,6 +127,7 @@ class ConversationIndexUpdater(
             wanted.add(message to MessageStamp(
                 textFingerprint = IndexFingerprint.of(message.modelText),
                 speaker = Speaker.of(message.isBot),
+                speakerTitle = SearchTextReader.checkedTitle(titles.titleFor(message)),
                 exchangeId = exchangeId,
                 chatPosition = position,
                 timeMillis = message.timeMillis,

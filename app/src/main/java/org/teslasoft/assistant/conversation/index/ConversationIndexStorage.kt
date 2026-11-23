@@ -14,6 +14,12 @@ import org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope
 data class MessageStamp(
     val textFingerprint: String,
     val speaker: Speaker,
+    /**
+     * The title the embedding model read for this message's passages. It
+     * comes from the message itself, so renaming an identity does not change
+     * it unless the title policy is changed on purpose.
+     */
+    val speakerTitle: String,
     /** The user message ID that opens the exchange, or null when none precedes it. */
     val exchangeId: String?,
     /** The message's position among the chat's stored messages. */
@@ -29,7 +35,7 @@ data class MessageStamp(
 ) {
     /** True when [other] has the same passages and search texts, differing only in placement or scope. */
     fun sameSearchTexts(other: MessageStamp): Boolean =
-        textFingerprint == other.textFingerprint && speaker == other.speaker &&
+        textFingerprint == other.textFingerprint && speaker == other.speaker && speakerTitle == other.speakerTitle &&
             cutterVersion == other.cutterVersion && searchSettings == other.searchSettings &&
             vectorModel == other.vectorModel && vectorDimensions == other.vectorDimensions
 }

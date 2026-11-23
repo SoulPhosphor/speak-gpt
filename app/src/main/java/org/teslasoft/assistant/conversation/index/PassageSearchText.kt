@@ -18,8 +18,9 @@ import org.teslasoft.assistant.preferences.memory.librarian.KeywordText
  * How a passage's search text is handed to the embedding model and measured
  * (memory development plan G.5b cutter rules 3, 4 and 7).
  *
- * The model input is the stored-text instruction prefix with the speaker's
- * label in the model's title slot, followed by the search text. [count]
+ * The model input is the stored-text instruction prefix with the passage's
+ * title (by default the speaker label, [SpeakerTitlePolicy]) in the model's
+ * title slot, followed by the search text. [count]
  * measures that complete input, special tokens included, with the model's
  * own tokenizer. [hardLimit] is the model's stored-text limit.
  */
@@ -27,61 +28,60 @@ class SearchTextReader(
     val vectorModel: String,
     val vectorDimensions: Int,
     val hardLimit: Int,
-    private val prefixFor: (Speaker) -> String,
+    private val prefixFor: (String) -> String,
     private val countModelInput: (String) -> Int
 ) {
     init {
         require(hardLimit >= 1) { "hardLimit must be at least 1" }
     }
 
-    fun modelInput(speaker: Speaker, searchText: String): String = prefixFor(speaker) + searchText
+    /** The complete model input: the prefix with [title] in the title slot, then the search text. */
+    fun modelInput(title: String, searchText: String): String = prefixFor(checkedTitle(title)) + searchText
 
-    fun count(speaker: Speaker, searchText: String): Int = countModelInput(modelInput(speaker, searchText))
+    fun count(title: String, searchText: String): Int = countModelInput(modelInput(title, searchText))
 
-    /** Changes whenever the model, its limit or the prefixes change, so passages are cut again. */
+    /** Changes whenever the model, its limit or the prefix form change, so passages are cut again. */
     val key: String = listOf(
         vectorModel,
         vectorDimensions.toString(),
         hardLimit.toString(),
-        IndexFingerprint.of(Speaker.entries.joinToString("\u0000") { prefixFor(it) })
+        IndexFingerprint.of(prefixFor(KEY_PROBE))
     ).joinToString("|")
 
     companion object {
         private const val EMPTY_TITLE = "title: none"
+        private const val KEY_PROBE = "\u0000"
+
+        /** A title is one plain line without the slot separator. */
+        fun checkedTitle(title: String): String {
+            require(title.isNotBlank() && title.none { it == '|' || it == '\n' || it == '\r' }) {
+                "speaker title must be one plain line without '|'"
+            }
+            return title
+        }
 
         /**
          * The real reader for an embedding model: its tokenizer, its
-         * stored-text limit, and its document prefix with the title slot
-         * holding [speakerTitle] for each speaker.
+         * stored-text limit, and its document prefix with each passage's
+         * title in the title slot.
          */
-        fun forEmbeddingModel(
-            model: EmbeddingModels.Model,
-            tokenizer: HfTokenizer,
-            speakerTitle: (Speaker) -> String
-        ): SearchTextReader {
+        fun forEmbeddingModel(model: EmbeddingModels.Model, tokenizer: HfTokenizer): SearchTextReader {
             require(model.documentPrefix.contains(EMPTY_TITLE)) {
                 "${model.id} has no title slot in its document prefix"
-            }
-            val prefixes = Speaker.entries.associateWith { speaker ->
-                val title = speakerTitle(speaker)
-                require(title.isNotBlank() && title.none { it == '|' || it == '\n' || it == '\r' }) {
-                    "speaker title must be one plain line without '|'"
-                }
-                model.documentPrefix.replaceFirst(EMPTY_TITLE, "title: $title")
             }
             return SearchTextReader(
                 vectorModel = model.embeddingTag,
                 vectorDimensions = model.dimensions,
                 hardLimit = model.storedTextMaxTokens,
-                prefixFor = { prefixes.getValue(it) },
+                prefixFor = { title -> model.documentPrefix.replaceFirst(EMPTY_TITLE, "title: $title") },
                 countModelInput = tokenizer::countTokens
             )
         }
 
         /** The reader for the installed embedding model, or null when none is installed. Off the main thread. */
-        fun forInstalledModel(context: Context, speakerTitle: (Speaker) -> String): SearchTextReader? {
+        fun forInstalledModel(context: Context): SearchTextReader? {
             val model = EmbeddingModelStorage.activeModel(context) ?: return null
-            return forEmbeddingModel(model, EmbeddingTokenCounter.tokenizer(context, model), speakerTitle)
+            return forEmbeddingModel(model, EmbeddingTokenCounter.tokenizer(context, model))
         }
     }
 }
@@ -129,21 +129,21 @@ object PassageSearchText {
      */
     fun build(
         text: String,
-        speaker: Speaker,
+        title: String,
         reader: SearchTextReader,
         targetTokens: Int,
         overlapWords: Int
     ): SearchPassages {
         require(targetTokens in 1..reader.hardLimit) { "targetTokens must be within the model's limit" }
         require(overlapWords >= 0) { "overlapWords must not be negative" }
-        require(reader.count(speaker, "") < targetTokens) { "targetTokens must leave room after the prefix" }
-        val cut = PassageCutter.cut(text, targetTokens) { reader.count(speaker, it) }
+        require(reader.count(title, "") < targetTokens) { "targetTokens must leave room after the prefix" }
+        val cut = PassageCutter.cut(text, targetTokens) { reader.count(title, it) }
         val passages = cut.passages.mapIndexed { order, span ->
             val searchStart = if (order == 0) span.start else overlapStart(
-                text, cut.passages[order - 1], span, speaker, reader, overlapWords
+                text, cut.passages[order - 1], span, title, reader, overlapWords
             )
             val searchText = text.substring(searchStart, span.end)
-            val modelInput = reader.modelInput(speaker, searchText)
+            val modelInput = reader.modelInput(title, searchText)
             SearchPassage(
                 order = order,
                 start = span.start,
@@ -152,7 +152,7 @@ object PassageSearchText {
                 searchText = searchText,
                 modelInput = modelInput,
                 searchFingerprint = IndexFingerprint.of(modelInput),
-                searchTokens = reader.count(speaker, searchText),
+                searchTokens = reader.count(title, searchText),
                 keywords = KeywordText.terms(text.substring(span.start, span.end)).distinct().joinToString(" ")
             )
         }
@@ -169,7 +169,7 @@ object PassageSearchText {
         text: String,
         previous: PassageSpan,
         current: PassageSpan,
-        speaker: Speaker,
+        title: String,
         reader: SearchTextReader,
         overlapWords: Int
     ): Int {
@@ -177,7 +177,7 @@ object PassageSearchText {
         val starts = wordStarts(text, previous.start, previous.end)
         fun startFor(carried: Int) = starts[starts.size - carried]
         fun fits(carried: Int) =
-            reader.count(speaker, text.substring(startFor(carried), current.end)) <= reader.hardLimit
+            reader.count(title, text.substring(startFor(carried), current.end)) <= reader.hardLimit
         var tooMany = minOf(overlapWords, starts.size)
         if (tooMany == 0) return current.start
         if (fits(tooMany)) return startFor(tooMany)

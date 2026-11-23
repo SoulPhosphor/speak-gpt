@@ -19,7 +19,9 @@ import org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope
  * index and the saved-memory database. It holds positions, fingerprints,
  * scope, a word index and vectors, never a readable copy of message text:
  *
- *  - `passages`: one row per passage, keyed by chat ID, message ID and order;
+ *  - `passages`: one row per passage, keyed by chat ID, message ID and order,
+ *    with the title its search text was read under (a label or, later, a
+ *    name recorded on the message; never an identity key);
  *  - `passage_vectors`: one row per search-text fingerprint, model and size;
  *  - `passage_keywords`: an FTS5 word index with no stored content and no
  *    word positions (`content=''`, `detail=none`), one row per passage row;
@@ -85,6 +87,7 @@ class ConversationIndexStore private constructor(
                 "previous_order INTEGER," +
                 "next_order INTEGER," +
                 "speaker TEXT NOT NULL CHECK(speaker IN ('user','ai'))," +
+                "speaker_title TEXT NOT NULL," +
                 "time_millis INTEGER," +
                 "chat_position INTEGER NOT NULL," +
                 "text_fingerprint TEXT NOT NULL," +
@@ -251,6 +254,7 @@ class ConversationIndexStore private constructor(
                 if (passage.order > 0) put("previous_order", passage.order - 1) else putNull("previous_order")
                 if (passage.order < last) put("next_order", passage.order + 1) else putNull("next_order")
                 put("speaker", stamp.speaker.stored)
+                put("speaker_title", stamp.speakerTitle)
                 put("text_fingerprint", stamp.textFingerprint)
                 put("search_fingerprint", passage.searchFingerprint)
                 put("cutter_version", stamp.cutterVersion)
@@ -310,7 +314,8 @@ class ConversationIndexStore private constructor(
         return db.rawQuery(
             "SELECT message_id, text_fingerprint, speaker, exchange_id, chat_position, time_millis, scope_known, " +
                 "scope_companion_persona, scope_companion, scope_world, scope_campaign, scope_character, " +
-                "scope_user_persona, scope_project, cutter_version, search_settings, vector_model, vector_dimensions " +
+                "scope_user_persona, scope_project, cutter_version, search_settings, vector_model, vector_dimensions, " +
+                "speaker_title " +
                 "FROM passages WHERE $where AND passage_order = 0",
             args
         ).use { cursor ->
@@ -319,6 +324,7 @@ class ConversationIndexStore private constructor(
                     put(cursor.getString(0), MessageStamp(
                         textFingerprint = cursor.getString(1),
                         speaker = Speaker.fromStored(cursor.getString(2)),
+                        speakerTitle = cursor.getString(18),
                         exchangeId = cursor.getStringOrNull(3),
                         chatPosition = cursor.getInt(4),
                         timeMillis = if (cursor.isNull(5)) null else cursor.getLong(5),

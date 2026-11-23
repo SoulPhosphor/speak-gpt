@@ -11,6 +11,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.teslasoft.assistant.conversation.index.SpeakerTitlePolicy.Companion.COMPANION
+import org.teslasoft.assistant.conversation.index.SpeakerTitlePolicy.Companion.HUMAN
 import org.junit.runner.RunWith
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModels
@@ -35,7 +37,7 @@ class ConversationIndexStoreInstrumentedTest {
         vectorModel = "test-model-8",
         vectorDimensions = 8,
         hardLimit = 400,
-        prefixFor = { "title: test-label-${it.stored} | text: " },
+        prefixFor = { "title: $it | text: " },
         countModelInput = { text -> text.split(Regex("\\s+")).count { it.isNotEmpty() } + 2 }
     )
 
@@ -205,7 +207,7 @@ class ConversationIndexStoreInstrumentedTest {
         version = "v2"
         val edited = chat().map { if (it.isBot) it.copy(modelText = it.modelText + " Edited.") else it }
         // The chat is saved again while the first changed message is being cut.
-        val slowReader = SearchTextReader("test-model-8", 8, 400, { "title: test-label-${it.stored} | text: " }) { text ->
+        val slowReader = SearchTextReader("test-model-8", 8, 400, { "title: $it | text: " }) { text ->
             version = "v3"
             text.split(Regex("\\s+")).count { it.isNotEmpty() } + 2
         }
@@ -256,9 +258,9 @@ class ConversationIndexStoreInstrumentedTest {
         assertTrue("Missing CI tokenizer fixture $tokenizerFile", tokenizerFile.isFile && tokenizerFile.canRead())
         val tokenizer = HfTokenizer.load(tokenizerFile)
         val model = EmbeddingModels.GEMMA_Q4
-        val real = SearchTextReader.forEmbeddingModel(model, tokenizer) { "test-label-${it.stored}" }
+        val real = SearchTextReader.forEmbeddingModel(model, tokenizer)
         assertEquals(model.storedTextMaxTokens, real.hardLimit)
-        assertEquals("title: test-label-user | text: hello", real.modelInput(Speaker.USER, "hello"))
+        assertEquals("title: Human | text: hello", real.modelInput(HUMAN, "hello"))
 
         val messages = mapOf(
             "ordinary" to (1..120).joinToString("\n\n") { "Paragraph $it: we packed box $it before moving to Leeds." },
@@ -269,14 +271,14 @@ class ConversationIndexStoreInstrumentedTest {
         )
         for ((target, overlap) in listOf(256 to 40, 2_000 to 2_000, 64 to 10)) {
             for ((name, text) in messages) {
-                val built = PassageSearchText.build(text, Speaker.AI, real, target, overlap).passages
+                val built = PassageSearchText.build(text, COMPANION, real, target, overlap).passages
                 if (target == 64) assertTrue("$name is cut into several passages", built.size > 1)
                 assertEquals(text, built.joinToString("") { text.substring(it.start, it.end) })
                 for ((index, passage) in built.withIndex()) {
                     val measured = tokenizer.countTokens(passage.modelInput)
                     assertTrue("$name/$target: $measured tokens", measured <= model.storedTextMaxTokens)
                     assertEquals(measured, passage.searchTokens)
-                    assertEquals(model.documentPrefix.replaceFirst("title: none", "title: test-label-ai") + passage.searchText, passage.modelInput)
+                    assertEquals(model.documentPrefix.replaceFirst("title: none", "title: Companion") + passage.searchText, passage.modelInput)
                     assertEquals(text.substring(passage.searchStart, passage.end), passage.searchText)
                     if (index > 0) assertTrue(passage.searchStart >= built[index - 1].start)
                 }
