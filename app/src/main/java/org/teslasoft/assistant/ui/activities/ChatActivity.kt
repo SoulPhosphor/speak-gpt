@@ -12127,8 +12127,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     last[ChatAdapter.KEY_MESSAGE_TOKEN_ESTIMATE] = it.toString()
                 }
             }
-            val records = listOfNotNull(completePendingUsageRecord())
-            attachUsageRecords(last, records)
+            // Once taken, the completed request's usage is recorded even if a
+            // message deletion cancels this reply while its price loads.
+            recordTakenUsageSafely(last) { listOfNotNull(completePendingUsageRecord()) }
             // A regeneration folds this finished reply into the turn's version
             // list. Runs after the metadata above so the new version captures
             // the final model, tokens, and state.
@@ -12146,9 +12147,34 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * durable records on either role, while legacy estimation remains
      * assistant-only. */
     private suspend fun carryPendingUsageFromEmptyAssistant() {
-        val record = completePendingUsageRecord() ?: return
-        val carrier = messages.dropLast(1).lastOrNull { it["isBot"] != true } ?: return
-        attachUsageRecords(carrier, listOf(record), mirrorCompactMetadata = false)
+        val carrier = messages.dropLast(1).lastOrNull { it["isBot"] != true }
+        if (carrier == null) {
+            // As before: with no carrier the pending record is taken and not kept.
+            completePendingUsageRecord()
+            return
+        }
+        recordTakenUsageSafely(carrier, mirrorCompactMetadata = false) {
+            listOfNotNull(completePendingUsageRecord())
+        }
+    }
+
+    /**
+     * Completes and attaches usage that [take] removes from the screen's
+     * pending state, without letting a cancellation drop it half-way. A
+     * carrier deleted meanwhile still has the usage kept in the usage log;
+     * a reply retired by a message deletion then stops here.
+     */
+    private suspend fun recordTakenUsageSafely(
+        carrier: HashMap<String, Any>,
+        mirrorCompactMetadata: Boolean = true,
+        take: suspend () -> List<TurnUsageRecord>
+    ) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            val records = take()
+            attachUsageRecords(carrier, records, mirrorCompactMetadata)
+            if (records.isNotEmpty() && messages.none { it === carrier }) keepUsageOfDeletedRows(listOf(HashMap(carrier)))
+        }
+        if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
     }
 
     /** Attach only completed requests. Usage-only tool calls use the initiating

@@ -177,6 +177,18 @@ class MessageDeletionWiringContractTest {
         assertTrue(abandon.indexOf("operationToken += 1") < abandon.indexOf("stopJob?.cancel()"))
     }
 
+    @Test fun usageTakenByTheCompletionPathIsRecordedEvenIfCancelled() {
+        // Every taker of the pending completed usage goes through the safe recorder.
+        val takers = activity.split("completePendingUsageRecord()").size - 1
+        assertEquals(4, takers) // the definition, two safe callers, and the no-carrier drop
+        val safe = function("recordTakenUsageSafely")
+        assertTrue(safe.contains("withContext(kotlinx.coroutines.NonCancellable)"))
+        assertTrue(safe.indexOf("val records = take()") < safe.indexOf("attachUsageRecords(carrier, records"))
+        assertTrue(safe.contains("keepUsageOfDeletedRows("))
+        assertTrue(safe.contains("if (turnFence.isStale()) throw CancellationException("))
+        assertEquals(2, activity.split("recordTakenUsageSafely(").size - 2)
+    }
+
     @Test fun everyChatScreenSaveIsOrdered() {
         val save = activity.substringAfter("    private fun saveSettings(").substringBefore("    private fun saveSettingsInBackground(")
         assertTrue(save.contains("order.writeIfNewest(chatId, seq"))
