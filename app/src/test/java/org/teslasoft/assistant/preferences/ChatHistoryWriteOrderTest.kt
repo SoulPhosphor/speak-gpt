@@ -179,4 +179,45 @@ class ChatHistoryWriteOrderTest {
         assertEquals(500L, ChatHistoryWriteOrder.defaultRetryDelayMs(2))
         assertEquals(30_000L, ChatHistoryWriteOrder.defaultRetryDelayMs(50))
     }
+
+    @Test fun aSnapshotPickedUpBeforeTheChatIsDeletedWritesNothingAfterIt() {
+        val storage = Storage().apply { failuresLeft = 1 }
+        val order = ChatHistoryWriteOrder(scheduler = null)
+        order.saveInBackground(chat, order.claim(chat), rows("kept"), false, storage.writer)
+        val holding = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        // Another writer holds the history lock.
+        val holder = Thread {
+            synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+                holding.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                // The whole chat is deleted while the reader below waits.
+                order.discard(listOf(chat))
+            }
+        }
+        holder.start()
+        assertTrue(holding.await(5, TimeUnit.SECONDS))
+        // A reader picks up the kept snapshot, then waits for the lock.
+        val reader = Thread { order.beforeRead(chat) }
+        reader.start()
+        val deadline = System.currentTimeMillis() + 5_000
+        while (reader.state != Thread.State.BLOCKED && System.currentTimeMillis() < deadline) Thread.sleep(2)
+        assertEquals(Thread.State.BLOCKED, reader.state)
+        release.countDown()
+        holder.join(5_000)
+        reader.join(5_000)
+        assertNull("a deleted chat's history is never written back", storage.stored[chat])
+    }
+
+    @Test fun aSnapshotWithdrawnByARenameIsNotWrittenUnderTheOldId() {
+        val storage = Storage().apply { failuresLeft = 2 }
+        val order = ChatHistoryWriteOrder(scheduler = null)
+        order.saveInBackground(chat, order.claim(chat), rows("kept"), false, storage.writer)
+        order.rename(chat, "chat-b")
+        // A retry still addressed to the old id finds nothing to write.
+        order.attemptNow(chat)
+        assertNull(storage.stored[chat])
+        order.attemptNow("chat-b")
+        assertEquals(listOf("kept"), storage.stored["chat-b"])
+    }
 }

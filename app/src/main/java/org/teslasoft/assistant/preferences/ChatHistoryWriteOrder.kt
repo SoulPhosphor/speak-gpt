@@ -66,11 +66,19 @@ class ChatHistoryWriteOrder internal constructor(
     }
 
     /**
-     * Runs [write] for save [seq] unless a newer save already succeeded.
+     * Runs [write] for save [seq] unless a newer save already succeeded or
+     * [stillWanted] (checked under the lock) says the save was withdrawn.
      * Returns null when skipped; otherwise the writer's result.
      */
-    fun <T> writeIfNewest(chatId: String, seq: Long, succeeded: (T) -> Boolean, write: () -> T): T? =
+    fun <T> writeIfNewest(
+        chatId: String,
+        seq: Long,
+        succeeded: (T) -> Boolean,
+        stillWanted: () -> Boolean = { true },
+        write: () -> T
+    ): T? =
         synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+            if (!stillWanted()) return@synchronized null
             val newer = synchronized(stateLock) { state(chatId).written >= seq }
             if (newer) return@synchronized null
             val outer = writingOnThisThread.get() == true
@@ -144,7 +152,11 @@ class ChatHistoryWriteOrder internal constructor(
 
     private fun tryWrite(chatId: String, pending: Pending): Boolean {
         val outcome = try {
-            writeIfNewest(chatId, pending.seq, { it }) {
+            // Re-checked under the lock: a chat deletion or rename that came
+            // after this snapshot was picked up withdraws it.
+            writeIfNewest(chatId, pending.seq, { it }, stillWanted = {
+                synchronized(stateLock) { states[chatId]?.pending === pending }
+            }) {
                 pending.writer.write(chatId, pending.messages, pending.bookmarkChanged)
             }
         } catch (_: Exception) {
