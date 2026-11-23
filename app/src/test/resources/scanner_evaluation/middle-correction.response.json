@@ -1,0 +1,36 @@
+{
+  "memories": [
+    {
+      "content": "The user agreed to lead Cedar Observatory volunteers on Saturday mornings, but Saturday later became unavailable; Sunday mornings are now confirmed. Weekday evenings remain unavailable because of choir.",
+      "scope": "project",
+      "type_id": "fact",
+      "tags": [
+        "Cedar Observatory",
+        "volunteering",
+        "schedule"
+      ]
+    },
+    {
+      "content": "For the telescope restoration, the user ordered a brass focusing knob that fits the 1978 instrument. The club decided to keep the telescope's original blue finish rather than repaint it black, to preserve its history.",
+      "scope": "project",
+      "type_id": "decision",
+      "tags": [
+        "telescope restoration",
+        "Cedar Observatory"
+      ]
+    },
+    {
+      "content": "The user's cousin Ivo is joining the spring train trip. They chose May instead of April so the coastal line will be running.",
+      "scope": "real_life",
+      "type_id": "decision",
+      "tags": [
+        "Ivo",
+        "train trip"
+      ]
+    }
+  ],
+  "model_rules": [],
+  "draft_edits": [],
+  "withdrawn_drafts": [],
+  "already_covered": []
+}

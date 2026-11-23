@@ -7710,6 +7710,54 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             getMemory(id)?.let { PendingMatchPresentation.reviewFingerprint(it) } == fingerprint
         }
 
+    /** Read the pair and relationships atomically, before displaying them. */
+    fun capturePendingPair(proposalId: String, relatedId: String): PendingPairSnapshot? {
+        if (proposalId == relatedId) return null
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val proposal = getMemory(proposalId)?.takeIf { it.status == "draft" } ?: return null
+            val related = getMemory(relatedId)?.takeIf { it.status == "draft" } ?: return null
+            val result = PendingPairSnapshot(proposal, related, listOf(proposalId, relatedId).associateWith {
+                relationshipHintsForDraft(it).map { hint -> hint.memoryId }.toSet()
+            })
+            db.setTransactionSuccessful()
+            return result
+        } finally { db.endTransaction() }
+    }
+
+    /** All Stage 6D decisions validate both displayed records and their links
+     * inside the write transaction. Edit/discard/keep never activate a record. */
+    fun resolvePendingPair(
+        snapshot: PendingPairSnapshot,
+        action: PendingPairAction,
+        chosenId: String? = null,
+        content: String? = null
+    ): ResolutionResult {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (!snapshot.holds(::getMemory) { id -> relationshipHintsForDraft(id).map { it.memoryId }.toSet() }) {
+                return ResolutionResult.StaleSelection
+            }
+            if (action != PendingPairAction.KEEP_BOTH && chosenId !in snapshot.ids) return ResolutionResult.StaleSelection
+            when (action) {
+                PendingPairAction.KEEP_BOTH -> Unit
+                PendingPairAction.EDIT -> {
+                    require(!content.isNullOrBlank())
+                    updateMemory(getMemory(chosenId!!)!!.copy(content = content), null)
+                }
+                PendingPairAction.DISCARD -> deleteMemoryTx(db, chosenId!!)
+                PendingPairAction.SAVE -> if (!activateProposalTx(db, chosenId!!)) return ResolutionResult.StaleSelection
+            }
+            db.setTransactionSuccessful()
+            return ResolutionResult.Applied(if (action == PendingPairAction.SAVE) listOf(chosenId!!) else emptyList())
+        } finally { db.endTransaction() }
+    }
+
+    private fun resolutionTargetsAreFiled(ids: Collection<String>, proposalId: String): Boolean =
+        ids.all { id -> id != proposalId && getMemory(id)?.status in setOf("active", "archived", "superseded") }
+
     /** Flip a still-pending proposal to active inside an open transaction.
      *  Returns false (leaving the transaction to be rolled back) when the
      *  proposal vanished or is no longer a draft — the resolution-time
@@ -7775,6 +7823,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.beginTransaction()
         try {
             if (!reviewSnapshotHolds(expected)) return ResolutionResult.StaleSelection
+            if (editedOld != null && !resolutionTargetsAreFiled(listOf(editedOld.memoryId), proposalId)) return ResolutionResult.StaleSelection
             if (!activateProposalTx(db, proposalId)) return ResolutionResult.StaleProposal
             val reindex = arrayListOf(proposalId)
             if (editedOld != null) {
@@ -7825,6 +7874,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.beginTransaction()
         try {
             if (!reviewSnapshotHolds(expected)) return ResolutionResult.StaleSelection
+            if (!resolutionTargetsAreFiled(oldMemoryIds, proposalId)) return ResolutionResult.StaleSelection
             if (!activateProposalTx(db, proposalId)) return ResolutionResult.StaleProposal
             for (oldId in oldMemoryIds.distinct()) {
                 if (oldId == proposalId) continue
@@ -7855,6 +7905,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.beginTransaction()
         try {
             if (!reviewSnapshotHolds(expected)) return ResolutionResult.StaleSelection
+            if (!resolutionTargetsAreFiled(oldMemoryIds, proposalId)) return ResolutionResult.StaleSelection
             if (!activateProposalTx(db, proposalId)) return ResolutionResult.StaleProposal
             val superseded = ArrayList<String>()
             for (oldId in oldMemoryIds.distinct()) {

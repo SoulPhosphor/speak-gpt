@@ -18,6 +18,7 @@ package org.teslasoft.assistant.ui.activities.memory
 
 import org.teslasoft.assistant.ui.util.ScreenChrome
 
+import androidx.activity.addCallback
 import androidx.core.widget.doAfterTextChanged
 import org.teslasoft.assistant.ui.widgets.MemoryTokenMeter
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounter
@@ -49,6 +50,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.PendingPairSnapshot
 import org.teslasoft.assistant.preferences.memory.PendingMatchLoader
 import org.teslasoft.assistant.preferences.memory.PendingMatchPresentation
 import org.teslasoft.assistant.ui.adapters.memory.PendingMatchText
@@ -64,8 +66,8 @@ import org.teslasoft.assistant.theme.ThemeManager
  * the Related Memory (the match opened from the Pending card, or the closest
  * one) follows, then the Additional Matches (Stage 6C), each in the normal
  * memory-card format with its status and match method, a checkbox (top-left;
- * only the opened match starts ticked, and Pending matches have none until
- * Stage 6D) and an Info control (top-right). Resolutions
+ * only the opened match starts ticked, and Pending matches have dedicated
+ * Stage 6D controls instead) and an Info control (top-right). Resolutions
  * live in their own section after the last match:
  *   - Save & Edit Old Memory — one selection only; activates the proposal, keeps
  *     the old memory active, and applies inline title/content edits to it;
@@ -104,6 +106,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
     /** One existing possible-match card and its controls. */
     private class MatchHolder(
         val record: MemoryRecord,
+        val card: LinearLayout,
         val check: MaterialCheckBox,
         val editSection: View,
         val editTitle: TextInputEditText,
@@ -135,6 +138,10 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
 
     /** True while a resolution is being applied, to block double-taps. */
     private var applying = false
+    private var pendingPair: PendingPairReviewController? = null
+    private var loadGeneration = 0
+    private val pairNavigation = ArrayList<View>()
+    private val importanceControls = ArrayList<View>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -157,7 +164,8 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         btnReplace = findViewById(R.id.btn_review_replace)
 
         applyTheme()
-        btnBack?.setOnClickListener { finish() }
+        btnBack?.setOnClickListener { if (pendingPair?.handleBack() != true) finish() }
+        onBackPressedDispatcher.addCallback(this) { if (pendingPair?.handleBack() != true) finish() }
         btnEdit?.setOnClickListener { onEditClick() }
         btnSupersede?.setOnClickListener { applyResolution(ResolutionKind.SUPERSEDE) }
         btnReplace?.setOnClickListener { applyResolution(ResolutionKind.REPLACE) }
@@ -169,6 +177,9 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
 
     private fun load() {
         editingCardId = null
+        pendingPair = null
+        val generation = ++loadGeneration
+        val requested = requestedRelatedId
         runOffThread {
             if (!MemoryStore.isProvisioned(this)) {
                 runOnUiThread { finish() }
@@ -186,11 +197,24 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             // Fresh detection — the same finder the browser used, recomputed here
             // so Review always reflects the current library.
             val loaded = PendingMatchLoader.load(this, draftId)
+            val openedNow = PendingMatchPresentation.open(loaded.ordered, requested)
+            val pair = openedNow?.selected?.takeIf { it.reviewOnly }?.let {
+                store.capturePendingPair(draftId, it.memoryId)
+            }
+            // Match metadata must describe the exact wordings displayed.
+            val raced = openedNow?.selected?.reviewOnly == true && (pair == null ||
+                PendingMatchPresentation.reviewFingerprint(pair.proposal) != PendingMatchPresentation.reviewFingerprint(proposal) ||
+                PendingMatchPresentation.reviewFingerprint(pair.related) != loaded.records[openedNow.selected.memoryId]?.let {
+                    PendingMatchPresentation.reviewFingerprint(it)
+                } || (openedNow.selected.method == PendingMatchPresentation.Method.ALTERNATIVE &&
+                    (pair.related.memoryId !in pair.links[pair.proposal.memoryId].orEmpty() ||
+                        pair.proposal.memoryId !in pair.links[pair.related.memoryId].orEmpty())))
             runOnUiThread {
-                if (isFinishing) return@runOnUiThread
+                if (isFinishing || isDestroyed || generation != loadGeneration) return@runOnUiThread
+                if (raced) { load(); return@runOnUiThread }
                 // The opened match stays the selected one across reloads (an
                 // importance change or a stale decision) while it is still a match.
-                val opened = PendingMatchPresentation.open(loaded.ordered, requestedRelatedId)
+                val opened = openedNow
                 if (opened == null) {
                     // The overlap is gone; nothing to resolve. The browser will
                     // show this suggestion as conflict-free after it re-checks.
@@ -205,7 +229,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
                 requestedRelatedId = opened.selected.memoryId
                 val scrollAdditional = firstLoad && scrollToAdditional
                 firstLoad = false
-                buildUi(proposal, opened, loaded.records, scrollAdditional)
+                buildUi(proposal, opened, loaded.records, scrollAdditional, pair)
             }
         }
     }
@@ -214,24 +238,56 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         proposal: MemoryRecord,
         opened: PendingMatchPresentation.Opened,
         records: Map<String, MemoryRecord>,
-        scrollAdditional: Boolean
+        scrollAdditional: Boolean,
+        pair: PendingPairSnapshot?
     ) {
         val c = container ?: return
         c.removeAllViews()
         matchHolders.clear()
+        pairNavigation.clear()
+        importanceControls.clear()
+        if (pair != null) pendingPair = PendingPairReviewController(
+            this, pair, ::runOffThread,
+            setLocked = { locked -> applying = locked; setButtonsEnabled(!locked) },
+            reload = ::load, finish = { finish() }
+        )
 
         // Stage 6C order (owner design): the full proposal, the match the user
         // opened, then the additional matches.
         addIntro(c)
+        if (pair != null) c.addView(layoutInflater.inflate(R.layout.view_pending_pair_intro, c, false))
         addHeader(c, getString(R.string.mem_review_proposed_header))
-        addMemoryCard(c, proposal, match = null, checked = false)
+        val proposalHolder = addMemoryCard(c, proposal, match = null, checked = false)
+        pendingPair?.bindCard(proposalHolder.card, proposal)
         addHeader(c, getString(R.string.mem_match_related_header))
         val preselected = if (substituted) emptySet() else opened.preselected
-        addMatch(c, opened.selected, records, preselected)
+        val relatedHolder = addMatch(c, opened.selected, records, preselected)
+        if (pair != null && relatedHolder != null) {
+            pendingPair?.bindCard(relatedHolder.card, pair.related)
+            pendingPair?.addKeepBoth(c)
+        }
         var additionalHeader: View? = null
         if (opened.additional.isNotEmpty()) {
             additionalHeader = addHeader(c, getString(R.string.mem_match_additional_header))
-            for (m in opened.additional) addMatch(c, m, records, preselected)
+            for (m in opened.additional) {
+                val holder = addMatch(c, m, records, preselected)
+                if (m.reviewOnly && holder != null) {
+                    val open = {
+                        intent.putExtra(EXTRA_RELATED_ID, m.memoryId)
+                        requestedRelatedId = m.memoryId
+                        substituted = false
+                        load()
+                    }
+                    val controller = pendingPair
+                    if (controller != null) controller.addOpenPair(holder.card, open)
+                    else {
+                        val button = layoutInflater.inflate(R.layout.view_pending_pair_open, holder.card, false)
+                        holder.card.addView(button)
+                        pairNavigation.add(button)
+                        button.setOnClickListener { if (!applying && editingCardId == null) open() }
+                    }
+                }
+            }
         }
         shownFingerprints = (listOf(proposal) + (listOf(opened.selected) + opened.additional)
             .mapNotNull { records[it.memoryId] })
@@ -261,12 +317,12 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         match: PendingMatchPresentation.Presented,
         records: Map<String, MemoryRecord>,
         preselected: Set<String>
-    ) {
-        val record = records[match.memoryId] ?: return
+    ): MatchHolder? {
+        val record = records[match.memoryId] ?: return null
         val holder = addMemoryCard(parent, record, match, checked = match.memoryId in preselected)
-        // Pending matches stay review-only until Stage 6D: no checkbox, so no
-        // resolution can ever be applied to them.
+        // Pending matches have dedicated controls, never legacy resolution targets.
         if (!match.reviewOnly) matchHolders.add(holder)
+        return holder
     }
 
     private fun addIntro(parent: LinearLayout) {
@@ -319,6 +375,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             else { visibility = View.VISIBLE; text = PendingMatchText.detail(this@MemoryPossibleMatchReviewActivity, match) }
         }
         card.findViewById<MaterialButton>(R.id.review_importance).apply {
+            importanceControls.add(this)
             if (preferences?.getUseImportanceRatings() ?: true) {
                 visibility = View.VISIBLE
                 text = getString(R.string.mem_importance_value_fmt, importanceLabel(record.importance))
@@ -341,7 +398,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         }
         parent.addView(card)
         return MatchHolder(
-            record, check,
+            record, card as LinearLayout, check,
             card.findViewById(R.id.review_edit_section),
             card.findViewById(R.id.review_edit_title),
             card.findViewById(R.id.review_edit_content)
@@ -349,6 +406,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
     }
 
     private fun showImportancePicker(record: MemoryRecord) {
+        if (applying || editingCardId != null) return
         val values = listOf(-2, -1, 0, 1, 2, 3)
         val labels = values.map { importanceLabel(it) }.toTypedArray()
         val selected = values.indexOf(record.importance.coerceIn(-2, 3)).coerceAtLeast(0)
@@ -401,7 +459,11 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
     }
 
     private fun refreshResolutionButtons() {
+        val controlsEnabled = !applying && editingCardId == null
+        pairNavigation.forEach { it.isEnabled = controlsEnabled }
+        importanceControls.forEach { it.isEnabled = controlsEnabled }
         if (applying) return
+        pendingPair?.setExternalEnabled(!applying && editingCardId == null)
         val count = checkedHolders().size
         val editing = editingCardId != null
         btnSupersede?.isEnabled = count >= 1 && !editing
@@ -525,6 +587,9 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
     }
 
     private fun setButtonsEnabled(enabled: Boolean) {
+        pairNavigation.forEach { it.isEnabled = enabled && editingCardId == null }
+        importanceControls.forEach { it.isEnabled = enabled && editingCardId == null }
+        pendingPair?.setExternalEnabled(enabled && editingCardId == null)
         btnEdit?.isEnabled = enabled
         btnSupersede?.isEnabled = enabled
         btnReplace?.isEnabled = enabled
@@ -571,7 +636,8 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             } catch (e: Exception) {
                 runOnUiThread {
                     applying = false
-                    setButtonsEnabled(true)
+                    pendingPair?.onFailure()
+                    if (!applying) setButtonsEnabled(true)
                     Toast.makeText(
                         this,
                         getString(R.string.memory_operation_failed, e.message ?: e.javaClass.simpleName),

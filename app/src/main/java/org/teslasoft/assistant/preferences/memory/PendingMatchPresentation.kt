@@ -52,8 +52,7 @@ object PendingMatchPresentation {
         /** Meaning similarity, only for [Method.SIMILARITY]. */
         val score: Float?
     ) {
-        /** Pending matches stay review-only until Stage 6D adds their actions
-         *  (owner decision): never selectable for Save & Edit Old Memory,
+        /** Pending matches have their own Stage 6D controls: never selectable for Save & Edit Old Memory,
          *  Save & Supersede or Save & Replace. */
         val reviewOnly: Boolean get() = status == "draft"
     }
