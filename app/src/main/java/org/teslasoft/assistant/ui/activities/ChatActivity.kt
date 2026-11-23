@@ -10476,13 +10476,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the terminal values are decided by the caller from what it caught. */
     private suspend fun finalizeLifecycleTerminal(
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
-        streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
+        streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?,
+        /** The turn ends here: a completed request whose usage was not
+         *  recorded yet is recorded now instead of being dropped. */
+        keepCompletedUsage: Boolean = false
     ) {
         // A message deletion that retired this reply finalized it already.
         if (turnFence.isStale()) return
         val carrier = usageCarrier()
         val attached = completeClaimedTerminal(
-            claimTerminalState(), carrier,
+            claimTerminalState(keepCompletedUsage), carrier,
             outcome, finishReasonDisplay, streamClosed, termination, errorText
         )
         // Retired by a message deletion while the record was being completed:
@@ -10495,17 +10498,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val attempt: ProviderUsageAttempt?,
         val pricing: Deferred<TokenPricingCatalog>?,
         val pendingPricing: Deferred<TokenPricingCatalog>?,
-        val lifecycle: ResponseLifecycleRecorder?
+        val lifecycle: ResponseLifecycleRecorder?,
+        /** A completed request whose usage was not recorded yet (deletion only). */
+        val completed: ProviderUsageSnapshot? = null,
+        val completedFingerprint: String? = null,
+        val completedAtElapsedMs: AtomicLong? = null,
+        val completedRows: List<Map<String, Any>>? = null
     )
 
     /**
      * Takes the running reply's usage and lifecycle state before anything can
      * wait, so a reply started while this one finishes keeps its own state.
      */
-    private fun claimTerminalState(): ClaimedTerminal {
+    private fun claimTerminalState(keepCompletedUsage: Boolean = false): ClaimedTerminal {
+        val completed = if (keepCompletedUsage) pendingProviderUsageSnapshot else null
         val claimed = ClaimedTerminal(
             currentProviderUsageAttempt, currentPricingCatalog,
-            pendingCompletedPricingCatalog, currentLifecycle
+            pendingCompletedPricingCatalog, currentLifecycle,
+            completed = completed,
+            completedFingerprint = if (completed != null) pendingCompletedPricingCatalogEndpointFingerprint else null,
+            completedAtElapsedMs = if (completed != null) pendingCompletedPricingCatalogCompletedAtElapsedMs else null,
+            completedRows = if (completed != null && !completed.counts.hasAnyValue()) messages.map { HashMap(it) } else null
         )
         currentProviderUsageAttempt = null
         currentPricingCatalog = null
@@ -10535,15 +10548,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
         streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
     ): Boolean {
-        val terminalRecord = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            completeTerminalUsageRecord(claimed.attempt, claimed.pricing)
+        val records = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            // A completed request the deletion caught before its usage was
+            // recorded keeps its own price wait (it owns pendingPricing then).
+            val completedRecord = claimed.completed?.let {
+                completeUsageRecordFrom(
+                    it, claimed.pendingPricing, claimed.completedFingerprint,
+                    claimed.completedAtElapsedMs, claimed.completedRows
+                )
+            }
+            listOfNotNull(completedRecord, completeTerminalUsageRecord(claimed.attempt, claimed.pricing))
         }
         claimed.pricing?.cancel()
         claimed.pendingPricing?.cancel()
         var attached = false
-        terminalRecord?.let { record ->
+        if (records.isNotEmpty()) {
             carrier?.let {
-                attachUsageRecords(it, listOf(record), it["isBot"] == true)
+                attachUsageRecords(it, records, it["isBot"] == true)
                 mirrorUsageRecordsToCanonicalVariant(it)
                 attached = true
             }
@@ -12271,11 +12292,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pendingCompletedPricingCatalogEndpointFingerprint = null
         val pricingCompletedAtElapsedMs = pendingCompletedPricingCatalogCompletedAtElapsedMs
         pendingCompletedPricingCatalogCompletedAtElapsedMs = null
+        val messageSnapshot = if (snapshot.counts.hasAnyValue()) null else messages.map { HashMap(it) }
+        return completeUsageRecordFrom(
+            snapshot, pricingDeferred, pricingEndpointFingerprint, pricingCompletedAtElapsedMs, messageSnapshot
+        )
+    }
 
-        val estimate = if (snapshot.counts.hasAnyValue()) {
+    /** A completed request's usage record from its saved snapshot. Rows are
+     *  needed only to estimate counts the provider did not report. */
+    private suspend fun completeUsageRecordFrom(
+        snapshot: ProviderUsageSnapshot,
+        pricingDeferred: Deferred<TokenPricingCatalog>?,
+        pricingEndpointFingerprint: String?,
+        pricingCompletedAtElapsedMs: AtomicLong?,
+        messageSnapshot: List<Map<String, Any>>?
+    ): TurnUsageRecord {
+        val estimate = if (snapshot.counts.hasAnyValue() || messageSnapshot == null) {
             null
         } else {
-            val messageSnapshot = messages.map { HashMap(it) }
             withContext(Dispatchers.Default) { estimateLastAssistantUsageCl100k(messageSnapshot) }
         }
         val (counts, source) = TokenUsageAccounting.chooseCounts(snapshot.counts) {
@@ -12999,7 +13033,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     getString(R.string.gen_interrupt_reason_screen_closed)
                 )
                 finalizeLifecycleTerminal(
-                    plan.outcome, "missing", true, plan.termination, plan.lifecycleError
+                    plan.outcome, "missing", true, plan.termination, plan.lifecycleError,
+                    keepCompletedUsage = true
                 )
                 // Skipped by showTerminalFailure itself if a deletion retired
                 // this reply while its usage record was being completed.
@@ -13093,7 +13128,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 ResponseLifecycle.Outcome.INCOMPLETE,
                 providerEvidence?.finishReason ?: currentLifecycle?.lastFinishReason ?: "missing",
                 true,
-                lifecycleTermination, lifecycleError
+                lifecycleTermination, lifecycleError,
+                keepCompletedUsage = true
             )
 
             // Record to the Provider Failure Log when enabled AND the server
@@ -15749,7 +15785,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 providerRequestDispatched,
                 getString(R.string.gen_interrupt_reason_screen_closed)
             )
-            val claimed = claimTerminalState()
+            val claimed = claimTerminalState(keepCompletedUsage = true)
             applyCancelledReplyPlan(plan)
             try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
             generationNetworkMonitor = null

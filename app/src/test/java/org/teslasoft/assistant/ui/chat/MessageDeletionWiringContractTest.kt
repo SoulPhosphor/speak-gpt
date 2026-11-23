@@ -59,7 +59,7 @@ class MessageDeletionWiringContractTest {
         val retire = function("retireRunningWorkForDeletion")
         assertTrue(retire.indexOf("turnFence.retire()") < retire.indexOf("generationJobs.forEach { it.cancel() }"))
         assertTrue(retire.contains("CancelledReplyTerminal.plan("))
-        assertTrue(retire.contains("claimTerminalState()"))
+        assertTrue(retire.contains("claimTerminalState(keepCompletedUsage = true)"))
         assertTrue(retire.contains("ImageGenerationJobRegistry.discardDelivery(imageJob)"))
         assertTrue(retire.contains("summarizerController?.cancelSummarizing()"))
         // The cancellation handler uses the same plan.
@@ -117,6 +117,18 @@ class MessageDeletionWiringContractTest {
         assertTrue(finalize.contains("if (turnFence.isStale()) return"))
         assertTrue(finalize.indexOf("usageCarrier()") < finalize.indexOf("completeClaimedTerminal("))
         assertTrue(activity.contains("if (currentLifecycle === r) currentLifecycle = null"))
+    }
+
+    @Test fun aCompletedRequestsUnrecordedUsageIsKeptWhenTheTurnEnds() {
+        val claim = activity.substringAfter("private fun claimTerminalState(").substringBefore("currentProviderUsageAttempt = null")
+        assertTrue(claim.contains("completed = completed"))
+        val complete = activity.substringAfter("private suspend fun completeClaimedTerminal(").substringBefore("val r = claimed.lifecycle")
+        assertTrue(complete.contains("completeUsageRecordFrom("))
+        // Deletion and both terminal handlers keep it; mid-turn hand-offs do not.
+        assertTrue(function("retireRunningWorkForDeletion").contains("claimTerminalState(keepCompletedUsage = true)"))
+        assertTrue(activity.split("keepCompletedUsage = true\n").size - 1 >= 2)
+        val superseded = activity.substringAfter("private suspend fun startLifecycle(").substringBefore("currentPricingCatalog")
+        assertFalse(superseded.contains("keepCompletedUsage"))
     }
 
     @Test fun everyChatScreenSaveIsOrdered() {
