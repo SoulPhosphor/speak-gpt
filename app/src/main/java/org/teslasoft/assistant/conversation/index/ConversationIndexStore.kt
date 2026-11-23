@@ -112,7 +112,7 @@ class ConversationIndexStore private constructor(
                 "words, content='', contentless_delete=1, detail=none," +
                 // An apostrophe is part of a word, as in KeywordText's terms, so every
                 // stored term is one token and never needs a phrase query.
-                "tokenize=\"unicode61 remove_diacritics 0 tokenchars \")"
+                "tokenize=\"unicode61 remove_diacritics 0 tokenchars ''''\")"
         )
         db.execSQL(
             "CREATE TRIGGER passages_keywords_ad AFTER DELETE ON passages BEGIN " +

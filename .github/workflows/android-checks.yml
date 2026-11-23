@@ -57,6 +57,16 @@ jobs:
           restore-keys: |
             robolectric-${{ runner.os }}-
 
+      - name: Download pinned EmbeddingGemma tokenizer for JVM tests
+        # Real-tokenizer unit tests (PassageSearchTextGemmaTest,
+        # ScannerQueryWindowsGemmaTest) read it through GEMMA_TOKENIZER_JSON.
+        run: |
+          set -euo pipefail
+          base=https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/5090578d9565bb06545b4552f76e6bc2c93e4a66
+          curl --fail --location --retry 3 "$base/tokenizer.json" -o "$RUNNER_TEMP/tokenizer.json"
+          echo "4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47  $RUNNER_TEMP/tokenizer.json" | sha256sum --check
+          echo "GEMMA_TOKENIZER_JSON=$RUNNER_TEMP/tokenizer.json" >> "$GITHUB_ENV"
+
       - name: Run unit tests
         # The three app variants have a large Android/PDF/OCR classpath. Keep
         # their Kotlin compilation and JVM test workers inside runner memory.
