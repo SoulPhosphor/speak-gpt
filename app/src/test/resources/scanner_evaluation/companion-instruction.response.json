@@ -1,0 +1,15 @@
+{
+  "memories": [
+    {
+      "content": "When planning observatory outings with Companion B, the user wants a reminder to bring the brass C7 key; this routine applies specifically to outings with Companion B.",
+      "scope": "companion",
+      "type_id": "fact",
+      "tags": ["observatory outings", "reminder"],
+      "target_refs": ["T1"]
+    }
+  ],
+  "model_rules": [],
+  "draft_edits": [],
+  "withdrawn_drafts": [],
+  "already_covered": []
+}

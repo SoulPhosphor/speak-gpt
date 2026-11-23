@@ -169,6 +169,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.teslasoft.assistant.ui.chat.parallel.*
+import org.teslasoft.assistant.conversation.parallel.ParallelChatTitles
 import org.teslasoft.assistant.conversation.responsegroups.*
 import org.teslasoft.assistant.conversation.setup.ExperimentalSetup
 import org.teslasoft.assistant.R
@@ -807,6 +808,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         override val unavailable get() = chatStorageUnavailable || deletingChat
         override val imagineCommandEnabled get() = preferences?.getImagineCommandGlobal() == true || explicitImagineDraft
         override suspend fun prepareBase(raw: String, setup: ExperimentalSetup): ParallelTurnBase {
+            ensureImageSummaries()
             val stored = prefix + raw + endSeparator
             val companionLabel = currentCompanionLabel()
             val memoryScope = org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.current(preferences).encode()
@@ -912,9 +914,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (position < boundary) askToRecompactAfterDelete(boundary, sourceChanged = true)
             }
         }
+        override suspend fun nameTurn(group: ResponseGroup, retainUsage: (org.teslasoft.assistant.usage.UsageLogEntry) -> Unit) = ParallelChatTitles.name(
+            this@ChatActivity, chatId, group, AUTO_NAME_MAX_ATTEMPTS,
+            { !isFinishing && !isDestroyed }, this@ChatActivity::summarizerChatTitle, this@ChatActivity::applyAutoName, retainUsage)
         override fun canonicalEdited() = onMessageEdited()
         override fun settled() {
             syncChatProjection(); summarizerCycle(); showPendingContextHelperFailure()
+            ensureImageSummaries()
             val persona = messages.lastOrNull()?.let(org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope::read)?.companionPersonaId
             memoryWriteQueue.execute {
                 org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.ensureCompanion(applicationContext, persona)
@@ -6605,24 +6611,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun ensureImageSummaries() {
         val controller = summarizerController ?: return
         if (!org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)) return
-        val targets = messages.mapNotNull { msg ->
-            if (msg["isBot"] != true) return@mapNotNull null
+        val targets = messages.flatMap { msg ->
+            if (msg["isBot"] != true) return@flatMap emptyList()
             // A hidden image's prompt is not sent to any model.
-            if (MessageVisibility.isHidden(msg)) return@mapNotNull null
+            if (MessageVisibility.isHidden(msg)) return@flatMap emptyList()
+            if (msg.containsKey(ResponseGroupCodec.KEY)) return@flatMap ResponseGroupImages.pendingSummaries(msg)
             val meta = GeneratedImageMetadata.fromJson(msg[GeneratedImageMetadata.KEY]?.toString())
-                ?: return@mapNotNull null
-            if (meta.status != GeneratedImageMetadata.STATUS_COMPLETE) return@mapNotNull null
-            if (meta.prompt.isBlank()) return@mapNotNull null
-            if (meta.effectiveSummary() != null) return@mapNotNull null
-            if (meta.imageId in imageSummaryInFlight) return@mapNotNull null
-            meta
-        }
+                ?: return@flatMap emptyList()
+            if (meta.status != GeneratedImageMetadata.STATUS_COMPLETE || meta.prompt.isBlank() || meta.effectiveSummary() != null)
+                return@flatMap emptyList()
+            listOf(meta)
+        }.distinctBy { it.imageId }.filter { it.imageId !in imageSummaryInFlight }
         for (meta in targets) {
             imageSummaryInFlight.add(meta.imageId)
             lifecycleScope.launch {
-                val summary = controller.summarizeImagePrompt(meta.prompt)
-                imageSummaryInFlight.remove(meta.imageId)
-                if (!summary.isNullOrBlank()) applyImageSummary(meta.imageId, summary)
+                try {
+                    val summary = controller.summarizeImagePrompt(meta.prompt)
+                    if (!summary.isNullOrBlank()) applyImageSummary(meta.imageId, meta.prompt, summary)
+                } finally { imageSummaryInFlight.remove(meta.imageId) }
             }
         }
     }
@@ -6630,14 +6636,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Store a freshly made image summary on its message, unless a user edit
      *  or another summary landed meanwhile, then refresh the row and the
      *  model projection. */
-    private fun applyImageSummary(imageId: String, summary: String) {
+    private fun applyImageSummary(imageId: String, prompt: String, summary: String) {
+        if (parallelChat.applyImageSummary(imageId, prompt, summary)) return
         val index = messages.indexOfFirst {
             GeneratedImageMetadata.fromJson(it[GeneratedImageMetadata.KEY]?.toString())?.imageId == imageId
         }
         if (index < 0) return
         val meta = GeneratedImageMetadata.fromJson(messages[index][GeneratedImageMetadata.KEY]?.toString())
             ?: return
-        if (meta.effectiveSummary() != null) return
+        if (meta.prompt != prompt || meta.effectiveSummary() != null) return
         messages[index][GeneratedImageMetadata.KEY] = meta.withImageSummary(summary).toJson()
         saveSettings()
         rebuildModelProjection()
@@ -14544,6 +14551,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val placeholderName = ChatPreferences.getChatPreferences().getChatName(this, chatId)
 
             if (placeholderName.trim().contains("_autoname_")) {
+                val useSummarizerForTitles = preferences?.getUseSummarizerForTitles() == true
+                if (useSummarizerForTitles && !org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)) return
                 autoNameAttempts++
                 disableTurnControlsUnlessTheyAreStops()
                 setGenerationProgressVisible(false)
@@ -14589,7 +14598,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Thinking text a model writes before the title is looked
                 // past; a reply with no usable title counts as a failed
                 // attempt, the same as a request error.
-                val newChatName: String? = try {
+                val newChatName: String? = if (useSummarizerForTitles) summarizerChatTitle(m) else try {
                     org.teslasoft.assistant.util.ChatTitleExtractor.extract(
                         withAuxiliaryTextUsage(
                             requestModel = titleModel,
@@ -14612,10 +14621,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // backup — even when summarizing is off for this chat. With
                 // no summarizer set up, the chat stays "Untitled chat".
                 val lastMainAttempt = autoNameAttempts >= AUTO_NAME_MAX_ATTEMPTS
-                val renamed = !newChatName.isNullOrBlank() && applyAutoName(newChatName, placeholderName)
-                if (!renamed && lastMainAttempt && !isFinishing && !isDestroyed) {
+                val selectionCurrent = preferences?.getUseSummarizerForTitles() == useSummarizerForTitles
+                val renamed = selectionCurrent && !newChatName.isNullOrBlank() && applyAutoName(newChatName, placeholderName)
+                if (!renamed && !useSummarizerForTitles && selectionCurrent && lastMainAttempt && !isFinishing && !isDestroyed) {
                     val backupName = summarizerChatTitle(m)
-                    if (!backupName.isNullOrBlank() && backupName != newChatName) {
+                    if (preferences?.getUseSummarizerForTitles() == false && !backupName.isNullOrBlank() && backupName != newChatName) {
                         applyAutoName(backupName, placeholderName)
                     }
                 }

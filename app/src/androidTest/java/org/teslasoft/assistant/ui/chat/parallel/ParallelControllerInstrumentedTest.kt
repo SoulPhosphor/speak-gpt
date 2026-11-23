@@ -72,6 +72,8 @@ class ParallelControllerInstrumentedTest {
             assertEquals(4, ResponseGroupEdits.usage(settled).map { it.requestId }.distinct().size)
             assertEquals(1, host.preparations)
             assertEquals(1, host.contextCommits)
+            assertEquals(1, host.titleTurns.size)
+            assertEquals(settled.groupId, host.titleTurns.single())
             assertSame(host.committedUserRow, withContext(Dispatchers.Main.immediate) { host.messages.first() })
             withContext(Dispatchers.Main.immediate) {
                 host.finished = CompletableDeferred()
@@ -91,6 +93,7 @@ class ParallelControllerInstrumentedTest {
             assertSame(host.committedUserRow, withContext(Dispatchers.Main.immediate) { host.messages.first() })
             assertEquals(1, host.preparations)
             assertEquals(1, host.contextCommits)
+            assertEquals(1, host.titleTurns.size)
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
@@ -405,6 +408,107 @@ class ParallelControllerInstrumentedTest {
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
+    @Test fun delayedImageSummaryUsesTheLatestOwnedRowAndFailedSavesLeaveItRetryable() = fixture { activity, host ->
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { _, out -> out.text("answer") } },
+                    { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            host.finished.await()
+            withContext(Dispatchers.Main.immediate) {
+                val original = host.group()
+                val slot = original.slots[3]
+                val imageId = id()
+                val meta = org.teslasoft.assistant.imagegen.GeneratedImageMetadata(imageId, null, "image/png", 32, 32,
+                    "fixture", "fixture", "original prompt", "description", 100L, "complete", null)
+                val imaged = original.copy(slots = original.slots.map { selected ->
+                    if (selected.slotId != slot.slotId) selected else selected.copy(versions = selected.versions.map { version ->
+                        version.copy(attempts = version.attempts.mapIndexed { index, attempt ->
+                            if (index != version.attempts.lastIndex) attempt else attempt.copy(imageJobId = imageId, imageResult = meta.toJson())
+                        })
+                    })
+                })
+                host.messages[1] = ResponseGroupEdits.install(host.messages[1], imaged)
+                assertTrue(host.save())
+                controller.browse(1, slot.slotId, slot.foregroundVersionId)
+                controller.editImageSummary(1, "user edit while summarizing")
+                assertFalse(controller.applyImageSummary(imageId, meta.prompt, "late automatic summary"))
+                assertEquals("user edit while summarizing", host.stored().slots[3].versions.single().imageSummaryEdited)
+                controller.editImageSummary(1, null)
+                controller.browse(1, original.primarySlotId, original.slots.first().foregroundVersionId)
+                val before = host.group()
+                host.failSave = true
+                assertFalse(controller.applyImageSummary(imageId, meta.prompt, "automatic reminder"))
+                assertEquals(before, host.group())
+                assertEquals(before, host.stored())
+                host.failSave = false
+                assertTrue(controller.applyImageSummary(imageId, meta.prompt, "automatic reminder"))
+                val saved = host.stored()
+                assertEquals("automatic reminder", saved.slots[3].versions.single().imageSummary)
+                assertEquals(before.primarySlotId, saved.primarySlotId)
+                assertEquals(before.foregroundSlotId, saved.foregroundSlotId)
+                assertEquals(before.slots.take(3), saved.slots.take(3))
+                assertEquals(before.slots[3].versions.single().attempts, saved.slots[3].versions.single().attempts)
+                assertEquals(before.input, saved.input)
+                host.messages.clear()
+                assertFalse(controller.applyImageSummary(imageId, meta.prompt, "after deletion"))
+            }
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
+    }
+
+    @Test fun failedTitleReceiptUsesVisibleSaveOnlyRetryWithoutRepeatingPaidRequests() = fixture { activity, host ->
+        val requestId = id()
+        val receipt = UsageLogEntry(requestId, UsageCategory.SUMMARIZING, null, 100L,
+            TurnUsageRecord(model = "fixture-title", provider = "fixture-provider", requestId = requestId,
+                inputTokens = 17, outputTokens = 3, totalTokens = 20, totalCost = 0.02), UsageFunction.SUMMARIZING)
+        val prefs = Preferences.getPreferences(context, host.chatId)
+        assertTrue(UsageLogStore.putRequest(prefs, receipt.copy(record = receipt.record.copy(
+            inputTokens = null, outputTokens = null, totalTokens = null, totalCost = null))))
+        host.pendingTitleReceipt = receipt
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        var writes = 0
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host, titleUsageWriter = { entry ->
+                writes++
+                assertEquals(receipt, entry)
+                UsageLogStore.putRequest(prefs, entry)
+            }) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { _, out ->
+                    calls.incrementAndGet(); out.text("answer")
+                } }, { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            host.finished.await()
+            withContext(Dispatchers.Main.immediate) {
+                assertTrue(controller.busy)
+                assertTrue(controller.unsaved(1))
+                val controls = android.view.LayoutInflater.from(activity).inflate(
+                    org.teslasoft.assistant.R.layout.view_parallel_response_controls, null)
+                ParallelResponseTabs.bind(controls, host.messages.last(), true, { _, _ -> }, {},
+                    controller.unsaved(1), controller::retrySave)
+                assertEquals(android.view.View.VISIBLE, controls.findViewById<android.view.View>(
+                    org.teslasoft.assistant.R.id.parallel_retry_save).visibility)
+                assertTrue(controls.findViewById<android.widget.TextView>(
+                    org.teslasoft.assistant.R.id.parallel_response_status).text.contains("could not be saved"))
+                assertEquals(0, writes)
+                host.finished = CompletableDeferred()
+                controller.retrySave()
+            }
+            host.finished.await()
+            assertFalse(withContext(Dispatchers.Main.immediate) { controller.busy })
+            assertFalse(withContext(Dispatchers.Main.immediate) { controller.unsaved(1) })
+            assertEquals(1, writes)
+            assertEquals(4, calls.get())
+            assertEquals(1, host.titleTurns.size)
+            val saved = UsageLogStore.read(prefs).entries.filter { it.id == requestId }
+            assertEquals(1, saved.size)
+            assertEquals(receipt, saved.single())
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
+    }
+
     private inner class Host(override val chatId: String) : ParallelChatController.Host {
         override val messages = arrayListOf<HashMap<String, Any>>()
         override var rawInput = "current message"
@@ -416,6 +520,7 @@ class ParallelControllerInstrumentedTest {
         var contextCommits = 0
         var failCommit = false
         var canonicalEdits = 0
+        val titleTurns = arrayListOf<String>()
         var committedUserRow: HashMap<String, Any>? = null
         var failSave = false
         var finished = CompletableDeferred<Unit>()
@@ -443,6 +548,11 @@ class ParallelControllerInstrumentedTest {
         override suspend fun beforeRegenerate(position: Int, action: suspend () -> Unit) = action()
         override fun canonicalEdited() { canonicalEdits++ }
         override fun settled() { finished.complete(Unit) }
+        var pendingTitleReceipt: UsageLogEntry? = null
+        override suspend fun nameTurn(group: ResponseGroup, retainUsage: (UsageLogEntry) -> Unit) {
+            titleTurns += group.groupId
+            pendingTitleReceipt?.let(retainUsage)
+        }
         fun group() = (ResponseGroupCodec.read(messages.last()) as ResponseGroupRead.Valid).group
         fun storedRow() = ChatPreferences.getChatPreferences().getChatByIdResult(context, chatId, DamagedChatOperation.OPENING_A_CHAT).messages.last()
         fun stored() = (ResponseGroupCodec.read(storedRow()) as ResponseGroupRead.Valid).group

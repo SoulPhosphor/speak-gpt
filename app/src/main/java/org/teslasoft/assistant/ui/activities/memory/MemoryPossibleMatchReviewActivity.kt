@@ -140,6 +140,8 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
     private var applying = false
     private var pendingPair: PendingPairReviewController? = null
     private var loadGeneration = 0
+    private val pairNavigation = ArrayList<View>()
+    private val importanceControls = ArrayList<View>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -242,6 +244,8 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
         val c = container ?: return
         c.removeAllViews()
         matchHolders.clear()
+        pairNavigation.clear()
+        importanceControls.clear()
         if (pair != null) pendingPair = PendingPairReviewController(
             this, pair, ::runOffThread,
             setLocked = { locked -> applying = locked; setButtonsEnabled(!locked) },
@@ -269,6 +273,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
                 val holder = addMatch(c, m, records, preselected)
                 if (m.reviewOnly && holder != null) {
                     val open = {
+                        intent.putExtra(EXTRA_RELATED_ID, m.memoryId)
                         requestedRelatedId = m.memoryId
                         substituted = false
                         load()
@@ -278,6 +283,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
                     else {
                         val button = layoutInflater.inflate(R.layout.view_pending_pair_open, holder.card, false)
                         holder.card.addView(button)
+                        pairNavigation.add(button)
                         button.setOnClickListener { if (!applying && editingCardId == null) open() }
                     }
                 }
@@ -369,6 +375,7 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
             else { visibility = View.VISIBLE; text = PendingMatchText.detail(this@MemoryPossibleMatchReviewActivity, match) }
         }
         card.findViewById<MaterialButton>(R.id.review_importance).apply {
+            importanceControls.add(this)
             if (preferences?.getUseImportanceRatings() ?: true) {
                 visibility = View.VISIBLE
                 text = getString(R.string.mem_importance_value_fmt, importanceLabel(record.importance))
@@ -452,6 +459,9 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
     }
 
     private fun refreshResolutionButtons() {
+        val controlsEnabled = !applying && editingCardId == null
+        pairNavigation.forEach { it.isEnabled = controlsEnabled }
+        importanceControls.forEach { it.isEnabled = controlsEnabled }
         if (applying) return
         pendingPair?.setExternalEnabled(!applying && editingCardId == null)
         val count = checkedHolders().size
@@ -577,6 +587,8 @@ class MemoryPossibleMatchReviewActivity : SettingsPageActivity() {
     }
 
     private fun setButtonsEnabled(enabled: Boolean) {
+        pairNavigation.forEach { it.isEnabled = enabled && editingCardId == null }
+        importanceControls.forEach { it.isEnabled = enabled && editingCardId == null }
         pendingPair?.setExternalEnabled(enabled && editingCardId == null)
         btnEdit?.isEnabled = enabled
         btnSupersede?.isEnabled = enabled

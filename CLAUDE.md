@@ -71,6 +71,15 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 - Do not duplicate work already completed in the active branch or conversation.
 - **Changes during waits.** Before opening a PR for code that waits on a model request, a pause, or background work, list each decision made from stored data, how a change to that data during the wait is detected, and the test that proves it. Fix any gap before review.
 
+### Changes during waits — Stage 6D
+
+| Decision | Detect changes during the wait | Verification |
+| --- | --- | --- |
+| Which Pending pair and match metadata are displayed | Read both records and relationships atomically; compare with the match loader's wordings; generation guard rejects obsolete loads | `PendingPairSnapshotTest`; pair read and refresh in `MemoryPossibleMatchReviewActivity` |
+| Keep both, inline edit, discard confirmation, explicit approval, including token-counting waits | Recheck both displayed record fingerprints, Pending status and relationship sets inside the store transaction; stale input writes nothing | `PendingPairReviewInstrumentedTest.everyActionRejectsEitherRecordOrRelationshipChangingDuringTheWait` |
+| Whether legacy approval actions may affect a selected memory | Recheck the displayed fingerprint and reject every Pending target inside the existing resolution transaction | `PendingPairReviewInstrumentedTest.ordinaryPendingMatchesHaveTheSameProtectionAndLegacyActionsRejectAllPendingTargets` |
+| Whether another action may run while an edit or confirmation is open | Lock pair actions, navigation, importance edits and legacy controls; Cancel restores the original meter and Pending content | `PendingPairReviewInstrumentedTest.actualControlsEditAndCancelWithoutDispatchingAWritingOperation` |
+
 ### External services and costs
 
 - Obtain model catalogs, capabilities, voice lists, prices, and other provider-controlled information from the provider or an authorized live source. Do not hard-code data that providers can change.

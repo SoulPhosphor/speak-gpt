@@ -1111,3 +1111,67 @@ handling and prospective-edit agreement). Its live-meter test host failed at
 inflation because it omitted the shared palette setup used by the production
 memory editor. The debug-only host now applies `ThemeManager.applyPalette`
 before inflating that actual layout. No production theme or appearance changed.
+
+
+## Stage 6D: scanner-to-review evaluation
+
+The synthetic inputs are in `ScannerEvaluationFixtures.kt`; all request text is
+built by the production `ArchivistPrompt` and `ArchivistRuntimeProtocol` code.
+Expected outcomes were withheld from extraction. Thirteen independent responses
+are frozen unchanged in `app/src/test/resources/scanner_evaluation/` and replayed
+through the production parser and working-draft/matching/filing helpers. This
+measures the current scanner contract; it is not a historical before/after
+benchmark of the retired scanner, and it does not retune search thresholds.
+
+| Cases | Observed extraction result |
+| --- | --- |
+| Short conversation | One suggestion, retaining the chosen shift and its reason |
+| 80-message chats, late and middle correction | Three topic memories each; current Sunday arrangement, former Saturday plan, choir reason, telescope details and train-trip decision retained |
+| Earlier working draft; update near the end of a very long turn | Each response edits D1 rather than creating another event; checkpoint recovery preserves its identity and corrected wording |
+| Retelling; Archived retelling; changed companion listener | No new suggestion; validated already-covered evidence names the supplied memory and current source message |
+| New decision; new detail about Archived history; return to Archived situation | Linked new suggestions; saved history is not modified |
+| Pasted email followed by correction | Ivo's Friday shift and the user's Tuesday shift remain distinct |
+| Companion-specific instruction | One suggestion targeted only to the supplied companion, including the C7 key detail |
+
+Placement caveat: in both 80-message responses the extraction chose untargeted
+project scope for the volunteering and telescope topics. Their prose is accurate,
+but placement warrants human review. The test does not rewrite those responses
+or claim perfect placement. No extraction prompt was changed for this result.
+
+`ScannerEndToEndEvaluationTest` additionally covers matching with and without
+vectors, cold/warm reuse and fingerprint invalidation, a late-discovered match's
+one conditional comparison, cap ranking only when needed, retellings under a
+different Type or No Type, and exhausted conflicting edits reaching review as a
+linked pair at cap one. The vectors in JVM tests are deterministic test vectors,
+not measured semantic accuracy. `PendingPairReviewInstrumentedTest` exercises
+actual encrypted transactions for all four actions, mutations on either side
+during the wait, relationship changes, legacy-target guards and actual controls.
+
+`ScannerReviewEvaluationInstrumentedTest` uses the pinned EmbeddingGemma model
+already provisioned by normal CI, the real comparison cache and embedding queue,
+then files the original event, validates a second-chat retelling without adding
+a card, and files and reviews the third-chat update in a real encrypted store,
+with and without embeddings. It asserts two cold document reads and zero warm
+reads, and reports emulator cold/warm lookup time in the ordinary run's logs.
+There is no additional performance build. Live-before-background and interrupted
+background ordering are covered by `EmbeddingQueueTest` (including
+`liveReadGoesAheadOfEveryWaitingBackgroundRead` and
+`liveReadStopsARunningBackgroundReadWhichIsReadAgainAfterIt`). These are queue
+correctness checks; physical-phone contention latency remains unmeasured.
+
+| Measurement | Evidence and limits |
+| --- | --- |
+| Extraction requests / repairs | 13 frozen extraction responses, one per input; all parse without a repair |
+| Input/output volume | Per-case estimates from `IncludeTextPolicy`, printed by the replay test; estimates are not provider token bills |
+| Conditional comparisons / ranking | Controlled tests distinguish a shown match (zero extra comparisons), a later match (one, reused on recheck), and over-cap ranking; no live-provider frequency claim |
+| Native vector reuse / lookup time | Assertions and per-run emulator timings in the normal Android Checks instrumentation log; no phone performance claim |
+| Full scan duration | Not measured with a live provider; replay/lookup time excludes model generation |
+| Provider input/output/cache tokens and charges | **Not Reported**; no external paid API was used |
+| Battery, warmth, phone review effort, live-send contention | Physical-phone acceptance remains outstanding |
+
+Phone acceptance: use the same invented cases and scanner settings with and
+without an embedding model, plus a low suggestion cap. Record scan start/end,
+battery before/after and whether plugged in; note warmth and whether a chat send
+stalls while scanning. For review, record taps/time and verify edit/cancel,
+keep-both links, discard confirmation and saving exactly one side. These results
+must not be inferred from an emulator or from green CI.

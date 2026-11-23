@@ -184,6 +184,13 @@ class SummarizerSettingsActivity : SettingsPageActivity() {
             }
         })
 
+        findViewById<MaterialSwitch>(R.id.switch_summarizer_titles)?.apply {
+            isChecked = preferences?.getUseSummarizerForTitles() ?: false
+            setOnCheckedChangeListener { _, checked ->
+                preferences?.setUseSummarizerForTitles(checked)
+            }
+        }
+
         switchNewChats?.isChecked = preferences?.getSummarizerOnForNewChats() ?: false
         switchNewChats?.setOnCheckedChangeListener { _, checked ->
             preferences?.setSummarizerOnForNewChats(checked)
