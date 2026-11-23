@@ -253,6 +253,11 @@ object ImageGenerationJobRegistry {
      *  nowhere, neither to a screen nor to stored history. Main thread. */
     fun discardDelivery(job: ActiveJob) {
         job.deliveryDiscarded = true
+        // Frees the chat's slot now, so a new request starts its own job
+        // instead of joining this one while it winds down.
+        val key = job.ownerKey ?: job.chatId
+        if (jobs[key] === job) jobs.remove(key)
+        publishCounts()
         job.job?.cancel()
     }
 
@@ -553,7 +558,9 @@ object ImageGenerationJobRegistry {
     )
 
     private suspend fun finish(app: Context, record: ActiveJob, terminal: Terminal) {
-        jobs.remove(record.ownerKey ?: record.chatId)
+        // Identity-checked: a discarded job never removes its replacement.
+        val key = record.ownerKey ?: record.chatId
+        if (jobs[key] === record) jobs.remove(key)
         publishCounts()
         val listener = listeners[record.chatId]
         try {

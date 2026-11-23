@@ -220,4 +220,35 @@ class ChatHistoryWriteOrderTest {
         order.attemptNow("chat-b")
         assertEquals(listOf("kept"), storage.stored["chat-b"])
     }
+
+    @Test fun aReaderServesANewerKeptSnapshotThatReplacedTheOneItTried() {
+        // The first deletion's save, the second deletion's save and the
+        // reader's attempt all fail.
+        val storage = Storage().apply { failuresLeft = 3 }
+        storage.stored[chat] = listOf("a", "b", "c")
+        val order = ChatHistoryWriteOrder(scheduler = null)
+        order.saveInBackground(chat, order.claim(chat), rows("a", "b"), false, storage.writer)
+        val holding = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val holder = Thread {
+            synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+                holding.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                // A second deletion replaces the kept snapshot while the reader waits.
+                order.saveInBackground(chat, order.claim(chat), rows("a"), false, storage.writer)
+            }
+        }
+        holder.start()
+        assertTrue(holding.await(5, TimeUnit.SECONDS))
+        var served: List<Any?>? = null
+        val reader = Thread { served = order.beforeRead(chat)?.map { it["message"] } }
+        reader.start()
+        val deadline = System.currentTimeMillis() + 5_000
+        while (reader.state != Thread.State.BLOCKED && System.currentTimeMillis() < deadline) Thread.sleep(2)
+        assertEquals(Thread.State.BLOCKED, reader.state)
+        release.countDown()
+        holder.join(5_000)
+        reader.join(5_000)
+        assertEquals(listOf("a"), served)
+    }
 }

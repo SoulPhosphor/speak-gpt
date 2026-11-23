@@ -75,6 +75,12 @@ class MessageDeletionWiringContractTest {
         assertTrue(discard < finish.indexOf("persistTerminalWithoutScreen("))
         // The terminal still completes, so the job and its keep-alive end normally.
         assertTrue(finish.contains("record.terminal.complete(terminal)"))
+        // A discarded job frees the chat's slot at once, and its own cleanup
+        // can only remove itself, never a newer job for the same chat.
+        val discardFn = registry.substringAfter("fun discardDelivery(").substringBefore("\n    }\n")
+        assertTrue(discardFn.contains("if (jobs[key] === job) jobs.remove(key)"))
+        assertTrue(finish.contains("if (jobs[key] === record) jobs.remove(key)"))
+        assertFalse(finish.contains("jobs.remove(record.ownerKey ?: record.chatId)"))
     }
 
     @Test fun everyLateWriterOfARetiredReplyIsFenced() {

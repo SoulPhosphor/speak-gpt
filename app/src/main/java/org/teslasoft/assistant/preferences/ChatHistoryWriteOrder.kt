@@ -167,16 +167,22 @@ class ChatHistoryWriteOrder internal constructor(
     }
 
     /**
-     * Called before a history read. Tries a kept snapshot once more; when
-     * storage still refuses it, returns a copy of it for the reader to use.
+     * Called before a history read. Tries the kept snapshot once more; when
+     * storage still refuses it, returns a copy of it for the reader to use. A
+     * newer kept snapshot that replaced the one tried is tried in turn, so a
+     * reader never falls back to storage while any snapshot is still kept.
      */
     fun beforeRead(chatId: String): ArrayList<HashMap<String, Any>>? {
         if (writingOnThisThread.get() == true) return null
-        val pending = synchronized(stateLock) { states[chatId]?.pending } ?: return null
-        if (tryWrite(chatId, pending)) return null
-        return synchronized(stateLock) {
-            states[chatId]?.pending?.messages?.mapTo(ArrayList()) { HashMap(it) }
+        repeat(MAX_READ_ATTEMPTS) {
+            val pending = synchronized(stateLock) { states[chatId]?.pending } ?: return null
+            if (!tryWrite(chatId, pending)) return keptCopy(chatId)
         }
+        return keptCopy(chatId)
+    }
+
+    private fun keptCopy(chatId: String): ArrayList<HashMap<String, Any>>? = synchronized(stateLock) {
+        states[chatId]?.pending?.messages?.mapTo(ArrayList()) { HashMap(it) }
     }
 
     /** True while a snapshot for [chatId] has not been saved yet. */
@@ -211,6 +217,7 @@ class ChatHistoryWriteOrder internal constructor(
     companion object {
         private const val FIRST_RETRY_MS = 250L
         private const val MAX_RETRY_MS = 30_000L
+        private const val MAX_READ_ATTEMPTS = 3
 
         internal fun defaultRetryDelayMs(attempt: Int): Long =
             (FIRST_RETRY_MS shl (attempt - 1).coerceIn(0, 7)).coerceAtMost(MAX_RETRY_MS)
