@@ -136,7 +136,7 @@ For code work, use this sequence:
 
 **One pull request per session.** Combine all changes made in one session into a single pull request, including documentation, instruction and code changes. Split them only for an extremely good reason, and state that reason in each PR.
 
-**Codex reviews:** Codex usage is limited. Codex starts a review automatically when a pull request is opened, so open a PR only once implementation, self-review and the necessary testing are finished. Never comment `@codex review` to request that opening review, and never request any other Codex review without the owner's explicit approval, including a repeat review after corrections. Required testing and CI verification apply in full whether or not Codex reviews.
+**Codex reviews:** Codex usage is limited. Codex starts a review automatically when a pull request is opened, so open a PR only once implementation, self-review and the necessary testing are finished. Never comment `@codex review` to request that opening review. After fixing valid Codex findings and rerunning the relevant checks, comment `@codex review` on the corrected commit without asking, and repeat until Codex reports no remaining valid findings. Request no other Codex review without the owner's explicit approval. Required testing and CI verification apply in full whether or not Codex reviews.
 
 **Documentation-only PRs:** do not run local checks or Android builds when every change is documentation; inspect the complete replacement text, links, scope, and diff instead, and never claim tests were executed when they were not. A PR containing both documentation and code follows the code workflow above.
 
