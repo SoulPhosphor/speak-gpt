@@ -46,14 +46,9 @@ class PassageCutterTest {
 
     private val targets = listOf(1, 2, 7, 16, 64, 256)
 
-    /** Every sample at every target; the tiniest targets use the first 600 characters, which already exercise every level. */
-    private fun cases(): List<Triple<String, String, Int>> = samples.flatMap { (name, text) ->
-        targets.map { target -> Triple(name, if (target <= 2) text.take(600) else text, target) }
-    }
-
     @Test
     fun joiningEveryPassageInOrderGivesBackTheMessageExactly() {
-        for ((name, text, target) in cases()) for (measure in listOf(codePoints, tokenLike)) {
+        for ((name, text) in samples) for (target in targets) for (measure in listOf(codePoints, tokenLike)) {
             val passages = PassageCutter.cut(text, target, measure).passages
             assertEquals("$name at $target", text, passages.joinToString("") { text.substring(it.start, it.end) })
         }
@@ -61,7 +56,7 @@ class PassageCutterTest {
 
     @Test
     fun noPassageIsLargerThanTheSizeItWasAskedFor() {
-        for ((name, text, target) in cases()) for (measure in listOf(codePoints, tokenLike)) {
+        for ((name, text) in samples) for (target in targets) for (measure in listOf(codePoints, tokenLike)) {
             for (passage in PassageCutter.cut(text, target, measure).passages) {
                 val piece = text.substring(passage.start, passage.end)
                 val singleCodePoint = piece.codePointCount(0, piece.length) == 1
@@ -75,7 +70,7 @@ class PassageCutterTest {
 
     @Test
     fun passagesComeOutInOrderAndNeverOverlap() {
-        for ((name, text, target) in cases()) {
+        for ((name, text) in samples) for (target in targets) {
             val passages = PassageCutter.cut(text, target, tokenLike).passages
             var expectedStart = 0
             for (passage in passages) {
