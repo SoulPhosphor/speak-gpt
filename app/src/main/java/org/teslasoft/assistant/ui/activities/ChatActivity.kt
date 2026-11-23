@@ -1148,6 +1148,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // True while the running reply's terminal state has not been written yet.
     private var replyTerminalPending = false
 
+    // The job of the reply being generated, whichever entry point started it.
+    private var replyJob: kotlinx.coroutines.Job? = null
+
     // True only while deleteMessageRange settles the conversation on the main thread.
     private var holdSavesForDeletion = false
 
@@ -7164,7 +7167,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     disableTurnControlsUnlessTheyAreStops()
                     setGenerationProgressVisible(true)
 
-                    processRecordingScope = CoroutineScope(Dispatchers.Main)
+                    processRecordingScope = CoroutineScope(Dispatchers.Main + turnFence.element())
 
                     processRecordingScope?.launch {
                         progress?.setOnClickListener {
@@ -7872,7 +7875,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             disableTurnControlsUnlessTheyAreStops()
             setGenerationProgressVisible(true)
 
-            processRecordingScope = CoroutineScope(Dispatchers.Main)
+            processRecordingScope = CoroutineScope(Dispatchers.Main + turnFence.element())
             processRecordingScope?.launch {
                 progress?.setOnClickListener {
                     userRequestedStop = true
@@ -9124,7 +9127,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 disableTurnControlsUnlessTheyAreStops()
                 setGenerationProgressVisible(true)
 
-                setupScope = CoroutineScope(Dispatchers.Main)
+                setupScope = CoroutineScope(Dispatchers.Main + turnFence.element())
 
                 setupScope?.launch {
                     progress?.setOnClickListener {
@@ -10250,6 +10253,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             adapter?.notifyItemChanged(messages.size - 1)
         }
         val providerDiagnostics = finalizeLifecycleSuccess()
+        // Its lifecycle entry can wait; a deletion meanwhile settled this
+        // reply, and its rows now belong to the conversation that remains.
+        if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
         applyProviderWarnings(providerDiagnostics)
         messages[messages.size - 1]["message"] = "$response\n"
         markLastAssistantDone()
@@ -12810,6 +12816,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         shouldPronounce: Boolean,
         preparedTurn: PreparedRegularTurn? = null
     ) {
+        // Typed, voice and activation-prompt replies each run in their own
+        // scope; a message deletion stops whichever one is generating.
+        replyJob = currentCoroutineContext()[kotlinx.coroutines.Job]
         try {
             generateResponseUnsettled(request, shouldPronounce, preparedTurn)
         } catch (e: CancellationException) {
@@ -12947,6 +12956,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
 
                 val providerDiagnostics = finalizeLifecycleSuccess()
+                // Its lifecycle entry can wait; a deletion meanwhile settled this
+                // reply, and its rows now belong to the conversation that remains.
+                if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
                 applyProviderWarnings(providerDiagnostics)
                 messages[messages.size - 1]["message"] = "$response\n"
                 markLastAssistantDone()
@@ -14625,6 +14637,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // the same turn id — so a completed primary and an interrupted
         // continuation stay separate, comparable entries.
         val providerDiagnostics = finalizeLifecycleSuccess()
+        // Its lifecycle entry can wait; a deletion meanwhile settled this
+        // reply, and its rows now belong to the conversation that remains.
+        if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
         applyProviderWarnings(providerDiagnostics)
 
         // §8: a completed stream of a tool-bearing request proves the
@@ -15769,8 +15784,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         parallelChat.abandonForDeletion()
         val generationJobs = listOfNotNull(
             parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),
-            onSpeechResultsScope?.coroutineContext?.get(kotlinx.coroutines.Job)
-        )
+            onSpeechResultsScope?.coroutineContext?.get(kotlinx.coroutines.Job),
+            replyJob
+        ).distinct()
+        replyJob = null
         val imageJob = if (chatId.isNotBlank()) ImageGenerationJobRegistry.activeJob(chatId) else null
         turnFence.retire()
         generationJobs.forEach { it.cancel() }

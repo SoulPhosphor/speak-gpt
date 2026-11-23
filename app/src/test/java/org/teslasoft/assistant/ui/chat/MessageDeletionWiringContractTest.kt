@@ -1,6 +1,7 @@
 package org.teslasoft.assistant.ui.chat
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,10 +20,11 @@ class MessageDeletionWiringContractTest {
     private val activity by lazy { source("src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt") }
 
     private fun function(name: String): String {
-        val start = activity.indexOf("private fun $name(")
+        val start = listOf("private fun $name(", "private suspend fun $name(")
+            .map { activity.indexOf(it) }.filter { it >= 0 }.minOrNull() ?: -1
         assertTrue("$name not found", start >= 0)
-        val next = activity.indexOf("\n    private fun ", start + 1)
-        return activity.substring(start, if (next < 0) activity.length else next)
+        val next = Regex("\n    private (suspend )?fun ").find(activity, start + 1)?.range?.first
+        return activity.substring(start, next ?: activity.length)
     }
 
     @Test fun deletingMessagesNeverWaitsAndNeverPutsRowsBack() {
@@ -93,9 +95,27 @@ class MessageDeletionWiringContractTest {
         // A retired reply never starts another request phase.
         assertTrue(activity.substringAfter("private suspend fun startLifecycle(").substringBefore("currentLifecycle?.let")
             .contains("if (turnFence.isStale()) throw CancellationException("))
-        // Both reply scopes carry the fence.
+        // Every scope that generates a reply carries the fence: typed replies,
+        // voice replies and activation-prompt replies.
         assertFalse(activity.contains("parseMessageScope = CoroutineScope(Dispatchers.Main)\n"))
         assertTrue(activity.contains("parseMessageScope = CoroutineScope(Dispatchers.Main + turnFence.element())"))
+        val replyLaunches = Regex("\\n([ ]*)(\\w+)\\?\\.launch \\{[\\s\\S]{0,600}?generateResponse\\(").findAll(activity).toList()
+        // Typed, two voice paths, and the activation prompt.
+        assertEquals(4, replyLaunches.size)
+        for (call in replyLaunches) {
+            val scope = call.groupValues[2]
+            val created = activity.substring(0, call.range.first).lastIndexOf("$scope = CoroutineScope(")
+            assertTrue("$scope is not fenced", activity.startsWith("$scope = CoroutineScope(Dispatchers.Main + turnFence.element())", created))
+        }
+        // The deletion stops the job generating the reply, whichever scope runs it.
+        assertTrue(function("generateResponse").contains("replyJob = currentCoroutineContext()[kotlinx.coroutines.Job]"))
+        assertTrue(function("retireRunningWorkForDeletion").contains("replyJob\n"))
+        // A reply finishing successfully stops if a deletion retired it meanwhile.
+        val successes = activity.split("val providerDiagnostics = finalizeLifecycleSuccess()")
+        assertEquals(4, successes.size)
+        successes.drop(1).forEach {
+            assertTrue(it.take(300).contains("if (turnFence.isStale()) throw CancellationException(\"Retired by message deletion\")"))
+        }
     }
 
     @Test fun theErrorHandlerRechecksTheFenceAfterItsWaitAndTouchesOnlyItsOwnRow() {
