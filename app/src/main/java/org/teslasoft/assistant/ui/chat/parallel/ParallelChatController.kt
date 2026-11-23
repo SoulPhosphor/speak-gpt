@@ -193,6 +193,25 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         return true
     }
 
+    fun applyImageSummary(imageId: String, prompt: String, summary: String): Boolean {
+        if (closed || host.unavailable) return false
+        val index = host.messages.indexOfFirst { row ->
+            ResponseGroupImages.pendingSummaries(row).any { it.imageId == imageId && it.prompt == prompt }
+        }
+        if (index < 0) return false
+        val row = host.messages[index]
+        val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return false
+        val after = ResponseGroupImages.summarize(group, imageId, prompt, summary)
+        if (after == group) return false
+        host.messages[index] = ResponseGroupEdits.install(row, after)
+        if (!host.save()) { host.messages[index] = row; host.save(); return false }
+        val primary = group.slots.single { it.slotId == group.primarySlotId }
+        val canonical = primary.versions.single { it.versionId == primary.canonicalVersionId }
+        host.changed(index, canonical != after.slots.single { it.slotId == primary.slotId }
+            .versions.single { it.versionId == primary.canonicalVersionId })
+        return true
+    }
+
     fun stopAll() {
         if (!preparing) { host.messages.indices.toList().forEach { stop(it, null) }; return }
         if (stopping || closed) return

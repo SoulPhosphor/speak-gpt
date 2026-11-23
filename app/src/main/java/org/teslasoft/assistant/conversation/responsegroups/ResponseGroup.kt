@@ -49,7 +49,9 @@ data class ResponseVersion(
     val fields: Map<String, String>,
     val attempts: List<ResponseAttempt>,
     /** User-edited image reminder; never replaces the original provider/image receipt. */
-    val imageSummaryEdited: String? = null
+    val imageSummaryEdited: String? = null,
+    /** Automatic image reminder, separate from the immutable image receipt and user edit. */
+    val imageSummary: String? = null
 )
 
 @Keep

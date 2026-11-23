@@ -405,6 +405,56 @@ class ParallelControllerInstrumentedTest {
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
+    @Test fun delayedImageSummaryUsesTheLatestOwnedRowAndFailedSavesLeaveItRetryable() = fixture { activity, host ->
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { _, out -> out.text("answer") } },
+                    { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            host.finished.await()
+            withContext(Dispatchers.Main.immediate) {
+                val original = host.group()
+                val slot = original.slots[3]
+                val imageId = id()
+                val meta = org.teslasoft.assistant.imagegen.GeneratedImageMetadata(imageId, null, "image/png", 32, 32,
+                    "fixture", "fixture", "original prompt", "description", 100L, "complete", null)
+                val imaged = original.copy(slots = original.slots.map { selected ->
+                    if (selected.slotId != slot.slotId) selected else selected.copy(versions = selected.versions.map { version ->
+                        version.copy(attempts = version.attempts.mapIndexed { index, attempt ->
+                            if (index != version.attempts.lastIndex) attempt else attempt.copy(imageJobId = imageId, imageResult = meta.toJson())
+                        })
+                    })
+                })
+                host.messages[1] = ResponseGroupEdits.install(host.messages[1], imaged)
+                assertTrue(host.save())
+                controller.browse(1, slot.slotId, slot.foregroundVersionId)
+                controller.editImageSummary(1, "user edit while summarizing")
+                assertFalse(controller.applyImageSummary(imageId, meta.prompt, "late automatic summary"))
+                assertEquals("user edit while summarizing", host.stored().slots[3].versions.single().imageSummaryEdited)
+                controller.editImageSummary(1, null)
+                controller.browse(1, original.primarySlotId, original.slots.first().foregroundVersionId)
+                val before = host.group()
+                host.failSave = true
+                assertFalse(controller.applyImageSummary(imageId, meta.prompt, "automatic reminder"))
+                assertEquals(before, host.group())
+                assertEquals(before, host.stored())
+                host.failSave = false
+                assertTrue(controller.applyImageSummary(imageId, meta.prompt, "automatic reminder"))
+                val saved = host.stored()
+                assertEquals("automatic reminder", saved.slots[3].versions.single().imageSummary)
+                assertEquals(before.primarySlotId, saved.primarySlotId)
+                assertEquals(before.foregroundSlotId, saved.foregroundSlotId)
+                assertEquals(before.slots.take(3), saved.slots.take(3))
+                assertEquals(before.slots[3].versions.single().attempts, saved.slots[3].versions.single().attempts)
+                assertEquals(before.input, saved.input)
+                host.messages.clear()
+                assertFalse(controller.applyImageSummary(imageId, meta.prompt, "after deletion"))
+            }
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
+    }
+
     private inner class Host(override val chatId: String) : ParallelChatController.Host {
         override val messages = arrayListOf<HashMap<String, Any>>()
         override var rawInput = "current message"

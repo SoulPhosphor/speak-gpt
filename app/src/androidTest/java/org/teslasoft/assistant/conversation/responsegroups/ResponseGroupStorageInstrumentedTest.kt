@@ -177,12 +177,15 @@ class ResponseGroupStorageInstrumentedTest {
             imageJobId = imageId, imageResult = """{"imageId":"$imageId","status":"failed","failureCode":"PROVIDER_ERROR"}""")
         val after = old.copy(slots = old.slots.map { current -> if (current != slot) current else current.copy(
             versions = current.versions.map { v -> if (v != version) v else v.copy(fields = fields,
-                attempts = v.attempts.dropLast(1) + parent.copy(toolAssistantMessage = toolMessage) + continuation) }) })
+                attempts = v.attempts.dropLast(1) + parent.copy(toolAssistantMessage = toolMessage) + continuation,
+                imageSummary = "automatic reminder", imageSummaryEdited = "user reminder") }) })
         val result = ResponseGroupStore.replace(context, chatId, ResponseGroupTarget(chatId, old.assistantMessageId, old.groupId),
             original[2]["responseGroup"] as String, after) { fail("Nonprimary continuation must not rewrite canonical sources") }
         assertTrue(result is ResponseGroupStore.Result.Saved)
         val expected = read()
         assertEquals(requestId, group(expected[2]).slots[1].versions.last().attempts.last().requestId)
+        assertEquals("automatic reminder", group(expected[2]).slots[1].versions.last().imageSummary)
+        assertEquals("user reminder", group(expected[2]).slots[1].versions.last().imageSummaryEdited)
         assertTrue(prefs.editChat(context, "Renamed tool fixture", "Synthetic groups", chatId))
         assertEquals(expected, read())
         verifyBackupAndRestore(expected)
