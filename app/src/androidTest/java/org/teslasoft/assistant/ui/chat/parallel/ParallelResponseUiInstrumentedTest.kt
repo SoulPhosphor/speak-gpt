@@ -100,6 +100,44 @@ class ParallelResponseUiInstrumentedTest {
         assertNotNull(send.colorFilter)
     }
 
+    @Test fun summarizerTitleSwitchPersistsAndSitsAboveTheNewChatSwitch() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = org.teslasoft.assistant.preferences.Preferences.getPreferences(context, "")
+        val previous = prefs.getUseSummarizerForTitles()
+        val newChats = prefs.getSummarizerOnForNewChats()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        var activity: org.teslasoft.assistant.ui.activities.SummarizerSettingsActivity? = null
+        try {
+            prefs.setUseSummarizerForTitles(false)
+            repeat(2) { visit ->
+                val opened = instrumentation.startActivitySync(android.content.Intent(context,
+                    org.teslasoft.assistant.ui.activities.SummarizerSettingsActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as org.teslasoft.assistant.ui.activities.SummarizerSettingsActivity
+                activity = opened
+                onMain {
+                    val title = opened.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switch_summarizer_titles)
+                    val newChat = opened.findViewById<View>(R.id.switch_summarizer_new_chats)
+                    assertEquals(visit == 1, title.isChecked)
+                    val titleRow = title.parent as View
+                    val newChatRow = newChat.parent as View
+                    assertSame(titleRow.parent, newChatRow.parent)
+                    val parent = titleRow.parent as android.view.ViewGroup
+                    assertTrue(parent.indexOfChild(titleRow) < parent.indexOfChild(newChatRow))
+                    if (visit == 0) {
+                        title.performClick()
+                        assertTrue(prefs.getUseSummarizerForTitles())
+                    }
+                    assertEquals(newChats, prefs.getSummarizerOnForNewChats())
+                    opened.finish()
+                }
+                activity = null
+            }
+        } finally {
+            onMain { activity?.finish() }
+            prefs.setUseSummarizerForTitles(previous)
+        }
+    }
+
     private fun themed(night: Int = Configuration.UI_MODE_NIGHT_NO): Context {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val config = Configuration(context.resources.configuration).apply { uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or night }

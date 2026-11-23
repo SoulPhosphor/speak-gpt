@@ -3365,6 +3365,14 @@ class Preferences internal constructor(
         putGlobalString("summarizer_length", value.coerceAtLeast(10).toString())
     }
 
+    /** Global title-model choice, independent of conversation summarization. Default off. */
+    fun getUseSummarizerForTitles(): Boolean =
+        getGlobalString("summarizer_for_titles", "false") == "true"
+
+    fun setUseSummarizerForTitles(value: Boolean) {
+        putGlobalString("summarizer_for_titles", value.toString())
+    }
+
     /** Whether new chats start with the summarizer on (decision 2 toggle). */
     fun getSummarizerOnForNewChats(): Boolean =
         getGlobalString("summarizer_on_new_chats", "false") == "true"

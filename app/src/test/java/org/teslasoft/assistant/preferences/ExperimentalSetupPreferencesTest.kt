@@ -46,6 +46,35 @@ class ExperimentalSetupPreferencesTest {
         assertTrue(PerChatSettingKeys.ALL.contains("experimental_setup"))
     }
 
+    @Test fun allFiveModeChoicesReopenWithCorrectContextAndPreserveTheConversation() {
+        val store = FakeSharedPreferences()
+        val global = FakeSharedPreferences()
+        val prefs = Preferences(store, global, "chat")
+        store.edit().putString("messages", "all original turns and alternatives")
+            .putString("summarizer_summary", "saved summary").commit()
+        val models = listOf(model("a"), model("b"))
+        val choices = listOf(
+            ExperimentalSetup(ExperimentalSetup.Mode.OFF, true, models, "a"),
+            ExperimentalSetup(ExperimentalSetup.Mode.SINGLE, false, models, "a"),
+            ExperimentalSetup(ExperimentalSetup.Mode.SINGLE, true, models, "a"),
+            ExperimentalSetup(ExperimentalSetup.Mode.PARALLEL, false, models, "a"),
+            ExperimentalSetup(ExperimentalSetup.Mode.PARALLEL, true, models, "a")
+        )
+        val history = listOf("old user", "canonical answer", "new user")
+        for (choice in choices + choices.reversed()) {
+            assertTrue(prefs.saveExperimentalSetup(choice))
+            val reopened = Preferences(store, global, "chat")
+            assertEquals(choice, reopened.readExperimentalSetup())
+            assertEquals(choice.enabled, reopened.getChatExperimentalMode())
+            assertEquals(choice.usesLastMessageOnly, reopened.getChatLastMessageOnly())
+            val projected = org.teslasoft.assistant.conversation.ExperimentalMode.requestEntries(
+                history, reopened.getChatLastMessageOnly()) { it.endsWith("user") }
+            assertEquals(if (choice.usesLastMessageOnly) listOf("new user") else history, projected)
+            assertEquals("all original turns and alternatives", store.getString("messages", null))
+            assertEquals("saved summary", store.getString("summarizer_summary", null))
+        }
+    }
+
     @Test fun invalidRawDataIsRetainedAndNeverReplacedByLegacyToggle() {
         val store = FakeSharedPreferences()
         store.edit().putString("experimental_setup", "{future or damaged}").commit()
