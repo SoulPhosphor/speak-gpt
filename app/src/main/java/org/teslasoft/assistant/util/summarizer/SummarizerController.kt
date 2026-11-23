@@ -290,6 +290,13 @@ class SummarizerController(
      * compaction is left alone: it already discards its result if the
      * messages it froze were changed.
      */
+    /** [cancelSummarizingAndWait] without the wait, for the main thread: the
+     *  cycle stops at its next suspension, before it can save a section. */
+    fun cancelSummarizing() {
+        if (manualCompactionRunning || outlineRunning) return
+        job?.cancel()
+    }
+
     suspend fun cancelSummarizingAndWait() {
         if (manualCompactionRunning || outlineRunning) return
         val running = job ?: return

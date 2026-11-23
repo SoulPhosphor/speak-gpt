@@ -148,6 +148,8 @@ class ChatDeletionCoordinator internal constructor(
                     // Before the chat data is cleaned up, so a late image
                     // result can never write the deleted chat back.
                     ImageGenerationJobRegistry.markChatsDeleted(it)
+                    // Nor can a kept message-deletion save.
+                    org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared.discard(it)
                     ChatSearchIndexManager.get(app).scheduleChatsDeleted(it)
                 }
             )

@@ -58,6 +58,9 @@ internal class ParallelRequestCoordinator(
     private val keepAlive: (ResponseGroupTarget) -> AutoCloseable = { AutoCloseable {} }
 ) {
     private val requests = ConcurrentHashMap<String, Running>()
+    // Advanced by signalCancelAll; a dispatch or regeneration that began before
+    // it launches its requests already stopped, so none reaches a provider.
+    @Volatile private var stopAllGeneration = 0L
     private val pendingStops = ConcurrentHashMap.newKeySet<String>()
     private val checkpointLock = Mutex()
     private val checkpointTimes = ConcurrentHashMap<ResponseGroupTarget, Long>()
@@ -95,7 +98,12 @@ internal class ParallelRequestCoordinator(
     /** The entire group (all IDs/assignments/input) commits before any pricing/client/network work.
      * Calling this twice is rejected; a loaded pending group is never permission to resend it.
      */
-    suspend fun dispatch(chatId: String, input: ResponseGroup, commitTurnContext: () -> Unit): Run = withContext(worker) {
+    suspend fun dispatch(chatId: String, input: ResponseGroup, commitTurnContext: () -> Unit): Run {
+        val generation = stopAllGeneration
+        return withContext(worker) { dispatchFrom(generation, chatId, input, commitTurnContext) }
+    }
+
+    private fun dispatchFrom(generation: Long, chatId: String, input: ResponseGroup, commitTurnContext: () -> Unit): Run {
         val group = detach(input)
         val target = ResponseGroupTarget(chatId, group.assistantMessageId, group.groupId)
         val prepared = prepare(target, group, group.slots)
@@ -104,13 +112,18 @@ internal class ParallelRequestCoordinator(
             group
         }
         commitTurnContext()
-        launch(prepared)
+        return launch(prepared, generation)
     }
 
     /** Appends only the selected slot's version, keeping the original prompt/settings and all receipts.
      * The guarded store refuses canonical branch changes with descendants. No network runs on refusal.
      */
-    suspend fun regenerate(target: ResponseGroupTarget, slotId: String): Run = withContext(worker) {
+    suspend fun regenerate(target: ResponseGroupTarget, slotId: String): Run {
+        val generation = stopAllGeneration
+        return withContext(worker) { regenerateFrom(generation, target, slotId) }
+    }
+
+    private fun regenerateFrom(generation: Long, target: ResponseGroupTarget, slotId: String): Run {
         val before = persistence.read(target)
         val oldSlot = before.slots.single { it.slotId == slotId }
         require(oldSlot.versions.none { v -> v.attempts.any { it.state == MessageCompletionState.STREAMING } }) {
@@ -128,13 +141,19 @@ internal class ParallelRequestCoordinator(
             require(current == before) { "stale_regeneration" }
             after
         }
-        launch(prepared)
+        return launch(prepared, generation)
     }
 
     /** Nonblocking signal, also retained across the durable-reservation/registration interval. */
     fun signalCancel(requestId: String) {
         pendingStops.add(requestId)
         requests[requestId]?.job?.cancel(ParallelUserStop())
+    }
+
+    /** Nonblocking stop of every owned request, for a caller that cannot wait. */
+    fun signalCancelAll() {
+        stopAllGeneration += 1
+        requests.keys.toList().forEach(::signalCancel)
     }
 
     /** Single-request callers may also wait until the complete owned chain has drained. */
@@ -169,6 +188,8 @@ internal class ParallelRequestCoordinator(
 
     fun unsavedRequestIds(): Set<String> = requests.values.filter { it.unsaved }.mapTo(HashSet()) { it.request.requestId }
 
+    fun unsavedTargets(): Set<ResponseGroupTarget> = requests.values.filter { it.unsaved }.mapTo(HashSet()) { it.request.target }
+
     /** Explicit reopen reconciliation, with no launch/resume path. */
     suspend fun reconcileInterrupted(target: ResponseGroupTarget): ResponseGroup = withContext(worker) {
         persistence.update(target) { current -> ResponseGroupEdits.interrupted(requireNotNull(current)) }
@@ -202,7 +223,7 @@ internal class ParallelRequestCoordinator(
         }
     }
 
-    private fun launch(prepared: List<Running>): Run {
+    private fun launch(prepared: List<Running>, generation: Long): Run {
         // One supervisor prevents either a transport failure or save failure from cancelling siblings.
         val parent = SupervisorJob(scope.coroutineContext[Job])
         val lease = keepAlive(prepared.first().request.target)
@@ -215,6 +236,10 @@ internal class ParallelRequestCoordinator(
         }
         val ownedScope = CoroutineScope(scope.coroutineContext + parent + worker)
         prepared.forEach { require(requests.putIfAbsent(it.request.requestId, it) == null) }
+        // Stopped while being prepared: registered as stopped, never sent.
+        // Checked after registering, so a stop-all either sees these requests
+        // or advanced the generation before this check.
+        if (generation != stopAllGeneration) prepared.forEach { pendingStops.add(it.request.requestId) }
         val jobs = prepared.map { first ->
             val owned = java.util.concurrent.ConcurrentLinkedQueue<Running>().also { it.add(first) }
             ownedScope.launch(start = CoroutineStart.UNDISPATCHED) {

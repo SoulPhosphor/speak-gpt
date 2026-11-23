@@ -859,6 +859,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return true
         }
         override fun save() = saveSettings(synchronous = true) == ChatStorageHealth.WriteOutcome.OK
+        override fun deletedGroupSettled(row: HashMap<String, Any>) {
+            // The existing usage-log repair adds or enriches each request of
+            // the deleted row by its request ID; nothing is counted twice.
+            val prefs = preferences ?: return
+            CoroutineScope(Dispatchers.IO + kotlinx.coroutines.NonCancellable).launch {
+                try { UsageLogStore.seed(prefs, listOf(row)) } catch (_: Exception) { }
+            }
+        }
         override fun changed(position: Int, canonical: Boolean) {
             if (canonical) rebuildModelProjection()
             adapter?.notifyItemChanged(position)
@@ -1127,6 +1135,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var parseMessageScope: CoroutineScope? = null
     private var requestPreparationInProgress = false
 
+    // A message deletion retires the reply in progress at once instead of
+    // waiting for it to wind down; see deleteMessageRange.
+    private val turnFence = org.teslasoft.assistant.ui.chat.ConversationTurnFence()
+
+    // True while the running reply's terminal state has not been written yet.
+    private var replyTerminalPending = false
+
+    // True only while deleteMessageRange settles the conversation on the main thread.
+    private var holdSavesForDeletion = false
+
     // Joins the Voice Debug Log lines one voice moment writes at the same
     // instant into a single entry (see VoiceLogGroup).
     private val voiceLogGroup = org.teslasoft.assistant.ui.chat.VoiceLogGroup { tag, level, message ->
@@ -1194,6 +1212,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun restoreUIState() {
+        // A reply retired by a message deletion no longer owns the composer.
+        if (turnFence.isStale()) return
         runOnUiThread {
             setGenerationProgressVisible(false)
             btnMicro?.isEnabled = true
@@ -9203,6 +9223,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         bookmarkChanged: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
         if (deletingChat) return ChatStorageHealth.WriteOutcome.FAILED
+        // A message deletion is settling the conversation; its one background
+        // save, made right after, includes every change made meanwhile.
+        if (holdSavesForDeletion) return ChatStorageHealth.WriteOutcome.OK
         // Guarded save (Round 4): ChatPreferences refuses the write when the
         // chat's storage is locked or its stored value is preserved-corrupt —
         // this screen's in-memory list came from that unreadable read, and
@@ -9225,12 +9248,42 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             } else {
                 messages
             }
-        return ChatPreferences.getChatPreferences().saveChatHistory(
-            this,
+        // Ordered with any background save of this chat (see
+        // saveSettingsInBackground): an older snapshot never lands after this.
+        val order = org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared
+        val seq = order.claim(chatId)
+        return order.writeIfNewest(chatId, seq, { it == ChatStorageHealth.WriteOutcome.OK }) {
+            ChatPreferences.getChatPreferences().saveChatHistory(
+                this,
+                chatId,
+                persistableMessages,
+                synchronous = synchronous,
+                bookmarkChanged = bookmarkChanged
+            )
+        } ?: ChatStorageHealth.WriteOutcome.OK
+    }
+
+    /**
+     * Saves the conversation without making the screen wait: the rows are
+     * copied now, then written in order on the save thread and retried until
+     * that save, or a newer one, succeeds. Used by message deletion.
+     */
+    private fun saveSettingsInBackground() {
+        if (deletingChat || chatStorageUnavailable || chatId.isBlank()) return
+        val chatPreferences = ChatPreferences.getChatPreferences()
+        // IDs and numbers are given to the live rows, so the snapshot and the
+        // screen agree on them.
+        chatPreferences.prepareForSave(this, chatId, messages)
+        val rows = messages.filterNot {
+            it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true || it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
+        }
+        val order = org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared
+        order.saveInBackground(
             chatId,
-            persistableMessages,
-            synchronous = synchronous,
-            bookmarkChanged = bookmarkChanged
+            order.claim(chatId),
+            org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.snapshotOf(rows),
+            bookmarkChanged = false,
+            writer = org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.historyWriter(this)
         )
     }
 
@@ -9446,7 +9499,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     syncChatProjection()
                 }
 
-                parseMessageScope = CoroutineScope(Dispatchers.Main)
+                parseMessageScope = CoroutineScope(Dispatchers.Main + turnFence.element())
                 parseMessageScope?.launch {
                     progress?.setOnClickListener {
                         userRequestedStop = true
@@ -9540,6 +9593,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ImageGenerationJobRegistry.detach(chatId, this)
             return
         }
+        applyImageTerminal(job, terminal)
+    }
+
+    /** Shows an image job's ending in the chat (also used by a message
+     *  deletion, which shows the Cancelled ending of a job it stops). */
+    private fun applyImageTerminal(
+        job: ImageGenerationJobRegistry.ActiveJob,
+        terminal: ImageGenerationJobRegistry.Terminal
+    ) {
         removeImageProgressCard()
         val fromImagine = job.origin == ImageGenerationJobRegistry.Origin.IMAGINE
         when (terminal) {
@@ -10143,7 +10205,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                 }
             } finally {
-                generationRequestActive = false
+                if (!turnFence.isStale()) generationRequestActive = false
             }
         } else {
             // A completed response is a real non-streaming API call. Do not
@@ -10156,7 +10218,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 generationRequestActive = true
                 withGenerationRequestContext { ai!!.chatCompletion(request) }
             } finally {
-                generationRequestActive = false
+                if (!turnFence.isStale()) generationRequestActive = false
             }
             val choice = completion.choices.firstOrNull()
             val content = choice?.message?.content?.takeIf { it != "null" }
@@ -10406,32 +10468,81 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
         streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
     ) {
-        val terminalAttempt = currentProviderUsageAttempt
-        val terminalPricing = currentPricingCatalog
-        val terminalRecord = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            completeTerminalUsageRecord(terminalAttempt, terminalPricing)
-        }
+        // A message deletion that retired this reply finalized it already.
+        if (turnFence.isStale()) return
+        val carrier = usageCarrier()
+        val attached = completeClaimedTerminal(
+            claimTerminalState(), carrier,
+            outcome, finishReasonDisplay, streamClosed, termination, errorText
+        )
+        // Retired by a message deletion while the record was being completed:
+        // this reply's own save is skipped, so save the usage it added.
+        if (attached && turnFence.isStale() && messages.any { it === carrier }) saveSettingsInBackground()
+    }
+
+    /** One reply's usage and lifecycle state, taken off the screen's fields. */
+    private class ClaimedTerminal(
+        val attempt: ProviderUsageAttempt?,
+        val pricing: Deferred<TokenPricingCatalog>?,
+        val pendingPricing: Deferred<TokenPricingCatalog>?,
+        val lifecycle: ResponseLifecycleRecorder?
+    )
+
+    /**
+     * Takes the running reply's usage and lifecycle state before anything can
+     * wait, so a reply started while this one finishes keeps its own state.
+     */
+    private fun claimTerminalState(): ClaimedTerminal {
+        val claimed = ClaimedTerminal(
+            currentProviderUsageAttempt, currentPricingCatalog,
+            pendingCompletedPricingCatalog, currentLifecycle
+        )
         currentProviderUsageAttempt = null
-        currentPricingCatalog?.cancel()
         currentPricingCatalog = null
         currentPricingCatalogEndpointFingerprint = null
         currentPricingCatalogCompletedAtElapsedMs = null
         pendingProviderUsageSnapshot = null
-        pendingCompletedPricingCatalog?.cancel()
         pendingCompletedPricingCatalog = null
         pendingCompletedPricingCatalogEndpointFingerprint = null
         pendingCompletedPricingCatalogCompletedAtElapsedMs = null
+        currentLifecycle = null
+        return claimed
+    }
+
+    /** The row a reply's usage is recorded on, chosen before anything waits. */
+    private fun usageCarrier(): HashMap<String, Any>? =
+        messages.lastOrNull { it["isBot"] == true }
+            ?: messages.lastOrNull { it["isBot"] != true }
+
+    /**
+     * Records the claimed reply's usage on [carrier] and writes its lifecycle
+     * entry. A carrier deleted meanwhile still has its usage added to the
+     * chat's usage log (attachUsageRecords writes the log first).
+     */
+    private suspend fun completeClaimedTerminal(
+        claimed: ClaimedTerminal,
+        carrier: HashMap<String, Any>?,
+        outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
+        streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
+    ): Boolean {
+        val terminalRecord = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            completeTerminalUsageRecord(claimed.attempt, claimed.pricing)
+        }
+        claimed.pricing?.cancel()
+        claimed.pendingPricing?.cancel()
+        var attached = false
         terminalRecord?.let { record ->
-            val carrier = messages.lastOrNull { it["isBot"] == true }
-                ?: messages.lastOrNull { it["isBot"] != true }
             carrier?.let {
                 attachUsageRecords(it, listOf(record), it["isBot"] == true)
                 mirrorUsageRecordsToCanonicalVariant(it)
+                attached = true
             }
         }
-        val r = currentLifecycle ?: return
-        if (r.finalized) return
-        writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
+        val r = claimed.lifecycle
+        if (r != null && !r.finalized) {
+            writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
+        }
+        return attached
     }
 
     /** A reply with versions is totalled from its version list, and its
@@ -10593,7 +10704,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             generationId = r.generationId, errorText = errorText,
             attemptId = r.attemptId
         ) + providerRoutingLogLine(r.model) + reasoningLogLine()
-        currentLifecycle = null
+        if (currentLifecycle === r) currentLifecycle = null
         org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
     }
 
@@ -10791,7 +10902,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         disableTurnControlsUnlessTheyAreStops()
         setGenerationProgressVisible(true)
 
-        parseMessageScope = CoroutineScope(Dispatchers.Main)
+        parseMessageScope = CoroutineScope(Dispatchers.Main + turnFence.element())
         parseMessageScope?.launch {
             try {
                 val preparedRequest = try {
@@ -10921,7 +11032,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     getString(R.string.request_prepare_failed_body)
                 )
             } catch (e: CancellationException) {
-                requestPreparationInProgress = false
+                if (!turnFence.isStale()) requestPreparationInProgress = false
                 restoreUIState()
                 throw e
             } catch (e: PdfPreparationException) {
@@ -11661,6 +11772,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun putMessage(message: String, isBot: Boolean) {
+        // A retired reply can never add a row to the conversation.
+        if (turnFence.isStale()) return
         val map: HashMap<String, Any> = HashMap()
 
         map["message"] = message
@@ -11744,6 +11857,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  fragment ever reaches disk without it. A death before that first save
      *  leaves nothing on disk to mislead. */
     private fun markLastAssistantStreaming() {
+        if (turnFence.isStale()) return
         val last = messages.lastOrNull() ?: return
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.STREAMING
@@ -11863,6 +11977,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * turn with no reply. A reply that does exist is folded in as usual.
      */
     private fun settlePendingRegeneration() {
+        // A message deletion settled the regeneration of a reply it retired.
+        if (turnFence.isStale()) return
         if (pendingRetryVariants == null) return
         val last = messages.lastOrNull()
         // An image card still on screen means the turn has not finished.
@@ -12275,6 +12391,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         errorTag: String,
         errorSummary: String
     ) {
+        // A retired reply's row was settled by the message deletion.
+        if (turnFence.isStale()) return
         if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
             putMessage("", true)
         }
@@ -12703,6 +12821,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // socket, and the request dies with "Software caused connection abort").
         GenerationForegroundService.begin(this, chatId, chatName)
 
+        // From here the cancellation handler below writes this reply's
+        // terminal state; a message deletion that comes first writes it instead.
+        replyTerminalPending = true
         try {
             var response = ""
 
@@ -12853,85 +12974,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // unknown early end are never conflated (owner ruling, Aug 8 2026).
             // No suspension points below, so this runs even though the coroutine
             // is already cancelled.
-            val destroying = isFinishing || isDestroyed
-            val replyStarted = messages.isNotEmpty() &&
-                messages[messages.size - 1]["isBot"] == true
-            val (state, detail) = MessageCompletionState.classifyCancellation(
-                userRequestedStop, destroying, replyStarted
-            )
-            when (detail) {
-                MessageCompletionState.DETAIL_USER_STOP -> {
-                    // A deliberate Stop names the user's action in the chat,
-                    // while remaining a non-error in the existing diagnostics.
-                    finalizeLifecycleTerminal(
-                        ResponseLifecycle.Outcome.STOPPED, "missing", true,
-                        ResponseLifecycle.Termination.USER_STOP, null
-                    )
-                    showTerminalFailure(
-                        state, detail, null, logAsError = false,
-                        errorTag = "", errorSummary = ""
-                    )
+            // A message deletion that retired this reply has already settled
+            // its row, usage and screen; nothing here may touch them now.
+            if (!turnFence.isStale()) {
+                val destroying = isFinishing || isDestroyed
+                val replyStarted = messages.isNotEmpty() &&
+                    messages[messages.size - 1]["isBot"] == true
+                val plan = org.teslasoft.assistant.ui.chat.CancelledReplyTerminal.plan(
+                    userRequestedStop, destroying, replyStarted, providerRequestDispatched,
+                    getString(R.string.gen_interrupt_reason_screen_closed)
+                )
+                finalizeLifecycleTerminal(
+                    plan.outcome, "missing", true, plan.termination, plan.lifecycleError
+                )
+                // Skipped by showTerminalFailure itself if a deletion retired
+                // this reply while its usage record was being completed.
+                applyCancelledReplyPlan(plan)
+                calculateCost()
+                runOnUiThread {
+                    restoreUIState()
                 }
-                MessageCompletionState.DETAIL_START_FAILED -> {
-                    // The reply never started. Include the known reason (a
-                    // teardown) when there is one.
-                    val reason = if (destroying)
-                        getString(R.string.gen_interrupt_reason_screen_closed) else null
-                    val summary = "reply could not start" + (reason?.let { ": $it" } ?: "")
-                    finalizeLifecycleTerminal(
-                        if (destroying) ResponseLifecycle.Outcome.CANCELLED
-                        else ResponseLifecycle.Outcome.INCOMPLETE,
-                        "missing", true,
-                        if (destroying) ResponseLifecycle.Termination.APP_CANCEL
-                        else ResponseLifecycle.Termination.STREAM_CLOSED,
-                        summary
-                    )
-                    showTerminalFailure(
-                        state, detail, reason, logAsError = true,
-                        errorTag = "GenStartFailed", errorSummary = summary
-                    )
-                }
-                MessageCompletionState.DETAIL_SCREEN_CLOSED -> {
-                    // The app's own lifecycle tore the screen down mid-reply.
-                    val reason = getString(R.string.gen_interrupt_reason_screen_closed)
-                    finalizeLifecycleTerminal(
-                        ResponseLifecycle.Outcome.CANCELLED, "missing", true,
-                        ResponseLifecycle.Termination.APP_CANCEL, "app interrupted: $reason"
-                    )
-                    showTerminalFailure(
-                        state, detail, reason, logAsError = true,
-                        errorTag = "GenInterrupted", errorSummary = "app interrupted the reply: $reason"
-                    )
-                }
-                else -> {
-                    // Cancelled with no user stop and no teardown. Split on the
-                    // dispatch boundary: before the provider request was sent this
-                    // is a pre-dispatch cancellation (request_not_sent), recorded
-                    // as Cancelled; once dispatched it is the existing "ended
-                    // early; cause unknown" diagnostic. The visible row's terminal
-                    // handling is unchanged either way.
-                    if (providerRequestDispatched) {
-                        finalizeLifecycleTerminal(
-                            ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
-                            ResponseLifecycle.Termination.STREAM_CLOSED, "ended early; cause unknown"
-                        )
-                    } else {
-                        finalizeLifecycleTerminal(
-                            ResponseLifecycle.Outcome.CANCELLED, "missing", true,
-                            ResponseLifecycle.Termination.REQUEST_NOT_SENT, null
-                        )
-                    }
-                    showTerminalFailure(
-                        state, detail, null, logAsError = true,
-                        errorTag = "GenUnknownEnd", errorSummary = "reply ended early; cause unknown"
-                    )
-                }
-            }
-            calculateCost()
-            runOnUiThread {
-                restoreUIState()
             }
         } catch (e: Exception) {
+            if (turnFence.isStale()) return
             playErrorSignal()
             val failureDiagnostics = captureGenerationFailureDiagnostics()
             stopHandsFreeOnError()
@@ -13075,17 +13140,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 setGenerationProgressVisible(false)
             }
         } finally {
-            try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
-            generationNetworkMonitor = null
+            // Reference counted, so a retired reply still releases its own hold.
             GenerationForegroundService.end(this)
-            // Memory system transcript capture: this finally is the one place
-            // every turn (typed or voice, success or failure) passes exactly
-            // once with the user's message still in scope — the same
-            // single-funnel property the lorebook relies on.
-            recordTurnMemoryScope()
-            calculateCost()
-            runOnUiThread {
-                restoreUIState()
+            // A message deletion that retired this reply already did the rest.
+            if (!turnFence.isStale()) {
+                replyTerminalPending = false
+                try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
+                generationNetworkMonitor = null
+                // Memory system transcript capture: this finally is the one place
+                // every turn (typed or voice, success or failure) passes exactly
+                // once with the user's message still in scope — the same
+                // single-funnel property the lorebook relies on.
+                recordTurnMemoryScope()
+                calculateCost()
+                runOnUiThread {
+                    restoreUIState()
+                }
             }
         }
     }
@@ -13109,6 +13179,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Shows a waiting helper failure when the reply ends. The pop-up says the
      *  message was sent only when the reply actually finished. */
     private fun showPendingContextHelperFailure() {
+        if (turnFence.isStale()) return
         val failure = pendingContextHelperFailure ?: return
         pendingContextHelperFailure = null
         val delivered = messages.lastOrNull()?.let {
@@ -14440,7 +14511,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                 }
             } finally {
-                generationRequestActive = false
+                if (!turnFence.isStale()) generationRequestActive = false
             }
         } else {
             // Use Aallam's completed-response API directly. This path does not
@@ -14453,7 +14524,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 generationRequestActive = true
                 withGenerationRequestContext { ai!!.chatCompletion(chatCompletionRequest) }
             } finally {
-                generationRequestActive = false
+                if (!turnFence.isStale()) generationRequestActive = false
             }
             val choice = completion.choices.firstOrNull()
             val content = choice?.message?.content?.takeIf { it != "null" }
@@ -15574,45 +15645,114 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun deleteMessageRange(target: HashMap<String, Any>, deleteFollowing: Boolean) {
+        if (chatStorageUnavailable || deletingChat) return
         val targetId = org.teslasoft.assistant.preferences.MessageIdentity.idOf(target)
-        lifecycleScope.launch {
-            parallelChat.withRequestsStopped {
-                val imageJob = ImageGenerationJobRegistry.activeJob(chatId)
-                val generationJobs = listOfNotNull(
-                    parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),
-                    onSpeechResultsScope?.coroutineContext?.get(kotlinx.coroutines.Job)
-                )
-                generationJobs.forEach { it.cancel() }
-                stopReadback()
-                if (chatId.isNotBlank()) ImageGenerationJobRegistry.cancel(chatId)
-                generationJobs.forEach { it.join() }
-                // The registry completes only after its terminal callback has saved
-                // the final row. Include that row in the deletion, not after it.
-                imageJob?.await()
-                // Deleting stops a running summary update before the bookmark is
-                // realigned; its unfinished batch is discarded.
-                summarizerController?.cancelSummarizingAndWait()
-                val compactedBefore = preferences?.getManualCompactionBoundary() ?: 0
-                val currentPosition = messages.indexOfFirst { if (targetId.isBlank()) it === target else org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == targetId }
-                if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@withRequestsStopped
+        holdSavesForDeletion = true
+        try {
+            // Nothing here waits: the work stopped below winds down in the
+            // background and can no longer change this conversation.
+            retireRunningWorkForDeletion()
+            val compactedBefore = preferences?.getManualCompactionBoundary() ?: 0
+            val currentPosition = messages.indexOfFirst { if (targetId.isBlank()) it === target else org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == targetId }
+            if (currentPosition >= 0) {
                 val end = if (deleteFollowing) messages.size else currentPosition + 1
                 reconcileUsageBeforeRemoving()
                 val removed = ArrayList(messages.subList(currentPosition, end))
+                parallelChat.keepDeletedGroups(removed)
                 messages.subList(currentPosition, end).clear()
-                // Gallery records and generated image files have independent lifetimes.
-                if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
-                    messages.addAll(currentPosition, removed)
-                    Toast.makeText(this@ChatActivity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
-                } else {
-                    realignCondensedBoundaries(currentPosition, end)
-                }
+                realignCondensedBoundaries(currentPosition, end)
                 syncChatProjection()
                 selectionMode.exit()
                 askToRecompactAfterDelete(compactedBefore)
             }
-            // Resume only after the parallel mutation gate has reopened.
+        } finally {
+            holdSavesForDeletion = false
+        }
+        // Gallery records and generated image files have independent lifetimes.
+        // Confirmed deletions stay deleted: the save runs off the main thread
+        // and is retried until it, or a newer save, succeeds.
+        saveSettingsInBackground()
+        restartSummarizerAfterDeletion()
+    }
+
+    /** Resumes summary updates once the cancelled one has stopped. */
+    private fun restartSummarizerAfterDeletion() {
+        lifecycleScope.launch {
+            summarizerController?.cancelSummarizingAndWait()
             summarizerCycle()
         }
+    }
+
+    /**
+     * Stops everything that could still write to this conversation, at once
+     * and without waiting, ending each the way it would have ended itself:
+     * the reply in progress gets its terminal state and usage, a stopped
+     * image its Cancelled row, a regeneration its settled reply. The stopped
+     * work then winds down in the background, fenced off from the
+     * conversation, the composer and the next turn's state.
+     */
+    private fun retireRunningWorkForDeletion() {
+        parallelChat.abandonForDeletion()
+        val generationJobs = listOfNotNull(
+            parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),
+            onSpeechResultsScope?.coroutineContext?.get(kotlinx.coroutines.Job)
+        )
+        val imageJob = if (chatId.isNotBlank()) ImageGenerationJobRegistry.activeJob(chatId) else null
+        turnFence.retire()
+        generationJobs.forEach { it.cancel() }
+        stopReadback()
+
+        if (replyTerminalPending) {
+            // Exactly what the reply's own cancellation handler would write.
+            val carrier = usageCarrier()
+            val plan = org.teslasoft.assistant.ui.chat.CancelledReplyTerminal.plan(
+                userRequestedStop, isFinishing || isDestroyed,
+                messages.isNotEmpty() && messages[messages.size - 1]["isBot"] == true,
+                providerRequestDispatched,
+                getString(R.string.gen_interrupt_reason_screen_closed)
+            )
+            val claimed = claimTerminalState()
+            applyCancelledReplyPlan(plan)
+            try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
+            generationNetworkMonitor = null
+            recordTurnMemoryScope()
+            // The usage record waits briefly for its price; it is attached to
+            // its row, or only logged when that row is among those deleted.
+            CoroutineScope(Dispatchers.Main).launch {
+                val attached = completeClaimedTerminal(
+                    claimed, carrier, plan.outcome, "missing", true, plan.termination, plan.lifecycleError
+                )
+                if (attached && carrier != null && messages.any { it === carrier }) saveSettingsInBackground()
+            }
+        }
+        requestPreparationInProgress = false
+        generationRequestActive = false
+        settlePendingRegeneration()
+        showPendingContextHelperFailure()
+
+        if (imageJob != null && imageJob.chatId == chatId) {
+            // Its own late ending is delivered nowhere; this is its ending.
+            ImageGenerationJobRegistry.discardDelivery(imageJob)
+            applyImageTerminal(
+                imageJob,
+                ImageGenerationJobRegistry.Terminal.Cancelled(
+                    ImageGenerationJobRegistry.cancelledMetadata(imageJob)
+                )
+            )
+        }
+        // Stops a running summary update before the bookmark is realigned;
+        // its unfinished batch is discarded.
+        summarizerController?.cancelSummarizing()
+        calculateCost()
+        restoreUIState()
+    }
+
+    private fun applyCancelledReplyPlan(plan: org.teslasoft.assistant.ui.chat.CancelledReplyTerminal.Plan) {
+        showTerminalFailure(
+            plan.state, plan.detail, plan.reason, logAsError = plan.logAsError,
+            errorTag = plan.errorTag, errorSummary = plan.errorSummary
+        )
+        if (!turnFence.isStale()) replyTerminalPending = false
     }
 
     /**
@@ -15824,15 +15964,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .setTitle("Delete selected messages")
             .setMessage("Are you sure you want to delete selected messages?")
             .setPositiveButton("Delete") { _, _ ->
-                lifecycleScope.launch {
-                    // Deleting stops a running summary update first (see
-                    // deleteMessageRange), then removes and realigns.
-                    parallelChat.withRequestsStopped {
-                        summarizerController?.cancelSummarizingAndWait()
-                        deleteBulkSelection()
-                    }
-                    summarizerCycle()
-                }
+                if (chatStorageUnavailable || deletingChat) return@setPositiveButton
+                // Deleting stops Parallel Responses and a running summary update
+                // without waiting (see deleteMessageRange), then removes and
+                // realigns at once.
+                parallelChat.abandonForDeletion()
+                summarizerController?.cancelSummarizing()
+                deleteBulkSelection()
+                restartSummarizerAfterDeletion()
             }
             .setNegativeButton("Cancel") { _, _ -> }
             .show()
@@ -15841,7 +15980,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @SuppressLint("NotifyDataSetChanged")
     private fun deleteBulkSelection() {
         reconcileUsageBeforeRemoving()
-        val beforeRemoval = ArrayList(messages)
         val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
         val manualBoundaryBefore =
             preferences?.getManualCompactionBoundary() ?: 0
@@ -15861,6 +15999,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         var removedBeforeSummaryLock = 0
         var removedBeforeCompactionLock = 0
         val removedPositions = ArrayList<Int>()
+        parallelChat.keepDeletedGroups(
+            messages.filterIndexed { index, _ -> selectionMode.isSelected(index) }
+        )
         var pos = 0
         var p = 0
         while (pos < selectionMode.entries.size) {
@@ -15881,11 +16022,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             pos++
         }
-        if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
-            messages.clear(); messages.addAll(beforeRemoval)
-            Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
-            return
-        }
+        // Confirmed deletions stay deleted: saved off the main thread and
+        // retried until that save, or a newer one, succeeds.
+        saveSettingsInBackground()
         if (removedBeforeBookmark > 0) {
             preferences?.setSummarizerFoldedCount(foldedBefore - removedBeforeBookmark)
         }

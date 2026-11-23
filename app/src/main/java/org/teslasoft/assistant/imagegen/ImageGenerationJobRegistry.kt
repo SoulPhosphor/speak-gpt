@@ -178,6 +178,9 @@ object ImageGenerationJobRegistry {
 
         internal var job: Job? = null
 
+        /** Set by a message deletion that already showed this job's ending. */
+        @Volatile internal var deliveryDiscarded = false
+
         /** Awaited by the tool path to build its tool result. Cancelling
          *  the awaiting turn does NOT cancel the generation. */
         suspend fun await(): Terminal = terminal.await()
@@ -244,6 +247,18 @@ object ImageGenerationJobRegistry {
     fun cancel(chatId: String) {
         jobs[chatId]?.job?.cancel()
     }
+
+    /** A message deletion cancels [job] and shows its Cancelled ending itself
+     *  ([cancelledMetadata]); the job's own late ending is then delivered
+     *  nowhere, neither to a screen nor to stored history. Main thread. */
+    fun discardDelivery(job: ActiveJob) {
+        job.deliveryDiscarded = true
+        job.job?.cancel()
+    }
+
+    /** The record a Cancelled ending of [job] carries. */
+    fun cancelledMetadata(job: ActiveJob): GeneratedImageMetadata =
+        metadataFor(job, GeneratedImageMetadata.STATUS_CANCELLED)
 
     /** A parallel slot may cancel only the exact image it owns. Main thread, like start(). */
     fun cancelOwned(ownerKey: String, imageId: String) {
@@ -546,6 +561,7 @@ object ImageGenerationJobRegistry {
                 if (!deletionGuard.isChatDeleted(record)) record.ownedTerminal.invoke(terminal)
                 return
             }
+            if (record.deliveryDiscarded) return
             val delivery = imageJobDelivery(deletionGuard.isChatDeleted(record), listener != null)
             if (delivery == ImageJobDelivery.SCREEN && listener != null) {
                 try {
