@@ -90,6 +90,17 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 | Whether a vector row is still used | Unused rows are removed in the same transaction that removes their last passage | `ConversationIndexStoreInstrumentedTest.aSharedSearchTextKeepsItsVectorUntilTheLastPassageUsingItGoes` |
 | That the index describes the recorded chat version | The finishing transaction rechecks the chat version and that the indexed messages are exactly those written; otherwise the chat stays marked for refresh | `ConversationIndexUpdaterTest.aChatThatChangesDuringTheUpdateKeepsThePreviousStateForUnwrittenMessages`; `cancellingBetweenMessagesWritesNothingMore` |
 
+### Changes during waits — Stage 8, Step 9
+
+| Decision | Detect changes during the wait | Verification |
+| --- | --- | --- |
+| Which search text a waiting vector is made from | Rebuilt from the message as stored now; its permanent ID, eligibility, original-text fingerprint, cutter version and reader key must match, and the rebuilt input must give the stored search-text fingerprint, or nothing is read | `PassageEmbeddingWorkerTest.passagesCutForAnotherReaderAreNotReadButMarkedForRefresh`; `PassageEmbeddingGemmaTest.everyInputIsReadWholeAndFitsTheRealLimit` |
+| Whether a finished read may be stored | Inside the write transaction: the row must still be waiting and still used by that passage with that fingerprint, and the message is checked again just before commit; otherwise the write rolls back and the chat is marked for refresh | `PassageEmbeddingInstrumentedTest.anEditJustBeforeCommitRollsTheVectorWriteBack`; `anEditDuringTheReadKeepsTheVectorOutOfTheIndex`; `PassageEmbeddingWorkerTest.aDeletionDuringTheReadThrowsTheVectorAway`; `hidingTheMessageDuringTheReadThrowsTheVectorAway`; `aPassageReplacedDuringTheReadLeavesNoVectorForTheOldText` |
+| That an input too large for the model is recorded as failed | Counted with the model's tokenizer before the read, and refused again by the model's exact-input read; the failed mark uses the same transaction checks | `PassageEmbeddingGemmaTest.anInputOverTheRealLimitIsRecordedAsFailedAndNeverRead`; `PassageEmbeddingInstrumentedTest.theRealModelMakesTheVectorsThroughTheQueueAndNeverCutsAnInput` |
+| Per-chat progress after each vector | Recounted inside the same transaction for every chat using the vector; a write that fails part-way leaves the previous counts | `PassageEmbeddingInstrumentedTest.aWriteThatFailsPartWayLeavesTheWorkWaitingAndALaterPassFinishesIt` |
+| Whether an old model's vectors may be removed | One transaction rechecks that no passage uses another model, nothing waits and no chat is being refreshed | `PassageEmbeddingInstrumentedTest.anUnfinishedModelChangeKeepsTheOldVectorsAndAFinishedOneRemovesThem` |
+| Whether to continue after a pause | The saved pause is checked before every vector; a read already running is finished and stored | `PassageEmbeddingInstrumentedTest.closingAndReopeningKeepsFinishedVectorsAndResumesWithoutReadingThemAgain`; `PassageEmbeddingWorkerTest.pauseIsKeptAcrossANewWorkerAndResumingReadsOnlyWhatIsLeft` |
+
 ### External services and costs
 
 - Obtain model catalogs, capabilities, voice lists, prices, and other provider-controlled information from the provider or an authorized live source. Do not hard-code data that providers can change.

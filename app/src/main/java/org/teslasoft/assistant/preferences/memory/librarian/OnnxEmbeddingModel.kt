@@ -79,11 +79,29 @@ class OnnxEmbeddingModel private constructor(
         // Never ask the model for more than it accepts.
         val limit = tokenLimit.coerceIn(1, maxOf(messageTokenLimit, storedTextTokenLimit))
         val ids = tokenizer.encode(prepared, limit)
+        vectorFor(ids, control)
+    }
+
+    override fun countExactInputTokens(modelInput: String): Int = tokenizer.countTokens(modelInput)
+
+    override fun embedExactInput(
+        modelInput: String,
+        tokenLimit: Int,
+        control: EmbeddingQueue.ReadControl?
+    ): FloatArray = lifecycle.read {
+        val limit = tokenLimit.coerceIn(1, maxOf(messageTokenLimit, storedTextTokenLimit))
+        val tokens = tokenizer.countTokens(modelInput)
+        if (tokens > limit) throw InputTooLongException(tokens, limit)
+        // The count above showed the whole input fits, so nothing is cut here.
+        vectorFor(tokenizer.encode(modelInput, limit), control)
+    }
+
+    private fun vectorFor(ids: LongArray, control: EmbeddingQueue.ReadControl?): FloatArray {
         if (ids.isEmpty()) throw IllegalStateException("tokenizer produced no ids")
         val mask = LongArray(ids.size) { 1L }
         val pooled = runModel(ids, mask, control)
         val truncated = VectorMath.truncate(pooled, dimensions)
-        VectorMath.normalize(truncated)
+        return VectorMath.normalize(truncated)
     }
 
     /**

@@ -67,6 +67,27 @@ interface EmbeddingModel {
         control: EmbeddingQueue.ReadControl? = null
     ): FloatArray
 
+    /**
+     * How many tokens the model reads for [modelInput] exactly as given: the
+     * caller has already added any instruction prefix. Special tokens are
+     * counted; nothing is cut.
+     */
+    fun countExactInputTokens(modelInput: String): Int =
+        throw UnsupportedOperationException("$tag cannot read an exact input")
+
+    /**
+     * Embed [modelInput] exactly as given, with no prefix added, into a
+     * normalized vector of length [dimensions]. Never cut: an input longer
+     * than [tokenLimit] (special tokens included) throws
+     * [InputTooLongException] before the model reads anything. Stops through
+     * [control] like [embed].
+     */
+    fun embedExactInput(
+        modelInput: String,
+        tokenLimit: Int,
+        control: EmbeddingQueue.ReadControl? = null
+    ): FloatArray = throw UnsupportedOperationException("$tag cannot read an exact input")
+
     /** Embed with [messageTokenLimit]. */
     fun embed(text: String, isQuery: Boolean): FloatArray =
         embed(text, isQuery, messageTokenLimit)
@@ -79,3 +100,7 @@ interface EmbeddingModel {
     /** Release native sessions. Safe to call more than once. */
     fun close()
 }
+
+/** An input that does not fit the model's limit; it was not read, not cut. */
+class InputTooLongException(val tokens: Int, val limit: Int) :
+    IllegalArgumentException("input has $tokens tokens, limit $limit")

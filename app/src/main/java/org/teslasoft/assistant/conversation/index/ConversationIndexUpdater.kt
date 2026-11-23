@@ -45,7 +45,7 @@ class ConversationIndexUpdater(
         data class Failed(val cause: Exception) : Outcome
     }
 
-    private val searchSettings = "cut-t$targetTokens|o$overlapWords|${reader.key}"
+    private val searchSettings = SearchSettings(targetTokens, overlapWords, reader.key).encoded
 
     /**
      * @param messages every stored message of the chat, in stored order, as
@@ -139,5 +139,26 @@ class ConversationIndexUpdater(
             ))
         }
         return wanted
+    }
+}
+
+/**
+ * The cutting settings recorded on every passage: the target size, the
+ * overlap word count and the reader key. A change means cutting again; the
+ * vector worker reads them back to rebuild a passage's search text exactly.
+ */
+data class SearchSettings(val targetTokens: Int, val overlapWords: Int, val readerKey: String) {
+    val encoded: String get() = "cut-t$targetTokens|o$overlapWords|$readerKey"
+
+    companion object {
+        private val FORM = Regex("""cut-t(\d+)\|o(\d+)\|(.+)""", RegexOption.DOT_MATCHES_ALL)
+
+        /** The settings in [encoded], or null when it is not in the recorded form. */
+        fun decode(encoded: String): SearchSettings? {
+            val match = FORM.matchEntire(encoded) ?: return null
+            val target = match.groupValues[1].toIntOrNull() ?: return null
+            val overlap = match.groupValues[2].toIntOrNull() ?: return null
+            return SearchSettings(target, overlap, match.groupValues[3])
+        }
     }
 }

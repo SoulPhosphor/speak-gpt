@@ -587,6 +587,13 @@ class Librarian private constructor(private val appContext: Context) {
         }
     }
 
+    /** Conversation-index passage reads (Step 9) through the same queue, at
+     *  background priority, or null when no model is usable. */
+    fun passageVectorReader(): org.teslasoft.assistant.conversation.index.PassageVectorReader? {
+        val m = ensureModel() ?: return null
+        return org.teslasoft.assistant.conversation.index.QueuedPassageVectorReader(embeddingQueue, m)
+    }
+
     /**
      * Re-embed a single memory after a hand edit so the librarian matches on
      * its current text, not a stale (or missing) vector. Best-effort: a no-op
