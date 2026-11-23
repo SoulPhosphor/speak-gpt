@@ -44,7 +44,7 @@ class ConversationIndexStore private constructor(
     true
 ), ConversationIndexStorage {
 
-    /** Test hook: called inside a message write after its old rows are removed. */
+    /** Test hook: called inside a message or restamp write after it has changed rows, before the commit check. */
     @Volatile internal var afterOldRowsRemoved: (() -> Unit)? = null
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -107,7 +107,9 @@ class ConversationIndexStore private constructor(
         db.execSQL(
             "CREATE VIRTUAL TABLE passage_keywords USING fts5(" +
                 "words, content='', contentless_delete=1, detail=none," +
-                "tokenize='unicode61 remove_diacritics 0')"
+                // An apostrophe is part of a word, as in KeywordText's terms, so every
+                // stored term is one token and never needs a phrase query.
+                "tokenize=\"unicode61 remove_diacritics 0 tokenchars \")"
         )
         db.execSQL(
             "CREATE TRIGGER passages_keywords_ad AFTER DELETE ON passages BEGIN " +
@@ -160,15 +162,15 @@ class ConversationIndexStore private constructor(
         expected: MessageStamp?,
         replacement: MessageEntries?,
         chatUnchanged: () -> Boolean
-    ): IndexWrite = transaction { db ->
+    ): IndexWrite = writeTransaction { db ->
         require(replacement == null || replacement.messageId == messageId)
-        if (!chatUnchanged() || readStamps(db, chatId, messageId)[messageId] != expected) return@transaction IndexWrite.STALE
+        if (!chatUnchanged() || readStamps(db, chatId, messageId)[messageId] != expected) return@writeTransaction IndexWrite.STALE
         val oldVectors = vectorKeys(db, chatId, messageId)
         db.delete("passages", "chat_id = ? AND message_id = ?", arrayOf(chatId, messageId))
         afterOldRowsRemoved?.invoke()
         replacement?.let { insertPassages(db, chatId, it) }
         removeUnusedVectors(db, oldVectors)
-        IndexWrite.WRITTEN
+        publishIfUnchanged(chatUnchanged)
     }
 
     override fun restampMessage(
@@ -177,12 +179,13 @@ class ConversationIndexStore private constructor(
         expected: MessageStamp,
         stamp: MessageStamp,
         chatUnchanged: () -> Boolean
-    ): IndexWrite = transaction { db ->
+    ): IndexWrite = writeTransaction { db ->
         require(expected.sameSearchTexts(stamp))
-        if (!chatUnchanged() || readStamps(db, chatId, messageId)[messageId] != expected) return@transaction IndexWrite.STALE
+        if (!chatUnchanged() || readStamps(db, chatId, messageId)[messageId] != expected) return@writeTransaction IndexWrite.STALE
         db.update("passages", ContentValues().apply { putPlacement(stamp) },
             "chat_id = ? AND message_id = ?", arrayOf(chatId, messageId))
-        IndexWrite.WRITTEN
+        afterOldRowsRemoved?.invoke()
+        publishIfUnchanged(chatUnchanged)
     }
 
     override fun finishUpdate(
@@ -190,8 +193,8 @@ class ConversationIndexStore private constructor(
         chatVersion: String,
         expected: Map<String, MessageStamp>,
         chatUnchanged: () -> Boolean
-    ): IndexWrite = transaction { db ->
-        if (!chatUnchanged() || readStamps(db, chatId, null) != expected) return@transaction IndexWrite.STALE
+    ): IndexWrite = writeTransaction { db ->
+        if (!chatUnchanged() || readStamps(db, chatId, null) != expected) return@writeTransaction IndexWrite.STALE
         val waiting = db.rawQuery(
             "SELECT COUNT(*) FROM passages p JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
                 "AND v.vector_model = p.vector_model AND v.vector_dimensions = p.vector_dimensions " +
@@ -204,7 +207,16 @@ class ConversationIndexStore private constructor(
                 "needs_refresh = 0, waiting_vectors = excluded.waiting_vectors, fully_indexed = excluded.fully_indexed",
             arrayOf<Any>(chatId, chatVersion, waiting, if (waiting == 0) 1 else 0)
         )
-        IndexWrite.WRITTEN
+        publishIfUnchanged(chatUnchanged)
+    }
+
+    /** Thrown inside a transaction to roll it back when the chat changed while it ran. */
+    private class ChatChanged : RuntimeException()
+
+    /** The chat store is not locked by this transaction, so its version is checked again just before commit. */
+    private fun publishIfUnchanged(chatUnchanged: () -> Boolean): IndexWrite {
+        if (!chatUnchanged()) throw ChatChanged()
+        return IndexWrite.WRITTEN
     }
 
     /** For tests and later steps: the state of one vector row, or null when there is none. */
@@ -330,6 +342,10 @@ class ConversationIndexStore private constructor(
     }
 
     private fun Cursor.getStringOrNull(index: Int): String? = if (isNull(index)) null else getString(index)
+
+    /** A write transaction; when the chat changed before commit, it is rolled back and reported stale. */
+    private inline fun writeTransaction(block: (SQLiteDatabase) -> IndexWrite): IndexWrite =
+        try { transaction(block) } catch (_: ChatChanged) { IndexWrite.STALE }
 
     private inline fun <T> transaction(block: (SQLiteDatabase) -> T): T {
         val db = writableDatabase

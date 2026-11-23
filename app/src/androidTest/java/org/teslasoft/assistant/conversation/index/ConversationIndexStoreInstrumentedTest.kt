@@ -217,6 +217,36 @@ class ConversationIndexStoreInstrumentedTest {
         assertEquals(before, store.indexedMessages("chat"))
     }
 
+    @Test fun aChatChangeWhileAWriteIsInProgressRollsTheWriteBack() {
+        update(chat())
+        val before = store.indexedMessages("chat")
+        version = "v2"
+        // The chat is saved again after the old rows are removed and before the commit.
+        store.afterOldRowsRemoved = { version = "v3" }
+        val edited = chat().toMutableList().also { it[0] = user("u1", "Entirely new words about gardens.") }
+        assertEquals(ConversationIndexUpdater.Outcome.Stale, update(edited, recorded = "v2"))
+        assertEquals(before, store.indexedMessages("chat"))
+        assertTrue(store.passagesWithWords("chat", listOf("garden")).isEmpty())
+
+        // The same holds for a moved message that is only restamped.
+        version = "v4"
+        store.afterOldRowsRemoved = { version = "v5" }
+        assertEquals(ConversationIndexUpdater.Outcome.Stale, update(chat().drop(2), recorded = "v4"))
+        store.afterOldRowsRemoved = null
+        assertEquals(before, store.indexedMessages("chat"))
+        assertTrue(store.indexState("chat")!!.needsRefresh)
+        assertEquals("v1", store.indexState("chat")!!.describedVersion)
+    }
+
+    @Test fun wordsWithApostrophesAreSearchableWithoutPhraseQueries() {
+        update(listOf(user("u1", "Mr O'Brien and Siobhán's cousin visited Leeds.")))
+        val terms = org.teslasoft.assistant.preferences.memory.librarian.KeywordText.terms("O'Brien Siobhán's")
+        assertEquals(listOf("o'brien", "siobhán"), terms)
+        assertEquals(1, store.passagesWithWords("chat", terms).size)
+        assertEquals(1, store.passagesWithWords("chat", listOf("o'brien", "leed")).size)
+        assertTrue(store.passagesWithWords("chat", listOf("brien")).isEmpty())
+    }
+
     @Test fun realTokenizerSearchTextsFitTheModelAndHoldOnlyTheirOwnMessage() {
         val tokenizerFile = File(context.filesDir, "step2-model/tokenizer.json")
         assertTrue("Missing CI tokenizer fixture $tokenizerFile", tokenizerFile.isFile && tokenizerFile.canRead())
