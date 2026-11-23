@@ -44,7 +44,7 @@ class ConversationIndexStore private constructor(
     CorruptionHandler,
     null,
     true
-), ConversationIndexStorage {
+), ConversationIndexStorage, PassageVectorStorage {
 
     /** Test hook: called inside a message or restamp write after it has changed rows, before the commit check. */
     @Volatile internal var afterOldRowsRemoved: (() -> Unit)? = null
@@ -67,7 +67,7 @@ class ConversationIndexStore private constructor(
                 "search_fingerprint TEXT NOT NULL," +
                 "vector_model TEXT NOT NULL," +
                 "vector_dimensions INTEGER NOT NULL," +
-                "state TEXT NOT NULL CHECK(state IN ('$STATE_WAITING','made','failed'))," +
+                "state TEXT NOT NULL CHECK(state IN ('$STATE_WAITING','$STATE_MADE','$STATE_FAILED'))," +
                 "vector BLOB," +
                 "PRIMARY KEY(search_fingerprint, vector_model, vector_dimensions))"
         )
@@ -172,7 +172,7 @@ class ConversationIndexStore private constructor(
         db.delete("passages", "chat_id = ? AND message_id = ?", arrayOf(chatId, messageId))
         afterOldRowsRemoved?.invoke()
         replacement?.let { insertPassages(db, chatId, it) }
-        removeUnusedVectors(db, oldVectors)
+        removeUnusedVectors(db, oldVectors, replacement?.stamp)
         publishIfUnchanged(chatUnchanged)
     }
 
@@ -287,8 +287,6 @@ class ConversationIndexStore private constructor(
         put("scope_project", scope?.projectId)
     }
 
-    private data class VectorKey(val fingerprint: String, val model: String, val dimensions: Int)
-
     private fun vectorKeys(db: SQLiteDatabase, chatId: String, messageId: String): Set<VectorKey> =
         db.rawQuery(
             "SELECT search_fingerprint, vector_model, vector_dimensions FROM passages WHERE chat_id = ? AND message_id = ?",
@@ -297,14 +295,185 @@ class ConversationIndexStore private constructor(
             buildSet { while (cursor.moveToNext()) add(VectorKey(cursor.getString(0), cursor.getString(1), cursor.getInt(2))) }
         }
 
-    private fun removeUnusedVectors(db: SQLiteDatabase, keys: Set<VectorKey>) {
+    /**
+     * Removes each of [keys] that no passage uses any more. When a message is
+     * re-cut for another model ([replacement] names the new one), a vector
+     * already made by the old model is kept until the new model's index is
+     * complete ([removeObsoleteVectors], G.5a rule 3).
+     */
+    private fun removeUnusedVectors(db: SQLiteDatabase, keys: Set<VectorKey>, replacement: MessageStamp?) {
         for (key in keys) {
+            val otherModel = replacement != null &&
+                (key.vectorModel != replacement.vectorModel || key.vectorDimensions != replacement.vectorDimensions)
             db.execSQL(
                 "DELETE FROM passage_vectors WHERE search_fingerprint = ? AND vector_model = ? AND vector_dimensions = ? " +
+                    (if (otherModel) "AND state <> '$STATE_MADE' " else "") +
                     "AND NOT EXISTS (SELECT 1 FROM passages WHERE search_fingerprint = ? AND vector_model = ? AND vector_dimensions = ?)",
-                arrayOf<Any>(key.fingerprint, key.model, key.dimensions, key.fingerprint, key.model, key.dimensions)
+                arrayOf<Any>(
+                    key.searchFingerprint, key.vectorModel, key.vectorDimensions,
+                    key.searchFingerprint, key.vectorModel, key.vectorDimensions
+                )
             )
         }
+    }
+
+    override fun waitingVectors(
+        vectorModel: String,
+        vectorDimensions: Int,
+        afterFingerprint: String?,
+        limit: Int
+    ): List<WaitingVector> {
+        require(limit >= 1)
+        val db = readableDatabase
+        val fingerprints = db.rawQuery(
+            "SELECT v.search_fingerprint FROM passage_vectors v WHERE v.vector_model = ? AND v.vector_dimensions = ? " +
+                "AND v.state = '$STATE_WAITING' AND v.search_fingerprint > ? AND EXISTS (SELECT 1 FROM passages p " +
+                "WHERE p.search_fingerprint = v.search_fingerprint AND p.vector_model = v.vector_model " +
+                "AND p.vector_dimensions = v.vector_dimensions) ORDER BY v.search_fingerprint LIMIT ?",
+            // Every fingerprint is a non-empty hex string, so "" sorts before all of them.
+            arrayOf(vectorModel, vectorDimensions.toString(), afterFingerprint ?: "", limit.toString())
+        ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.getString(0)) } }
+        return fingerprints.map { fingerprint ->
+            val key = VectorKey(fingerprint, vectorModel, vectorDimensions)
+            WaitingVector(key, sourcesOf(db, key))
+        }.filter { it.sources.isNotEmpty() }
+    }
+
+    private fun sourcesOf(db: SQLiteDatabase, key: VectorKey): List<VectorSourcePassage> =
+        db.rawQuery(
+            "SELECT chat_id, message_id, passage_order, text_fingerprint, speaker_title, cutter_version, search_settings " +
+                "FROM passages WHERE search_fingerprint = ? AND vector_model = ? AND vector_dimensions = ? " +
+                "ORDER BY chat_id, message_id, passage_order",
+            arrayOf(key.searchFingerprint, key.vectorModel, key.vectorDimensions.toString())
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(VectorSourcePassage(
+                    chatId = cursor.getString(0),
+                    messageId = cursor.getString(1),
+                    order = cursor.getInt(2),
+                    textFingerprint = cursor.getString(3),
+                    speakerTitle = cursor.getString(4),
+                    cutterVersion = cursor.getInt(5),
+                    searchSettings = cursor.getString(6)
+                ))
+            }
+        }
+
+    override fun publishVector(
+        key: VectorKey,
+        source: VectorSourcePassage,
+        vector: ByteArray,
+        sourceUnchanged: () -> Boolean
+    ): VectorWrite = vectorTransaction(key, source, sourceUnchanged) { db ->
+        db.execSQL(
+            "UPDATE passage_vectors SET state = '$STATE_MADE', vector = ? " +
+                "WHERE search_fingerprint = ? AND vector_model = ? AND vector_dimensions = ?",
+            arrayOf<Any>(vector, key.searchFingerprint, key.vectorModel, key.vectorDimensions)
+        )
+    }
+
+    override fun markVectorFailed(
+        key: VectorKey,
+        source: VectorSourcePassage,
+        sourceUnchanged: () -> Boolean
+    ): VectorWrite = vectorTransaction(key, source, sourceUnchanged) { db ->
+        db.execSQL(
+            "UPDATE passage_vectors SET state = '$STATE_FAILED', vector = NULL " +
+                "WHERE search_fingerprint = ? AND vector_model = ? AND vector_dimensions = ?",
+            arrayOf<Any>(key.searchFingerprint, key.vectorModel, key.vectorDimensions)
+        )
+    }
+
+    /** Test hook: called inside a vector write after it changed the row, before the source is checked again. */
+    @Volatile internal var afterVectorWritten: (() -> Unit)? = null
+
+    /**
+     * One vector write: the row must still be waiting and [source] must still
+     * use it with the same original-text fingerprint; [change] runs, every
+     * chat using the vector gets its progress recounted, and [sourceUnchanged]
+     * is checked just before commit. Any failed check writes nothing.
+     */
+    private fun vectorTransaction(
+        key: VectorKey,
+        source: VectorSourcePassage,
+        sourceUnchanged: () -> Boolean,
+        change: (SQLiteDatabase) -> Unit
+    ): VectorWrite = try {
+        transaction { db ->
+            val state = db.rawQuery(
+                "SELECT state FROM passage_vectors WHERE search_fingerprint = ? AND vector_model = ? AND vector_dimensions = ?",
+                arrayOf(key.searchFingerprint, key.vectorModel, key.vectorDimensions.toString())
+            ).use { if (it.moveToFirst()) it.getString(0) else null }
+            val used = db.rawQuery(
+                "SELECT 1 FROM passages WHERE chat_id = ? AND message_id = ? AND passage_order = ? " +
+                    "AND text_fingerprint = ? AND search_fingerprint = ? AND vector_model = ? AND vector_dimensions = ?",
+                arrayOf(
+                    source.chatId, source.messageId, source.order.toString(), source.textFingerprint,
+                    key.searchFingerprint, key.vectorModel, key.vectorDimensions.toString()
+                )
+            ).use { it.moveToFirst() }
+            if (state != STATE_WAITING || !used) return@transaction VectorWrite.GONE
+            change(db)
+            recountChatsUsing(db, key)
+            afterVectorWritten?.invoke()
+            if (!sourceUnchanged()) throw ChatChanged()
+            VectorWrite.WRITTEN
+        }
+    } catch (_: ChatChanged) {
+        VectorWrite.STALE
+    }
+
+    /** Recounts waiting passages, and whether the chat is fully indexed, for every chat using [key]. */
+    private fun recountChatsUsing(db: SQLiteDatabase, key: VectorKey) {
+        val waiting = "(SELECT COUNT(*) FROM passages p JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
+            "AND v.vector_model = p.vector_model AND v.vector_dimensions = p.vector_dimensions " +
+            "WHERE p.chat_id = index_state.chat_id AND v.state = '$STATE_WAITING')"
+        db.execSQL(
+            "UPDATE index_state SET waiting_vectors = $waiting, fully_indexed = CASE WHEN needs_refresh = 0 " +
+                "AND described_version IS NOT NULL AND $waiting = 0 THEN 1 ELSE 0 END WHERE chat_id IN " +
+                "(SELECT DISTINCT chat_id FROM passages WHERE search_fingerprint = ? AND vector_model = ? AND vector_dimensions = ?)",
+            arrayOf<Any>(key.searchFingerprint, key.vectorModel, key.vectorDimensions)
+        )
+    }
+
+    override fun markNeedsRefresh(chatId: String) = beginUpdate(chatId)
+
+    override fun chatProgress(chatId: String): ChatIndexProgress {
+        val db = readableDatabase
+        val counts = db.rawQuery(
+            "SELECT COUNT(*), " +
+                "COALESCE(SUM(CASE WHEN v.state = '$STATE_MADE' THEN 1 ELSE 0 END), 0), " +
+                "COALESCE(SUM(CASE WHEN v.state = '$STATE_WAITING' THEN 1 ELSE 0 END), 0), " +
+                "COALESCE(SUM(CASE WHEN v.state = '$STATE_FAILED' THEN 1 ELSE 0 END), 0) " +
+                "FROM passages p LEFT JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
+                "AND v.vector_model = p.vector_model AND v.vector_dimensions = p.vector_dimensions WHERE p.chat_id = ?",
+            arrayOf(chatId)
+        ).use { cursor -> cursor.moveToFirst(); IntArray(4) { cursor.getInt(it) } }
+        val state = indexState(chatId)
+        return ChatIndexProgress(
+            passages = counts[0],
+            made = counts[1],
+            waiting = counts[2],
+            failed = counts[3],
+            needsRefresh = state?.needsRefresh ?: false,
+            fullyIndexed = state?.fullyIndexed ?: false
+        )
+    }
+
+    override fun removeObsoleteVectors(currentModel: String, currentDimensions: Int): Int = transaction { db ->
+        val current = arrayOf(currentModel, currentDimensions.toString())
+        fun any(sql: String, args: Array<String> = emptyArray()) = db.rawQuery(sql, args).use { it.moveToFirst() }
+        val incomplete =
+            any("SELECT 1 FROM passages WHERE NOT (vector_model = ? AND vector_dimensions = ?) LIMIT 1", current) ||
+                any("SELECT 1 FROM index_state WHERE needs_refresh = 1 LIMIT 1") ||
+                any(
+                    "SELECT 1 FROM passages p JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
+                        "AND v.vector_model = p.vector_model AND v.vector_dimensions = p.vector_dimensions " +
+                        "WHERE v.state = '$STATE_WAITING' LIMIT 1"
+                )
+        if (incomplete) 0 else db.delete(
+            "passage_vectors", "NOT (vector_model = ? AND vector_dimensions = ?)", arrayOf<Any>(currentModel, currentDimensions)
+        )
     }
 
     /** The stamp of each indexed message of [chatId] (or of [messageId] only), read from its first passage. */
@@ -370,6 +539,8 @@ class ConversationIndexStore private constructor(
         private const val DATABASE_VERSION = 1
         private const val SOURCE_CHAT_MESSAGE = "chat_message"
         const val STATE_WAITING = "waiting"
+        const val STATE_MADE = "made"
+        const val STATE_FAILED = "failed"
 
         @Volatile private var instance: ConversationIndexStore? = null
         @Volatile private var libraryLoaded = false
