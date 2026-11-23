@@ -95,6 +95,19 @@ class MessageDeletionWiringContractTest {
         assertTrue(activity.contains("parseMessageScope = CoroutineScope(Dispatchers.Main + turnFence.element())"))
     }
 
+    @Test fun theErrorHandlerRechecksTheFenceAfterItsWaitAndTouchesOnlyItsOwnRow() {
+        val handler = activity.substringAfter("            if (turnFence.isStale()) return\n            // This handler now writes")
+            .substringBefore("        } finally {")
+        assertTrue(handler.indexOf("replyTerminalPending = false") < handler.indexOf("finalizeLifecycleTerminal("))
+        assertTrue(handler.indexOf("val failedRowBefore = messages.lastOrNull()") < handler.indexOf("finalizeLifecycleTerminal("))
+        val stale = handler.indexOf("if (turnFence.isStale()) {")
+        assertTrue(stale > handler.indexOf("finalizeLifecycleTerminal("))
+        // Rechecked before any row is added or the last row is marked.
+        assertTrue(stale < handler.indexOf("putMessage(\"\", true)"))
+        assertTrue(stale < handler.indexOf("val failedIndex = messages.size - 1"))
+        assertTrue(handler.contains("messages.indexOfFirst { it === failedRowBefore }"))
+    }
+
     @Test fun usageIsClaimedBeforeAnyWaitAndAttachedToTheRowChosenThen() {
         val finalize = activity.substringAfter("private suspend fun finalizeLifecycleTerminal(")
             .substringBefore("private class ClaimedTerminal(")

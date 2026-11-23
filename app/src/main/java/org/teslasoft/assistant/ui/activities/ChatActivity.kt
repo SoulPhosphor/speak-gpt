@@ -11032,6 +11032,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                 }
             } catch (_: OutOfMemoryError) {
+                // A request retired by a message deletion reports nothing.
+                if (turnFence.isStale()) return@launch
                 requestPreparationInProgress = false
                 restoreUIState()
                 showRequestHardBlock(
@@ -11043,6 +11045,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 restoreUIState()
                 throw e
             } catch (e: PdfPreparationException) {
+                if (turnFence.isStale()) return@launch
                 requestPreparationInProgress = false
                 restoreUIState()
                 showRequestHardBlock(
@@ -11054,6 +11057,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
                 )
             } catch (e: Exception) {
+                if (turnFence.isStale()) return@launch
                 requestPreparationInProgress = false
                 restoreUIState()
                 val genError = GenerationErrorClassifier.classify(e)
@@ -13004,6 +13008,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } catch (e: Exception) {
             if (turnFence.isStale()) return
+            // This handler now writes the reply's terminal state; a message
+            // deletion during its waits must not write a second one.
+            replyTerminalPending = false
             playErrorSignal()
             val failureDiagnostics = captureGenerationFailureDiagnostics()
             stopHandsFreeOnError()
@@ -13076,6 +13083,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             val lifecycleError = providerEvidence?.errorMessages?.joinToString("\n")
                 ?.ifBlank { null } ?: e.message ?: "error"
+            // The row this failure belongs to, chosen before the usage record
+            // is completed (which can wait).
+            val failedRowBefore = messages.lastOrNull()
             finalizeLifecycleTerminal(
                 ResponseLifecycle.Outcome.INCOMPLETE,
                 providerEvidence?.finishReason ?: currentLifecycle?.lastFinishReason ?: "missing",
@@ -13106,6 +13116,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         contentFilterSide = providerEvidence?.contentFilterSide?.wire,
                         attemptId = providerEvidence?.attemptId
                     )
+            }
+
+            // A message deletion retired this reply while its usage was being
+            // completed: the conversation and composer now belong to it and to
+            // any newer turn. Mark only this reply's own row, if it survived.
+            if (turnFence.isStale()) {
+                val index = messages.indexOfFirst { it === failedRowBefore }
+                if (index >= 0 && failedRowBefore?.get("isBot") == true) {
+                    failedRowBefore[MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
+                    failedRowBefore[MessageCompletionState.KEY_STATE_DETAIL] = genError.code.code
+                    failedRowBefore[MessageCompletionState.KEY_ERROR_TEXT] = response
+                    adapter?.notifyItemChanged(index)
+                    saveSettingsInBackground()
+                }
+                return
             }
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
