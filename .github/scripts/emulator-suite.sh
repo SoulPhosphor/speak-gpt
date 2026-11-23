@@ -259,7 +259,8 @@ finish_step2() {
   if [ "${data_before:-}" = 1 ]; then adb_t 30 shell svc data enable || event "could not re-enable mobile data"; fi
 }
 
-# Only once Step2 will not run again: an infrastructure retry needs the model.
+# Shared by recall and scanner evaluation, including any infrastructure retry.
+# Remove only after the complete suite has finished using the fixture.
 remove_step2_model() {
   adb_t 60 shell run-as "$APP_PACKAGE" rm -rf files/step2-model || event "could not remove the step2 model"
 }
@@ -371,10 +372,8 @@ cmd_run_suite() {
           break ;;
       esac
     done
-    if [ "${class_name##*.}" = "$STEP2_CLASS" ] && [ "$step2_model_present" -eq 1 ]; then
-      remove_step2_model
-    fi
   done
+  if [ "$step2_model_present" -eq 1 ]; then remove_step2_model; fi
   write_step_summary
   return "$failed"
 }

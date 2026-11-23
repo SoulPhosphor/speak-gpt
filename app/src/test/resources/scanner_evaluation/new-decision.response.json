@@ -1,0 +1,18 @@
+{
+  "memories": [
+    {
+      "content": "The user joined the Cedar Observatory volunteer team and has confirmed Sunday mornings from February after the rota changed; weekday evenings still conflict with choir.",
+      "scope": "real_life",
+      "type_id": "fact",
+      "tags": [],
+      "target_refs": [],
+      "related_existing_memory_refs": [
+        "M1"
+      ]
+    }
+  ],
+  "model_rules": [],
+  "draft_edits": [],
+  "withdrawn_drafts": [],
+  "already_covered": []
+}

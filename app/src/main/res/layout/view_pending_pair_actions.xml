@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/Widget.App.MemoryPair.Column">
+    <com.google.android.material.button.MaterialButton android:id="@+id/pair_edit"
+        style="@style/AppButton.Primary.Inline.MemoryPair" android:text="@string/mem_pair_edit" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/pair_discard"
+        style="@style/AppButton.Destructive.Inline.MemoryPair" android:text="@string/mem_pair_discard" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/pair_save"
+        style="@style/AppButton.Primary.Inline.MemoryPair" android:text="@string/mem_pair_save" />
+    <LinearLayout android:id="@+id/pair_editor" style="@style/Widget.App.MemoryPair.Column" android:visibility="gone">
+        <TextView android:labelFor="@id/pair_content" style="@style/Widget.App.Field.Label" android:text="@string/mem_edit_label_content" />
+        <androidx.appcompat.widget.AppCompatEditText android:id="@+id/pair_content"
+            style="@style/Widget.App.MemoryPair.Field" android:inputType="textMultiLine|textCapSentences" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/pair_edit_save"
+            style="@style/AppButton.Primary.Inline.MemoryPair" android:text="@string/mem_pair_edit_save" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/pair_edit_cancel"
+            style="@style/AppButton.Destructive.Inline.MemoryPair" android:text="@string/btn_cancel" />
+    </LinearLayout>
+</LinearLayout>

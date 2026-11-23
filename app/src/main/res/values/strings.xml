@@ -4713,4 +4713,20 @@
     <string name="parallel_tab_interrupted">Interrupted</string>
     <string name="parallel_responses_unreadable">The stored model responses could not be read. The saved data and current answer are preserved. Regeneration is unavailable for this turn.</string>
     <string name="parallel_responses_unsupported">This version cannot open the stored model responses. The saved data and current answer are preserved. Regeneration is unavailable for this turn.</string>
+    <!-- Stage 6D: explicit actions for the opened Pending pair. -->
+    <string name="mem_pair_intro">Editing keeps a suggestion pending. Saving makes only the chosen suggestion active.</string>
+    <string name="mem_pair_keep_hint">Both suggestions will stay pending and linked for later review.</string>
+    <string name="mem_pair_edit">Edit Suggestion</string>
+    <string name="mem_pair_edit_save">Save Pending Changes</string>
+    <string name="mem_pair_discard">Discard Suggestion</string>
+    <string name="mem_pair_save">Save Suggestion</string>
+    <string name="mem_pair_keep">Keep Both Pending</string>
+    <string name="mem_pair_open">Review This Pair</string>
+    <string name="mem_pair_discard_title">Discard Suggestion?</string>
+    <string name="mem_pair_discard_message">Permanently discard this suggestion? The other suggestion will stay pending.\n\n%1$s</string>
+    <string name="mem_pair_save_title">Save Suggestion?</string>
+    <string name="mem_pair_save_message">Make this suggestion active? The other suggestion will stay pending.\n\n%1$s</string>
+    <string name="mem_pair_edited">Changes saved. This suggestion is still pending.</string>
+    <string name="mem_pair_discarded">Suggestion discarded. The other suggestion is still pending.</string>
+    <string name="mem_pair_kept">Both suggestions are still pending.</string>
 </resources>

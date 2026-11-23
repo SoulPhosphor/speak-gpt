@@ -448,4 +448,5 @@
     <dimen name="memory_token_meter_gap">4dp</dimen>
     <dimen name="memory_token_meter_track">4dp</dimen>
     <dimen name="memory_token_meter_page_inset">20dp</dimen>
+    <dimen name="memory_pair_action_gap">8dp</dimen>
 </resources>

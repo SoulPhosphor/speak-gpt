@@ -2161,6 +2161,26 @@ Similarity Match · 0.91 Similarity"; `MemoryMatch.Additional` (inherits
 count. Possible Match Review cards use `MemoryMatch.Detail` for the same line
 above the memory's full text. Sizes live in `memory_match_*` dimensions.
 
+### Pending-pair review actions
+
+Stage 6D adds `view_pending_pair_actions.xml` directly beneath each of the two
+opened Pending cards. `Widget.App.MemoryPair.Column` owns the vertical action
+host; the editor uses `Field.Label` and `MemoryPair.Field` (inherits `Field.Box`).
+The field's complete-input token meter is the card's existing `MemoryTokenMeter`.
+`AppButton.Primary.Inline.MemoryPair` and `.Destructive.Inline.MemoryPair` keep
+the established roles and label-sized widths, adding only the shared
+`memory_pair_action_gap`. `MemoryPair.Page` inherits `Page.Content` for the
+explanation and Keep Both Pending block before Additional Matches. The link
+explanation appears only for a reciprocal linked pair; ordinary Pending matches
+are not falsely described as having a stored link.
+
+Additional Pending cards expose Review This Pair using the same inline action
+family. Save confirmation uses `dialog_two_actions.xml`; Discard and Cancel
+both use destructive-role inline buttons in `Dialog.Actions`
+(`dialog_pending_pair_discard.xml`). Existing legacy card appearance is not
+converted by this addition. New layouts contain structure/content references;
+all appearance comes from shared styles and dimensions.
+
 ### Model-rule cards
 
 `view_model_rule_row.xml` uses `MemoryBrowser.Card` for the Quick Settings
