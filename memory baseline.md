@@ -1140,7 +1140,9 @@ benchmark of the retired scanner, and it does not retune search thresholds.
 Placement caveat: in both 80-message responses the extraction chose untargeted
 project scope for the volunteering and telescope topics. Their prose is accurate,
 but placement warrants human review. The test does not rewrite those responses
-or claim perfect placement. No extraction prompt was changed for this result.
+or claim perfect placement. The return-to-Archived response also retains
+"next month" instead of resolving it against the source date, so that temporal
+wording warrants review. No extraction prompt was changed for these results.
 
 `ScannerEndToEndEvaluationTest` additionally covers matching with and without
 vectors, cold/warm reuse and fingerprint invalidation, a late-discovered match's
@@ -1180,3 +1182,12 @@ battery before/after and whether plugged in; note warmth and whether a chat send
 stalls while scanning. For review, record taps/time and verify edit/cancel,
 keep-both links, discard confirmation and saving exactly one side. These results
 must not be inferred from an emulator or from green CI.
+
+Local validation: the required combined command compiled production code, but
+34 of 4,083 JVM tests could not download their Robolectric Android frameworks
+(`UnknownHostException: repo1.maven.org`); 3 tests were skipped. After caching the
+three frameworks from Maven Central with verified SHA-512 checksums, only those
+failed classes and the changed pair-snapshot test were run again: 206 tests
+passed. The same recovery command completed `assembleBeta` and
+`assembleDebugAndroidTest`. Beta package, label and non-debuggable packaging were
+verified. Native instrumentation still requires the normal CI emulator run.
