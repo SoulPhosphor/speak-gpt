@@ -62,6 +62,8 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     // Bumped when a message deletion abandons the running operation, so that
     // operation's late cleanup cannot reset a newer turn.
     private var operationToken = 0
+    // The Stop task waiting for an interrupted preparation to wind down.
+    private var stopJob: Job? = null
     /** Groups of deleted messages whose requests may still report back. */
     private class DeletedGroup(var row: HashMap<String, Any>, var group: ResponseGroup)
     private val deletedGroups = HashMap<String, DeletedGroup>()
@@ -124,12 +126,13 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         if (busy || selectingBranch) return true
         val pending = ParallelResponseSelection.pending(host.messages) ?: return false
         selectingBranch = true
+        val token = operationToken
         branchJob = scope.launch {
             var adopted = false
             try {
                 if (!pending.hasDescendants || confirm(activity.getString(R.string.make_current_body), R.string.make_current_confirm))
                     adopted = host.adopt(pending.position, pending.hasDescendants)
-            } finally { selectingBranch = false }
+            } finally { if (token == operationToken) selectingBranch = false }
             if (adopted) beforeSendOrContinue(continueSend)
         }
         return true
@@ -250,11 +253,14 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         val token = operationToken
         val preparingJob = operationJob
         preparingJob?.cancel(ParallelUserStop())
-        scope.launch {
+        stopJob = scope.launch {
             try {
                 // A blocking durable commit may finish while preparation is being cancelled.
                 // Drain that owner before finding every newly registered request chain.
                 preparingJob?.join()
+                // A message deletion abandoned this stop meanwhile; a newer turn
+                // may own the requests now, and it already stopped the old ones.
+                if (token != operationToken) return@launch
                 coordinator.cancelOwned()
                 flushSavedEvidence()
                 refreshSaveState()
@@ -363,8 +369,10 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         operationToken += 1
         operationJob?.cancel(ParallelUserStop())
         branchJob?.cancel(ParallelUserStop())
+        stopJob?.cancel()
         operationJob = null
         branchJob = null
+        stopJob = null
         pendingTurn = null
         preparing = false
         active = false
@@ -410,10 +418,11 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
 
     fun retrySave() {
         if (active || closed || mutating || stopping || !pendingSave) return
+        val token = operationToken
         scope.launch {
             active = true; host.busy(true)
             try { flushSavedEvidence(); refreshSaveState() }
-            finally { active = false; host.busy(busy); if (!busy) host.settled() }
+            finally { if (token == operationToken) { active = false; host.busy(busy); if (!busy) host.settled() } }
         }
     }
 

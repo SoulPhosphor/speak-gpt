@@ -163,6 +163,18 @@ class MessageDeletionWiringContractTest {
         assertTrue(function("deleteBulkSelection").contains("keepUsageOfDeletedRows("))
     }
 
+    @Test fun aStopWaitingOnParallelPreparationCannotCancelANewerTurn() {
+        val controller = source("src/main/java/org/teslasoft/assistant/ui/chat/parallel/ParallelChatController.kt")
+        val stopAll = controller.substringAfter("    fun stopAll() {").substringBefore("    fun stop(position: Int")
+        assertTrue(stopAll.contains("stopJob = scope.launch {"))
+        // Rechecked after the wait, before the unfiltered cancel.
+        assertTrue(stopAll.indexOf("if (token != operationToken) return@launch") > stopAll.indexOf("preparingJob?.join()"))
+        assertTrue(stopAll.indexOf("if (token != operationToken) return@launch") < stopAll.indexOf("coordinator.cancelOwned()"))
+        val abandon = controller.substringAfter("    fun abandonForDeletion() {").substringBefore("\n    }\n")
+        assertTrue(abandon.contains("stopJob?.cancel()"))
+        assertTrue(abandon.indexOf("operationToken += 1") < abandon.indexOf("stopJob?.cancel()"))
+    }
+
     @Test fun everyChatScreenSaveIsOrdered() {
         val save = activity.substringAfter("    private fun saveSettings(").substringBefore("    private fun saveSettingsInBackground(")
         assertTrue(save.contains("order.writeIfNewest(chatId, seq"))
