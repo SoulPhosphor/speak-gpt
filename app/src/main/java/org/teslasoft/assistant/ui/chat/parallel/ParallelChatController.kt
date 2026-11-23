@@ -12,12 +12,15 @@ import org.teslasoft.assistant.conversation.responsegroups.*
 import org.teslasoft.assistant.conversation.setup.ExperimentalSetup
 import org.teslasoft.assistant.preferences.*
 import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.usage.UsageLogEntry
+import org.teslasoft.assistant.usage.UsageLogStore
 import org.teslasoft.assistant.ui.chat.setup.SetupModelResolver
 import java.util.UUID
 import kotlin.coroutines.resume
 
 /** Screen glue only: coordinator owns requests; this controller owns composer and branch interaction. */
 internal class ParallelChatController(private val activity: FragmentActivity, private val host: Host,
+    private val titleUsageWriter: ((UsageLogEntry) -> Boolean)? = null,
     private val coordinatorFactory: ((CoroutineScope, ParallelGroupPersistence) -> ParallelRequestCoordinator)? = null) {
     interface Host {
         val chatId: String
@@ -37,6 +40,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         suspend fun beforeRegenerate(position: Int, action: suspend () -> Unit)
         fun canonicalEdited() {}
         fun settled()
+        suspend fun nameTurn(group: ResponseGroup, retainUsage: (UsageLogEntry) -> Unit) {}
         /** A deleted message's response group reached its final state; its
          *  usage belongs in the chat's usage log. */
         fun deletedGroupSettled(row: HashMap<String, Any>) {}
@@ -45,6 +49,8 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     private var active = false
     private var selectingBranch = false
     private var pendingSave = false
+    private data class PendingTitleReceipt(val assistantMessageId: String, val entry: UsageLogEntry)
+    private val pendingTitleReceipts = linkedMapOf<String, PendingTitleReceipt>()
     private var closed = false
     private data class PendingTurn(val raw: String, val base: ParallelTurnBase, val groupId: String)
     private var pendingTurn: PendingTurn? = null
@@ -163,6 +169,14 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 pendingTurn = PendingTurn(raw, base, group.groupId)
                 coordinator.dispatch(host.chatId, group, prepared.commitContext).await()
                 offerSaveRetry()
+                if (!closed && !pendingSave) {
+                    val settled = persistence.read(ResponseGroupTarget(host.chatId, group.assistantMessageId, group.groupId))
+                    if (settled.slots.any { slot -> slot.versions.any { it.fields["state"] == MessageCompletionState.DONE } })
+                        host.nameTurn(settled) { receipt ->
+                            pendingTitleReceipts[receipt.id] = PendingTitleReceipt(settled.assistantMessageId, receipt)
+                            if (closed) pendingSave = true else refreshSaveState()
+                        }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ParallelPreparationRefused) {
@@ -209,6 +223,25 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         return true
     }
 
+    fun applyImageSummary(imageId: String, prompt: String, summary: String): Boolean {
+        if (closed || host.unavailable) return false
+        val index = host.messages.indexOfFirst { row ->
+            ResponseGroupImages.pendingSummaries(row).any { it.imageId == imageId && it.prompt == prompt }
+        }
+        if (index < 0) return false
+        val row = host.messages[index]
+        val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return false
+        val after = ResponseGroupImages.summarize(group, imageId, prompt, summary)
+        if (after == group) return false
+        host.messages[index] = ResponseGroupEdits.install(row, after)
+        if (!host.save()) { host.messages[index] = row; host.save(); return false }
+        val primary = group.slots.single { it.slotId == group.primarySlotId }
+        val canonical = primary.versions.single { it.versionId == primary.canonicalVersionId }
+        host.changed(index, canonical != after.slots.single { it.slotId == primary.slotId }
+            .versions.single { it.versionId == primary.canonicalVersionId })
+        return true
+    }
+
     fun stopAll() {
         if (!preparing) { host.messages.indices.toList().forEach { stop(it, null) }; return }
         if (stopping || closed) return
@@ -223,7 +256,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 // Drain that owner before finding every newly registered request chain.
                 preparingJob?.join()
                 coordinator.cancelOwned()
-                coordinator.flush()
+                flushSavedEvidence()
                 refreshSaveState()
             } finally {
                 if (token == operationToken) {
@@ -281,7 +314,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
             branchJob?.cancelAndJoin()
             operationJob?.cancelAndJoin()
             coordinator.cancelOwned()
-            coordinator.flush()
+            flushSavedEvidence()
             refreshSaveState()
             if (pendingSave) return false
             action()
@@ -300,7 +333,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
             try {
                 coordinator.cancelOwned(ResponseGroupTarget(host.chatId, target.assistantMessageId, target.groupId),
                     target.slotId, target.versionId)
-                coordinator.flush()
+                flushSavedEvidence()
                 refreshSaveState()
                 if (pendingSave) return@launch
                 val index = host.messages.indexOfFirst { it["message_id"] == target.assistantMessageId }
@@ -334,7 +367,8 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     fun unsaved(position: Int): Boolean {
         if (!pendingSave) return false
         val group = (host.messages.getOrNull(position)?.let(ResponseGroupCodec::read) as? ResponseGroupRead.Valid)?.group ?: return false
-        return group.slots.flatMap { it.versions }.flatMap { it.attempts }.any { it.requestId in coordinator.unsavedRequestIds() }
+        return pendingTitleReceipts.values.any { it.assistantMessageId == group.assistantMessageId } ||
+            group.slots.flatMap { it.versions }.flatMap { it.attempts }.any { it.requestId in coordinator.unsavedRequestIds() }
     }
 
     /**
@@ -377,8 +411,11 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         }
     }
 
+    /** Unsaved evidence that still belongs to the chat (a deleted group's is
+     *  routed to the usage log instead). */
     private fun unsavedOutsideDeleted(): Boolean =
-        coordinator.unsavedTargets().any { it.assistantMessageId !in deletedGroups }
+        coordinator.unsavedTargets().any { it.assistantMessageId !in deletedGroups } ||
+            pendingTitleReceipts.isNotEmpty()
 
     private fun keepDeleted(kept: DeletedGroup, transform: (ResponseGroup?) -> ResponseGroup): ResponseGroup {
         val after = transform(kept.group)
@@ -395,8 +432,19 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         if (active || closed || mutating || stopping || !pendingSave) return
         scope.launch {
             active = true; host.busy(true)
-            try { coordinator.flush(); refreshSaveState() }
+            try { flushSavedEvidence(); refreshSaveState() }
             finally { active = false; host.busy(busy); if (!busy) host.settled() }
+        }
+    }
+
+    private suspend fun flushSavedEvidence() {
+        coordinator.flush()
+        for ((id, pending) in pendingTitleReceipts.toMap()) {
+            val saved = withContext(Dispatchers.IO) {
+                try { titleUsageWriter?.invoke(pending.entry) ?: UsageLogStore.putRequest(prefs, pending.entry) }
+                catch (_: Exception) { false }
+            }
+            if (saved && pendingTitleReceipts[id] == pending) pendingTitleReceipts.remove(id)
         }
     }
 
@@ -411,7 +459,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         refreshSaveState()
         if (!pendingSave || closed) return
         if (confirm(activity.getString(R.string.parallel_save_failed), R.string.parallel_retry_save)) {
-            coordinator.flush()
+            flushSavedEvidence()
             refreshSaveState()
         }
     }

@@ -3748,6 +3748,8 @@
     <string name="summarizer_compaction_maximum_error_message">The maximum token count has not been saved. Please choose an amount higher than the average token sent.</string>
     <string name="summarizer_compaction_tokens">Compaction Average Token Amount</string>
     <string name="summarizer_compaction_tokens_hint">Average tokens sent together to the summarizing AI at one time to be compacted. No partial messages will be sent unless the response exceeds the maximum token count.</string>
+    <string name="summarizer_titles_toggle">Use Summarizer for Titles</string>
+    <string name="summarizer_titles_toggle_hint">When off the chat AI will create the chat title instead.</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
     <string name="summarizer_new_chats_toggle_hint">Summarizer model is still used as a backup for chat titling and compaction when summarizing is turned off.</string>
     <string name="summarizer_length">Summary Length</string>
