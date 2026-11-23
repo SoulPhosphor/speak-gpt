@@ -59,7 +59,7 @@ class ConversationIndexStoreInstrumentedTest {
     private val secret = "Meet me under the old clock tower at midnight"
 
     private fun chat() = listOf(
-        user("u1", "$secret, I moved to Leeds.", ScanMessageScope(companionPersonaId = "persona-1", projectId = "project-9")),
+        user("u1", "$secret, I moved to Leeds.", ScanMessageScope(companionPersonaId = "persona-1", userPersonaId = "glamour-3", projectId = "project-9")),
         reply("a1", (1..150).joinToString(" ") { "harbour$it" }),
         user("u2", "Tell me about bicycles."),
         reply("a2", "Bicycles are fun.")
@@ -72,8 +72,12 @@ class ConversationIndexStoreInstrumentedTest {
         assertEquals(ConversationIndexUpdater.Outcome.Updated(4, 0, 0, 0), update(chat()))
         val stamps = store.indexedMessages("chat")
         assertEquals(setOf("u1", "a1", "u2", "a2"), stamps.keys)
-        assertEquals(ScanMessageScope(companionPersonaId = "persona-1", projectId = "project-9"), stamps.getValue("u1").scope)
+        assertEquals(ScanMessageScope(companionPersonaId = "persona-1", userPersonaId = "glamour-3", projectId = "project-9"), stamps.getValue("u1").scope)
         assertNull("unknown scope stays unknown", stamps.getValue("u2").scope)
+        // A recorded scope without a Glamour stores no Glamour reference but stays known.
+        update(chat().toMutableList().also { it[2] = user("u2", "Tell me about bicycles.", ScanMessageScope(projectId = "project-9")) }, recorded = "v1")
+        assertEquals(ScanMessageScope(projectId = "project-9"), store.indexedMessages("chat").getValue("u2").scope)
+        assertNull(store.indexedMessages("chat").getValue("u2").scope!!.userPersonaId)
         assertEquals("u1", stamps.getValue("a1").exchangeId)
 
         val db = store.readableDatabase

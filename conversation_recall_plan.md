@@ -1741,6 +1741,38 @@ reach companion-only material.
 - **Scope is never guessed** from the chat's present settings.
 - **To verify during Steps 7–13:** how much existing conversation has a
   recorded scope.
+- **Glamour reference (Owner, 2026-11-23; confirmed in code in Step 8).**
+  The memory system is to support optional Glamour associations later; this
+  is preparation only and changes no visibility, retrieval or Glamour rule.
+  Glamours, roleplay characters and companions stay distinct, and are always
+  referred to by permanent ID, never by a display name.
+  - **In the code a Glamour is the memory store's user persona record**
+    (Glamour Studio edits it through `EditUserPersonaActivity`; the chat's
+    active Glamour is `Preferences.getChatUserPersonaId`). There is no separate
+    user-persona concept beside it.
+  - **Recorded now:** when a turn finishes, the active Glamour's ID is saved in
+    each message's `memoryScope` as `userPersona`, whether or not its name was
+    displayed (`ChatTurnMemoryScope.current`). Each regenerated version keeps
+    its own. A user message also records `userNameSource`
+    (`glamour:<id>` or `roleplay:<id>`), but only for the identity whose name
+    was shown, so a Glamour hidden by a roleplay name is not in it; the index
+    does not use `userNameSource` for identity.
+  - **In the index:** each passage stores that ID as `scope_user_persona`, or
+    nothing. A message with a recorded scope and no Glamour stores nothing with
+    `scope_known` set; a message with no recorded scope stays unknown. No
+    historical Glamour is guessed or taken from a name.
+  - **Not covered yet:** messages whose turn never finished (failed, stopped,
+    interrupted replies are not indexed) and older messages without migrated
+    scope have no Glamour. Linking a Glamour to memories, and any use of the
+    reference in retrieval, needs its own design and approval.
+- **Speaker labels (Owner, 2026-11-23):** the embedding model's title slot
+  says **Human** for the user's messages and **Companion** for the AI's
+  (G.5b cutter rule 7). These words are used only in that slot and in
+  approved user-facing wording; API message roles and existing internal role
+  values are unchanged, and the Memory Context Helper keeps the providers'
+  normal roles, with identity context supplied separately where needed. The
+  values are passed in when indexing is connected (Step 10); Step 8 holds no
+  label.
 
 ## G.8 Context assembly: what the AI actually receives (Proposed)
 
