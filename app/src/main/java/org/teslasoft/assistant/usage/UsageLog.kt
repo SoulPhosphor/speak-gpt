@@ -415,6 +415,18 @@ object UsageLogStore {
         seeded
     }
 
+    /** [seed] that reports whether the log now durably holds the records of
+     *  [messages]: true when nothing was missing or the repair was committed. */
+    fun seedChecked(
+        prefs: org.teslasoft.assistant.preferences.Preferences,
+        messages: List<Map<String, Any>>,
+        nowMs: Long = System.currentTimeMillis()
+    ): Boolean = synchronized(lock) {
+        val current = read(prefs)
+        val seeded = current.seed(messages, nowMs)
+        seeded == current || prefs.commitUsageLog(UsageLog.encode(seeded))
+    }
+
     /** [seed] only for a chat whose log has never been seeded. Opening a chat
      * uses this; the Usage screen and every append still run the full repair. */
     fun seedOnce(

@@ -862,12 +862,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         override fun save() = saveSettings(synchronous = true) == ChatStorageHealth.WriteOutcome.OK
         override fun deletedGroupSettled(row: HashMap<String, Any>) {
-            // The existing usage-log repair adds or enriches each request of
-            // the deleted row by its request ID; nothing is counted twice.
-            val prefs = preferences ?: return
-            CoroutineScope(Dispatchers.IO + kotlinx.coroutines.NonCancellable).launch {
-                try { UsageLogStore.seed(prefs, listOf(row)) } catch (_: Exception) { }
-            }
+            keepUsageOfDeletedRows(listOf(row))
         }
         override fun changed(position: Int, canonical: Boolean) {
             if (canonical) rebuildModelProjection()
@@ -10573,6 +10568,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 attachUsageRecords(it, records, it["isBot"] == true)
                 mirrorUsageRecordsToCanonicalVariant(it)
                 attached = true
+                // A carrier deleted meanwhile cannot repair the usage log later.
+                if (messages.none { row -> row === it }) keepUsageOfDeletedRows(listOf(HashMap(it)))
             }
         }
         val r = claimed.lifecycle
@@ -15747,6 +15744,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val end = if (deleteFollowing) messages.size else currentPosition + 1
                 reconcileUsageBeforeRemoving()
                 val removed = ArrayList(messages.subList(currentPosition, end))
+                // Their recorded usage now lives only in the usage log.
+                keepUsageOfDeletedRows(org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.snapshotOf(removed))
                 parallelChat.keepDeletedGroups(removed)
                 messages.subList(currentPosition, end).clear()
                 realignCondensedBoundaries(currentPosition, end)
@@ -15762,6 +15761,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // and is retried until it, or a newer save, succeeds.
         saveSettingsInBackground()
         restartSummarizerAfterDeletion()
+    }
+
+    /**
+     * The usage of rows that are no longer in the chat can only live in the
+     * chat's usage log, so it is written there and retried until the write is
+     * committed. The existing usage-log repair adds or enriches each request
+     * by its request ID, so a retry never counts anything twice.
+     */
+    private fun keepUsageOfDeletedRows(rows: List<Map<String, Any>>) {
+        val prefs = preferences ?: return
+        if (rows.isEmpty()) return
+        CoroutineScope(Dispatchers.IO + kotlinx.coroutines.NonCancellable).launch {
+            var delayMs = 250L
+            while (true) {
+                val kept = try { UsageLogStore.seedChecked(prefs, rows) } catch (_: Exception) { false }
+                if (kept) break
+                kotlinx.coroutines.delay(delayMs)
+                delayMs = (delayMs * 2).coerceAtMost(30_000L)
+            }
+        }
     }
 
     /** Resumes summary updates once the cancelled one has stopped. */
@@ -16090,9 +16109,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         var removedBeforeSummaryLock = 0
         var removedBeforeCompactionLock = 0
         val removedPositions = ArrayList<Int>()
-        parallelChat.keepDeletedGroups(
-            messages.filterIndexed { index, _ -> selectionMode.isSelected(index) }
-        )
+        val removedRows = messages.filterIndexed { index, _ -> selectionMode.isSelected(index) }
+        // Their recorded usage now lives only in the usage log.
+        keepUsageOfDeletedRows(org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.snapshotOf(removedRows))
+        parallelChat.keepDeletedGroups(removedRows)
         var pos = 0
         var p = 0
         while (pos < selectionMode.entries.size) {

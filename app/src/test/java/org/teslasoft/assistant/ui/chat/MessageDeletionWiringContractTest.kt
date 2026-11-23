@@ -151,6 +151,18 @@ class MessageDeletionWiringContractTest {
         assertFalse(superseded.contains("keepCompletedUsage"))
     }
 
+    @Test fun usageOfDeletedRowsIsRetriedUntilTheUsageLogCommits() {
+        val keep = function("keepUsageOfDeletedRows")
+        assertTrue(keep.contains("UsageLogStore.seedChecked(prefs, rows)"))
+        assertTrue(keep.contains("if (kept) break"))
+        assertTrue(activity.contains("override fun deletedGroupSettled(row: HashMap<String, Any>) {\n            keepUsageOfDeletedRows(listOf(row))"))
+        val complete = activity.substringAfter("private suspend fun completeClaimedTerminal(").substringBefore("val r = claimed.lifecycle")
+        assertTrue(complete.contains("keepUsageOfDeletedRows("))
+        // Both deletion paths keep the removed rows' recorded usage the same way.
+        assertTrue(function("deleteMessageRange").contains("keepUsageOfDeletedRows("))
+        assertTrue(function("deleteBulkSelection").contains("keepUsageOfDeletedRows("))
+    }
+
     @Test fun everyChatScreenSaveIsOrdered() {
         val save = activity.substringAfter("    private fun saveSettings(").substringBefore("    private fun saveSettingsInBackground(")
         assertTrue(save.contains("order.writeIfNewest(chatId, seq"))
