@@ -50,6 +50,8 @@ class MessageDeletionWiringContractTest {
         val dialog = function("deleteSelectedMessages")
         assertFalse(dialog.contains("withRequestsStopped"))
         assertTrue(dialog.contains("parallelChat.abandonForDeletion()"))
+        assertTrue(dialog.indexOf("holdSavesForDeletion = true") < dialog.indexOf("parallelChat.abandonForDeletion()"))
+        assertTrue(dialog.indexOf("holdSavesForDeletion = false") < dialog.lastIndexOf("saveSettingsInBackground()"))
         val bulk = function("deleteBulkSelection")
         assertFalse(bulk.contains("saveSettings(synchronous = true)"))
         assertFalse(bulk.contains("messages.addAll("))

@@ -379,7 +379,29 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         stopping = false
         selectingBranch = false
         if (coordinatorDelegate.isInitialized()) coordinator.signalCancelAll()
+        settleRunningGroupsNow()
         host.busy(busy)
+    }
+
+    /**
+     * Records the stop in every still-running group now, while its row can
+     * still change: once a newer turn follows it, the history accepts only a
+     * receipt for that row, which is all a stopped request's late result adds.
+     */
+    private fun settleRunningGroupsNow() {
+        host.messages.indices.forEach { index ->
+            val row = host.messages[index]
+            val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return@forEach
+            if (!ParallelResponseSelection.running(group)) return@forEach
+            val change = try {
+                ResponseGroupHistory.replace(host.chatId, host.messages, ResponseGroupTarget(host.chatId,
+                    group.assistantMessageId, group.groupId), row[ResponseGroupCodec.KEY] as? String,
+                    ResponseGroupEdits.stoppedByUser(group))
+            } catch (_: Exception) { return@forEach }
+            host.messages[index] = HashMap(change.after)
+            host.save()
+            host.changed(index, change.canonicalChanged)
+        }
     }
 
     /** The deleted rows' groups: late results go only to the usage log. */

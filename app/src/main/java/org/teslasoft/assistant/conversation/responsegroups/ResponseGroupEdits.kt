@@ -51,6 +51,25 @@ object ResponseGroupEdits {
         })
     })
 
+    /** A user stop recorded at once (message deletion): every still-running
+     *  version and attempt ends as stopped with what it last saved; a late
+     *  result from its request can then only add its usage receipt. */
+    fun stoppedByUser(group: ResponseGroup): ResponseGroup = group.copy(slots = group.slots.map { slot ->
+        slot.copy(versions = slot.versions.map { version ->
+            val fields = if (version.fields["state"] == MessageCompletionState.STREAMING)
+                version.fields + mapOf("state" to MessageCompletionState.STOPPED,
+                    "stateDetail" to MessageCompletionState.DETAIL_USER_STOP) else version.fields
+            version.copy(fields = fields, attempts = version.attempts.map { attempt ->
+                if (attempt.state != MessageCompletionState.STREAMING) attempt else attempt.copy(
+                    state = MessageCompletionState.STOPPED,
+                    partialFields = if (attempt.partialFields.isEmpty()) emptyMap() else attempt.partialFields +
+                        mapOf("state" to MessageCompletionState.STOPPED,
+                            "stateDetail" to MessageCompletionState.DETAIL_USER_STOP)
+                )
+            })
+        })
+    })
+
     /** New attempts/versions append. Existing ownership and the original input cannot be replaced. */
     fun validateTransition(before: ResponseGroup, after: ResponseGroup) {
         ResponseGroupCodec.validate(after)

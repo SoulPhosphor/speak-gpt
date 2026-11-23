@@ -16078,9 +16078,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Deleting stops Parallel Responses and a running summary update
                 // without waiting (see deleteMessageRange), then removes and
                 // realigns at once.
-                parallelChat.abandonForDeletion()
-                summarizerController?.cancelSummarizing()
-                deleteBulkSelection()
+                holdSavesForDeletion = true
+                try {
+                    parallelChat.abandonForDeletion()
+                    summarizerController?.cancelSummarizing()
+                    deleteBulkSelection()
+                } finally {
+                    holdSavesForDeletion = false
+                }
+                // Covers every change made while settling, off the main thread.
+                saveSettingsInBackground()
                 restartSummarizerAfterDeletion()
             }
             .setNegativeButton("Cancel") { _, _ -> }

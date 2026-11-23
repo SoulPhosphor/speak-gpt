@@ -151,8 +151,9 @@ class ParallelDeletionAbandonTest {
         waitUntil { startedFor(row).isCompleted }
         assertTrue(controller.busy)
 
-        val removed = ArrayList(host.messages)
+        // In production order: stop first, then take the rows to remove.
         controller.abandonForDeletion()
+        val removed = ArrayList(host.messages)
         controller.keepDeletedGroups(removed)
         host.messages.clear()
         // No waiting for the stopped request: a new message can be sent now.
@@ -176,8 +177,8 @@ class ParallelDeletionAbandonTest {
 
         // Delete the later turn while its regeneration is still running (the
         // rows as the chat holds them now).
-        val removed = host.messages.subList(2, 4).toList()
         controller.abandonForDeletion()
+        val removed = host.messages.subList(2, 4).toList()
         controller.keepDeletedGroups(removed)
         host.messages.removeAll(removed)
         assertFalse(controller.busy)
@@ -201,8 +202,8 @@ class ParallelDeletionAbandonTest {
         setupReading = CountDownLatch(1)
         assertTrue(controller.regenerate(3))
         assertTrue(setupReading.await(10, TimeUnit.SECONDS))
-        val removed = host.messages.subList(2, 4).toList()
         controller.abandonForDeletion()
+        val removed = host.messages.subList(2, 4).toList()
         controller.keepDeletedGroups(removed)
         host.messages.removeAll(removed)
         assertFalse(controller.busy)
@@ -217,5 +218,36 @@ class ParallelDeletionAbandonTest {
         // The abandoned operation's cleanup did not reset the newer one.
         assertTrue("the newer turn still owns the controls", controller.busy)
         assertEquals(2, host.messages.size)
+    }
+
+    @Test fun aSurvivingRunningGroupIsStoppedAtOnceSoItsLateResultSavesAfterANewerTurn() {
+        val (earlierUser, earlierRow) = turn()
+        val (laterUser, laterRow) = turn()
+        host.messages += listOf(earlierUser, earlierRow, laterUser, laterRow)
+        assertTrue(controller.regenerate(3))
+        waitUntil { startedFor(laterRow).isCompleted }
+
+        // Delete only the earlier turn; the running group survives.
+        controller.abandonForDeletion()
+        val removed = host.messages.subList(0, 2).toList()
+        controller.keepDeletedGroups(removed)
+        host.messages.removeAll(removed)
+        assertFalse(controller.busy)
+        // Its stop is recorded at once, while it is still the last row.
+        val stoppedNow = groupOf(host.messages[1])
+        assertFalse(ParallelResponseSelection.running(stoppedNow))
+        assertTrue(stoppedNow.slots.flatMap { it.versions }.any { it.fields["state"] == MessageCompletionState.STOPPED })
+
+        // A newer turn follows before the stopped request reports back.
+        host.messages += hashMapOf<String, Any>(MessageIdentity.KEY to id(), "isBot" to false, "message" to "next")
+
+        // Its late result (the usage receipt) still saves; nothing is left unsaved.
+        waitUntil {
+            groupOf(host.messages[1]).slots.flatMap { it.versions }.flatMap { it.attempts }.any { it.usageRecord != null }
+        }
+        assertFalse(controller.unsaved(1))
+        assertFalse(controller.busy)
+        assertEquals(3, host.messages.size)
+        assertTrue(host.deletedRows.isEmpty())
     }
 }
