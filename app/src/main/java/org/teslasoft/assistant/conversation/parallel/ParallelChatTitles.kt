@@ -21,13 +21,13 @@ import java.util.UUID
 internal object ParallelChatTitles {
     suspend fun name(context: Context, chatId: String, group: ResponseGroup, maxAttempts: Int,
         alive: () -> Boolean, summarize: suspend (List<ChatMessage>) -> String?,
-        apply: suspend (String, String) -> Boolean) {
+        apply: suspend (String, String) -> Boolean, retainUsage: (UsageLogEntry) -> Unit) {
         val prefs = Preferences.getPreferences(context, chatId)
         val placeholder = ChatPreferences.getChatPreferences().getChatName(context, chatId)
         val messages by lazy { textMessages(group) }
         run(prefs, placeholder, maxAttempts, alive,
             { org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(context) },
-            { generate(context, chatId, group) }, { summarize(messages) }, apply)
+            { generate(context, chatId, group, retainUsage) }, { summarize(messages) }, apply)
     }
 
     /** Shared persisted attempt budget; a changed source choice invalidates a result after the wait. */
@@ -116,7 +116,8 @@ internal object ParallelChatTitles {
             endpoint.authType == assignment.capabilities["parallel_auth_type"] &&
             endpoint.identity == assignment.capabilities["parallel_endpoint_identity"] && endpoint.apiKey.isNotBlank()
 
-    suspend fun generate(context: Context, chatId: String, group: ResponseGroup): String? = withContext(Dispatchers.IO) {
+    suspend fun generate(context: Context, chatId: String, group: ResponseGroup,
+        retainUsage: (UsageLogEntry) -> Unit): String? = withContext(Dispatchers.IO) {
         val app = context.applicationContext
         val assignment = group.slots.first().assignment
         fun endpoint(): ApiEndpointObject {
@@ -164,8 +165,12 @@ internal object ParallelChatTitles {
                 val receipt = AuxiliaryUsage.record(request.usage, pricing, succeeded) { reported ->
                     TokenPricingCatalogClient.load(selected, reported)
                 }
-                if (receipt != null) UsageLogStore.putRequest(prefs, entry(receipt.copy(
-                    requestId = request.requestId, requestedModel = assignment.modelId, requestStartedAtMs = started)))
+                if (receipt != null) {
+                    val completed = entry(receipt.copy(requestId = request.requestId,
+                        requestedModel = assignment.modelId, requestStartedAtMs = started))
+                    val saved = try { UsageLogStore.putRequest(prefs, completed) } catch (_: Exception) { false }
+                    if (!saved) withContext(Dispatchers.Main.immediate) { retainUsage(completed) }
+                }
             }
         }
     }

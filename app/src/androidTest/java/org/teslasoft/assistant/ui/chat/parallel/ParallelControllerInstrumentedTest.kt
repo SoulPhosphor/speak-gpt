@@ -458,6 +458,57 @@ class ParallelControllerInstrumentedTest {
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
+    @Test fun failedTitleReceiptUsesVisibleSaveOnlyRetryWithoutRepeatingPaidRequests() = fixture { activity, host ->
+        val requestId = id()
+        val receipt = UsageLogEntry(requestId, UsageCategory.SUMMARIZING, null, 100L,
+            TurnUsageRecord(model = "fixture-title", provider = "fixture-provider", requestId = requestId,
+                inputTokens = 17, outputTokens = 3, totalTokens = 20, totalCost = 0.02), UsageFunction.SUMMARIZING)
+        val prefs = Preferences.getPreferences(context, host.chatId)
+        assertTrue(UsageLogStore.putRequest(prefs, receipt.copy(record = receipt.record.copy(
+            inputTokens = null, outputTokens = null, totalTokens = null, totalCost = null))))
+        host.pendingTitleReceipt = receipt
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        var writes = 0
+        val controller = withContext(Dispatchers.Main.immediate) {
+            ParallelChatController(activity, host, titleUsageWriter = { entry ->
+                writes++
+                assertEquals(receipt, entry)
+                UsageLogStore.putRequest(prefs, entry)
+            }) { owner, store ->
+                ParallelRequestCoordinator(owner, store, { _, _ -> null }, { ParallelTransport { _, out ->
+                    calls.incrementAndGet(); out.text("answer")
+                } }, { TokenPricingCatalog(it.assignment.modelId) })
+            }.also { it.send("current message") }
+        }
+        try {
+            host.finished.await()
+            withContext(Dispatchers.Main.immediate) {
+                assertTrue(controller.busy)
+                assertTrue(controller.unsaved(1))
+                val controls = android.view.LayoutInflater.from(activity).inflate(
+                    org.teslasoft.assistant.R.layout.view_parallel_response_controls, null)
+                ParallelResponseTabs.bind(controls, host.messages.last(), true, { _, _ -> }, {},
+                    controller.unsaved(1), controller::retrySave)
+                assertEquals(android.view.View.VISIBLE, controls.findViewById<android.view.View>(
+                    org.teslasoft.assistant.R.id.parallel_retry_save).visibility)
+                assertTrue(controls.findViewById<android.widget.TextView>(
+                    org.teslasoft.assistant.R.id.parallel_response_status).text.contains("could not be saved"))
+                assertEquals(0, writes)
+                host.finished = CompletableDeferred()
+                controller.retrySave()
+            }
+            host.finished.await()
+            assertFalse(withContext(Dispatchers.Main.immediate) { controller.busy })
+            assertFalse(withContext(Dispatchers.Main.immediate) { controller.unsaved(1) })
+            assertEquals(1, writes)
+            assertEquals(4, calls.get())
+            assertEquals(1, host.titleTurns.size)
+            val saved = UsageLogStore.read(prefs).entries.filter { it.id == requestId }
+            assertEquals(1, saved.size)
+            assertEquals(receipt, saved.single())
+        } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
+    }
+
     private inner class Host(override val chatId: String) : ParallelChatController.Host {
         override val messages = arrayListOf<HashMap<String, Any>>()
         override var rawInput = "current message"
@@ -497,7 +548,11 @@ class ParallelControllerInstrumentedTest {
         override suspend fun beforeRegenerate(position: Int, action: suspend () -> Unit) = action()
         override fun canonicalEdited() { canonicalEdits++ }
         override fun settled() { finished.complete(Unit) }
-        override suspend fun nameTurn(group: ResponseGroup) { titleTurns += group.groupId }
+        var pendingTitleReceipt: UsageLogEntry? = null
+        override suspend fun nameTurn(group: ResponseGroup, retainUsage: (UsageLogEntry) -> Unit) {
+            titleTurns += group.groupId
+            pendingTitleReceipt?.let(retainUsage)
+        }
         fun group() = (ResponseGroupCodec.read(messages.last()) as ResponseGroupRead.Valid).group
         fun storedRow() = ChatPreferences.getChatPreferences().getChatByIdResult(context, chatId, DamagedChatOperation.OPENING_A_CHAT).messages.last()
         fun stored() = (ResponseGroupCodec.read(storedRow()) as ResponseGroupRead.Valid).group

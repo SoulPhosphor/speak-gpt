@@ -169,6 +169,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.teslasoft.assistant.ui.chat.parallel.*
+import org.teslasoft.assistant.conversation.parallel.ParallelChatTitles
 import org.teslasoft.assistant.conversation.responsegroups.*
 import org.teslasoft.assistant.conversation.setup.ExperimentalSetup
 import org.teslasoft.assistant.R
@@ -913,9 +914,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (position < boundary) askToRecompactAfterDelete(boundary, sourceChanged = true)
             }
         }
-        override suspend fun nameTurn(group: ResponseGroup) = ParallelChatTitles.name(
+        override suspend fun nameTurn(group: ResponseGroup, retainUsage: (org.teslasoft.assistant.usage.UsageLogEntry) -> Unit) = ParallelChatTitles.name(
             this@ChatActivity, chatId, group, AUTO_NAME_MAX_ATTEMPTS,
-            { !isFinishing && !isDestroyed }, this@ChatActivity::summarizerChatTitle, this@ChatActivity::applyAutoName)
+            { !isFinishing && !isDestroyed }, this@ChatActivity::summarizerChatTitle, this@ChatActivity::applyAutoName, retainUsage)
         override fun canonicalEdited() = onMessageEdited()
         override fun settled() {
             syncChatProjection(); summarizerCycle(); showPendingContextHelperFailure()
