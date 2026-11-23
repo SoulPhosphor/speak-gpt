@@ -143,10 +143,12 @@ class ParallelControllerInstrumentedTest {
             host.finished.await()
             val original = host.stored()
             withContext(Dispatchers.Main.immediate) {
-                assertTrue(controller.withRequestsStopped {
-                    host.messages.removeAt(0)
-                    assertTrue(host.save())
-                })
+                // Message deletion of the user row only.
+                val removed = listOf(host.messages[0])
+                controller.abandonForDeletion()
+                controller.keepDeletedGroups(removed)
+                host.messages.removeAt(0)
+                assertTrue(host.save())
                 host.finished = CompletableDeferred()
                 assertTrue(controller.regenerate(0))
             }
@@ -274,7 +276,7 @@ class ParallelControllerInstrumentedTest {
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
-    @Test fun deletingAnActiveGroupJoinsFinalUsageAndAllowsTheNextTurn() = fixture { activity, host ->
+    @Test fun deletingAnActiveGroupFreesTheNextTurnAtOnceAndKeepsItsFinalUsageOutOfTheChat() = fixture { activity, host ->
         val started = Channel<Unit>(Channel.UNLIMITED)
         val requests = CopyOnWriteArrayList<ParallelRequest>()
         var hold = true
@@ -298,18 +300,13 @@ class ParallelControllerInstrumentedTest {
             repeat(4) { started.receive() }
             val ids = host.stored().slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId }.toSet()
             withContext(Dispatchers.Main.immediate) {
-                assertTrue(controller.withRequestsStopped {
-                    val settledGroup = host.group()
-                    assertFalse(ParallelResponseSelection.running(settledGroup))
-                    val receipts = ResponseGroupEdits.usage(settledGroup)
-                    assertEquals(ids, receipts.map { it.requestId }.toSet())
-                    assertTrue(receipts.all { it.inputTokens == 13 && it.outputTokens == 5 })
-                    assertTrue(settledGroup.slots.all { it.versions.single().fields["state"] == "stopped" })
-                    host.messages.clear()
-                    assertTrue(host.save())
-                })
+                // Message deletion: nothing waits for the four running requests.
+                val removed = ArrayList(host.messages)
+                controller.abandonForDeletion()
+                controller.keepDeletedGroups(removed)
+                host.messages.clear()
+                assertTrue(host.save())
                 assertFalse(controller.busy)
-                assertFalse(controller.unsaved(1))
                 hold = false
                 host.rawInput = "next message"
                 assertTrue(controller.send("next message"))
@@ -319,10 +316,16 @@ class ParallelControllerInstrumentedTest {
             assertEquals(8, requests.size)
             assertTrue(host.stored().slots.flatMap { it.versions }.flatMap { it.attempts }.none { it.requestId in ids })
             assertFalse(withContext(Dispatchers.Main.immediate) { controller.busy })
+            // The deleted group's final usage went to the usage log, never back into the chat.
+            eventually { host.deletedRows.lastOrNull()?.let { ResponseGroupEdits.usage(groupOf(it)).map { r -> r.requestId }.toSet() } == ids }
+            val deleted = groupOf(withContext(Dispatchers.Main.immediate) { host.deletedRows.last() })
+            assertFalse(ParallelResponseSelection.running(deleted))
+            assertTrue(ResponseGroupEdits.usage(deleted).all { it.inputTokens == 13 && it.outputTokens == 5 })
+            assertTrue(deleted.slots.all { it.versions.single().fields["state"] == "stopped" })
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
-    @Test fun deletionWaitsForSaveRetryWithoutRemovingRowsOrResendingRequests() = fixture { activity, host ->
+    @Test fun deletionProceedsWhileSavesFailAndNeverResendsRequests() = fixture { activity, host ->
         val started = Channel<Unit>(Channel.UNLIMITED)
         var calls = 0
         val controller = withContext(Dispatchers.Main.immediate) {
@@ -338,25 +341,26 @@ class ParallelControllerInstrumentedTest {
         try {
             repeat(4) { started.receive() }
             val original = host.stored()
-            var removed = false
             withContext(Dispatchers.Main.immediate) {
+                // A confirmed deletion is not refused or delayed by failing saves.
                 host.failSave = true
-                assertFalse(controller.withRequestsStopped { removed = true; host.messages.clear() })
-                assertFalse(removed)
-                assertEquals(2, host.messages.size)
-                assertTrue(controller.busy)
-                assertTrue(controller.unsaved(1))
-                host.failSave = false
-                controller.retrySave()
+                val removed = ArrayList(host.messages)
+                controller.abandonForDeletion()
+                controller.keepDeletedGroups(removed)
+                host.messages.clear()
+                assertTrue(host.messages.isEmpty())
+                assertFalse(controller.busy)
             }
-            host.finished.await()
-            assertFalse(withContext(Dispatchers.Main.immediate) { controller.busy })
+            val ids = original.slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId }
+            eventually { host.deletedRows.lastOrNull()?.let { !ParallelResponseSelection.running(groupOf(it)) } == true }
+            val deleted = groupOf(withContext(Dispatchers.Main.immediate) { host.deletedRows.last() })
+            assertEquals(ids, deleted.slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId })
+            assertEquals(4, ResponseGroupEdits.usage(deleted).size)
+            withContext(Dispatchers.Main.immediate) {
+                assertTrue(host.messages.isEmpty())
+                assertFalse(controller.busy)
+            }
             assertEquals(4, calls)
-            val saved = host.stored()
-            assertFalse(ParallelResponseSelection.running(saved))
-            assertEquals(original.slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId },
-                saved.slots.flatMap { it.versions }.flatMap { it.attempts }.map { it.requestId })
-            assertEquals(4, ResponseGroupEdits.usage(saved).size)
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
@@ -524,6 +528,8 @@ class ParallelControllerInstrumentedTest {
         var committedUserRow: HashMap<String, Any>? = null
         var failSave = false
         var finished = CompletableDeferred<Unit>()
+        val deletedRows = CopyOnWriteArrayList<HashMap<String, Any>>()
+        override fun deletedGroupSettled(row: HashMap<String, Any>) { deletedRows += row }
         override suspend fun prepareBase(raw: String, setup: ExperimentalSetup): ParallelTurnBase {
             preparations++
             preparationGate?.await()
@@ -556,6 +562,12 @@ class ParallelControllerInstrumentedTest {
         fun group() = (ResponseGroupCodec.read(messages.last()) as ResponseGroupRead.Valid).group
         fun storedRow() = ChatPreferences.getChatPreferences().getChatByIdResult(context, chatId, DamagedChatOperation.OPENING_A_CHAT).messages.last()
         fun stored() = (ResponseGroupCodec.read(storedRow()) as ResponseGroupRead.Valid).group
+    }
+
+    private fun groupOf(row: Map<String, Any>) = (ResponseGroupCodec.read(row) as ResponseGroupRead.Valid).group
+
+    private suspend fun eventually(check: () -> Boolean) {
+        while (!withContext(Dispatchers.Main.immediate) { check() }) delay(20)
     }
 
     private fun fixture(action: suspend (FragmentActivity, Host) -> Unit) = runBlocking {

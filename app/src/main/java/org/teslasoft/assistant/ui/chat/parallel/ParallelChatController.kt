@@ -305,26 +305,6 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         return true
     }
 
-    /** Keep requests' final evidence durable before deletion or usage reconciliation. */
-    suspend fun withRequestsStopped(action: suspend () -> Unit): Boolean {
-        if (closed || mutating || stopping) return false
-        mutating = true
-        host.busy(true)
-        try {
-            branchJob?.cancelAndJoin()
-            operationJob?.cancelAndJoin()
-            coordinator.cancelOwned()
-            flushSavedEvidence()
-            refreshSaveState()
-            if (pendingSave) return false
-            action()
-            return true
-        } finally {
-            mutating = false
-            if (!closed) host.busy(busy)
-        }
-    }
-
     fun editReply(target: ParallelReplyEditTarget, text: String) {
         if (closed || mutating || stopping || host.unavailable) return
         mutating = true
