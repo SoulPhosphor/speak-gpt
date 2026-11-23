@@ -12,6 +12,9 @@ import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 internal interface ParallelGroupPersistence {
     fun read(target: ResponseGroupTarget): ResponseGroup
     fun update(target: ResponseGroupTarget, transform: (ResponseGroup?) -> ResponseGroup): ResponseGroup
+    /** The screen may have queued this snapshot behind a deletion save.
+     * Requests still reserve their permanent identity durably before dispatch. */
+    suspend fun awaitSaved(target: ResponseGroupTarget) {}
 }
 
 internal class ParallelPersistenceException(val category: String) : Exception(category)

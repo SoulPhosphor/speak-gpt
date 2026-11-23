@@ -151,7 +151,8 @@ data class UsageLogState(
                 }
                 if (match >= 0) {
                     val entry = available.removeAt(match)
-                    if (group != null && requestId != null && requestId !in unknownReceipts && entry.record != record) {
+                    if (group != null && requestId != null && requestId !in unknownReceipts && entry.record != record &&
+                        (record.receiptRevision ?: 0L) >= (entry.record.receiptRevision ?: 0L)) {
                         val json = Gson()
                         val enriched = json.toJsonTree(record).asJsonObject
                         json.toJsonTree(entry.record).asJsonObject.entrySet().forEach { (key, value) ->
@@ -339,6 +340,9 @@ object UsageLog {
                             .any { !validOptional(it) { field -> field.isNumber && runCatching { field.asBigDecimal.intValueExact() >= 0 }.getOrDefault(false) } }) return@decodeEntry null
                     if (!validOptional("httpStatus") { it.isNumber && runCatching { it.asBigDecimal.intValueExact() }.isSuccess }) return@decodeEntry null
                     if (!validOptional("requestStartedAtMs") { it.isNumber && runCatching { it.asBigDecimal.longValueExact() }.isSuccess }) return@decodeEntry null
+                    if (!validOptional("receiptRevision") { it.isNumber && runCatching {
+                        it.asBigDecimal.longValueExact() >= 0L
+                    }.getOrDefault(false) }) return@decodeEntry null
                     if (listOf("inputPricePerToken", "outputPricePerToken", "cachedInputPricePerToken", "cacheWriteInputPricePerToken",
                             "inputCost", "outputCost", "uncachedInputCost", "cachedInputCost", "totalCost", "reportedChargeAmount")
                             .any { !validOptional(it) { field -> field.isNumber && field.asDouble.isFinite() &&
@@ -413,6 +417,18 @@ object UsageLogStore {
         val seeded = current.seed(messages, nowMs)
         if (seeded != current) prefs.commitUsageLog(UsageLog.encode(seeded))
         seeded
+    }
+
+    /** [seed] that reports whether the log now durably holds the records of
+     *  [messages]: true when nothing was missing or the repair was committed. */
+    fun seedChecked(
+        prefs: org.teslasoft.assistant.preferences.Preferences,
+        messages: List<Map<String, Any>>,
+        nowMs: Long = System.currentTimeMillis()
+    ): Boolean = synchronized(lock) {
+        val current = read(prefs)
+        val seeded = current.seed(messages, nowMs)
+        seeded == current || prefs.commitUsageLog(UsageLog.encode(seeded))
     }
 
     /** [seed] only for a chat whose log has never been seeded. Opening a chat

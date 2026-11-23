@@ -426,6 +426,17 @@ class ChatPreferences private constructor() {
         chatId: String,
         detectedDuring: DamagedChatOperation
     ): ChatHistoryResult {
+        // A confirmed message deletion whose save has not landed yet is what
+        // the chat now holds; never serve the stored copy it replaced.
+        ChatHistoryWriteOrder.shared.beforeRead(chatId)?.let { kept ->
+            return ChatHistoryResult(
+                ChatStorageHealth.readStateFor(
+                    locked = false, decryptFailed = false, parseFailed = false,
+                    keyPresent = true, hasEntries = kept.isNotEmpty()
+                ),
+                kept
+            )
+        }
         val name = "chat_$chatId"
         val chat: SharedPreferences = SecurePrefs.get(context, name)
         if (SecurePrefs.isLockedName(name)) {
@@ -645,6 +656,13 @@ class ChatPreferences private constructor() {
      * memory at once, on disk without waiting) only when it moves, so a
      * failed history save can only leave a gap, never a reused number.
      */
+    /** Gives [messages] their permanent IDs and numbers now, on the caller's
+     *  thread, so a snapshot saved later holds the same values as the live rows. */
+    internal fun prepareForSave(context: Context, chatId: String, messages: List<HashMap<String, Any>>) {
+        MessageIdentity.ensure(messages)
+        assignMessageNumbers(context, chatId, messages)
+    }
+
     private fun assignMessageNumbers(context: Context, chatId: String, messages: List<HashMap<String, Any>>) {
         // Already-numbered messages (an imported or restored chat) still
         // raise the counter, so a number is never reused after a deletion.
@@ -1059,6 +1077,7 @@ class ChatPreferences private constructor() {
         // one chat from the old fallback hash to the new fallback hash.
         try {
             ImageGenerationJobRegistry.rename(oldId, newId)
+            ChatHistoryWriteOrder.shared.rename(oldId, newId)
             org.teslasoft.assistant.conversation.parallel.ParallelChatScopes.rename(oldId, newId)
             ImageGenerationJobRegistry.updateOriginChatName(newId, chatName)
             GeneratedImageCatalogStore.repointOriginChat(context, oldId, newId, chatName)

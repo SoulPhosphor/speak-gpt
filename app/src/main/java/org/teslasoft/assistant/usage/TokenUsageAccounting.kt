@@ -170,7 +170,10 @@ data class TurnUsageRecord(
     val pricingEvidence: String? = null,
     val reportedChargeAmount: Double? = null,
     val reportedChargeCurrency: String? = null,
-    val reportedChargeDecimal: String? = null
+    val reportedChargeDecimal: String? = null,
+    /** Increasing evidence revision for one owned Parallel request. A delayed
+     * checkpoint repair must never replace a newer terminal receipt. */
+    val receiptRevision: Long? = null
 ) {
     val countSource: TokenCountSource get() = TokenCountSource.fromStored(source)
     val storedCostSource: CostSource get() = when {

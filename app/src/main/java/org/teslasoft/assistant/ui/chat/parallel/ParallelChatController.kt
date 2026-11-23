@@ -41,6 +41,9 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         fun canonicalEdited() {}
         fun settled()
         suspend fun nameTurn(group: ResponseGroup, retainUsage: (UsageLogEntry) -> Unit) {}
+        /** A deleted message's response group reached its final state; its
+         *  usage belongs in the chat's usage log. */
+        fun deletedGroupSettled(row: HashMap<String, Any>) {}
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var active = false
@@ -56,17 +59,30 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     private var branchJob: Job? = null
     private var mutating = false
     private var stopping = false
+    // Bumped when a message deletion abandons the running operation, so that
+    // operation's late cleanup cannot reset a newer turn.
+    private var operationToken = 0
+    // The Stop task waiting for an interrupted preparation to wind down.
+    private var stopJob: Job? = null
+    private var editJob: Job? = null
+    /** Groups of deleted messages whose requests may still report back. */
+    private class DeletedGroup(var row: HashMap<String, Any>, var group: ResponseGroup)
+    private val deletedGroups = HashMap<String, DeletedGroup>()
     val busy get() = active || pendingSave || mutating || stopping
     private val prefs get() = Preferences.getPreferences(activity, host.chatId)
     private val chatScope by lazy { ParallelChatScope(host.chatId) }
     private val detachedPersistence by lazy { StoredParallelGroups(activity.applicationContext, chatScope) {} }
     private val persistence = object : ParallelGroupPersistence {
-        override fun read(target: ResponseGroupTarget): ResponseGroup = runBlocking(Dispatchers.Main.immediate) {
+        override fun read(target: ResponseGroupTarget): ResponseGroup = runBlocking<ResponseGroup?>(Dispatchers.Main.immediate) {
+            deletedGroups[target.assistantMessageId]?.let { return@runBlocking it.group }
+            if (closed) return@runBlocking null
             owned(target).second
-        }
+        } ?: detachedPersistence.read(target)
         override fun update(target: ResponseGroupTarget, transform: (ResponseGroup?) -> ResponseGroup): ResponseGroup =
-            runBlocking(Dispatchers.Main.immediate) {
-                if (closed) return@runBlocking detachedPersistence.update(target, transform)
+            runBlocking<ResponseGroup?>(Dispatchers.Main.immediate) {
+                // A deleted message's group never returns to the chat.
+                deletedGroups[target.assistantMessageId]?.let { return@runBlocking keepDeleted(it, transform) }
+                if (closed) return@runBlocking null
                 val actual = chatScope.target(target)
                 val index = host.messages.indexOfFirst { it["message_id"] == actual.assistantMessageId }
                 check(actual.chatId == host.chatId)
@@ -97,12 +113,17 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 }
                 host.changed(index, change.canonicalChanged)
                 after
-            }
+            } ?: detachedPersistence.update(target, transform)
+
+        override suspend fun awaitSaved(target: ResponseGroupTarget) {
+            ChatHistoryWriteOrder.shared.awaitSaved(chatScope.target(target).chatId)
+        }
     }
-    private val coordinator by lazy { coordinatorFactory?.invoke(scope, persistence) ?: ParallelRuntime.forChat(activity, host.chatId, scope,
+    private val coordinatorDelegate = lazy { coordinatorFactory?.invoke(scope, persistence) ?: ParallelRuntime.forChat(activity, host.chatId, scope,
         canonicalSourcesChanged = {}, confirmImage = { request, prompt ->
             confirm("${request.assignment.label}\n\n$prompt", R.string.image_gen_action_create)
         }, persistence = persistence) }
+    private val coordinator by coordinatorDelegate
 
     fun configured(): Boolean = prefs.readExperimentalSetup()?.mode == ExperimentalSetup.Mode.PARALLEL
 
@@ -111,12 +132,13 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         if (busy || selectingBranch) return true
         val pending = ParallelResponseSelection.pending(host.messages) ?: return false
         selectingBranch = true
+        val token = operationToken
         branchJob = scope.launch {
             var adopted = false
             try {
                 if (!pending.hasDescendants || confirm(activity.getString(R.string.make_current_body), R.string.make_current_confirm))
                     adopted = host.adopt(pending.position, pending.hasDescendants)
-            } finally { selectingBranch = false }
+            } finally { if (token == operationToken) selectingBranch = false }
             if (adopted) beforeSendOrContinue(continueSend)
         }
         return true
@@ -141,6 +163,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         val inputIncludes = host.includes.toList()
         val manual = host.manualMemoryIds.toList()
         active = true; preparing = true; host.busy(true)
+        val token = operationToken
         operationJob = scope.launch {
             try {
                 val base = host.prepareBase(raw, setup)
@@ -159,8 +182,11 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                     val settled = persistence.read(ResponseGroupTarget(host.chatId, group.assistantMessageId, group.groupId))
                     if (settled.slots.any { slot -> slot.versions.any { it.fields["state"] == MessageCompletionState.DONE } })
                         host.nameTurn(settled) { receipt ->
-                            pendingTitleReceipts[receipt.id] = PendingTitleReceipt(settled.assistantMessageId, receipt)
-                            if (closed) pendingSave = true else refreshSaveState()
+                            if (token != operationToken) keepAbandonedTitleReceipt(receipt)
+                            else {
+                                pendingTitleReceipts[receipt.id] = PendingTitleReceipt(settled.assistantMessageId, receipt)
+                                if (closed) pendingSave = true else refreshSaveState()
+                            }
                         }
                 }
             } catch (e: CancellationException) {
@@ -172,10 +198,12 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
             } catch (_: Exception) {
                 notice(activity.getString(R.string.parallel_prepare_failed))
             } finally {
-                pendingTurn = null
-                preparing = false
-                active = false
-                if (!closed) { host.busy(busy); if (!mutating && !stopping) host.settled() }
+                if (token == operationToken) {
+                    pendingTurn = null
+                    preparing = false
+                    active = false
+                    if (!closed) { host.busy(busy); if (!mutating && !stopping) host.settled() }
+                }
             }
         }
         return true
@@ -231,19 +259,25 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         if (stopping || closed) return
         stopping = true
         host.busy(true)
+        val token = operationToken
         val preparingJob = operationJob
         preparingJob?.cancel(ParallelUserStop())
-        scope.launch {
+        stopJob = scope.launch {
             try {
                 // A blocking durable commit may finish while preparation is being cancelled.
                 // Drain that owner before finding every newly registered request chain.
                 preparingJob?.join()
+                // A message deletion abandoned this stop meanwhile; a newer turn
+                // may own the requests now, and it already stopped the old ones.
+                if (token != operationToken) return@launch
                 coordinator.cancelOwned()
                 flushSavedEvidence()
                 refreshSaveState()
             } finally {
-                stopping = false
-                if (!closed) { host.busy(busy); if (!busy) host.settled() }
+                if (token == operationToken) {
+                    stopping = false
+                    if (!closed) { host.busy(busy); if (!busy) host.settled() }
+                }
             }
         }
     }
@@ -269,6 +303,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
             return true
         }
         selectingBranch = true
+        val token = operationToken
         operationJob = scope.launch {
             try { host.beforeRegenerate(position) {
                 active = true; host.busy(true)
@@ -277,41 +312,26 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                     offerSaveRetry()
                 } catch (e: CancellationException) { throw e }
                 catch (_: Exception) { notice(activity.getString(R.string.parallel_prepare_failed)) }
-                finally { active = false; if (!closed) { host.busy(busy); if (!mutating && !stopping) host.settled() } }
-            } } finally { selectingBranch = false }
+                finally {
+                    if (token == operationToken) { active = false; if (!closed) { host.busy(busy); if (!mutating && !stopping) host.settled() } }
+                }
+            } } finally { if (token == operationToken) selectingBranch = false }
         }
         return true
-    }
-
-    /** Keep requests' final evidence durable before deletion or usage reconciliation. */
-    suspend fun withRequestsStopped(action: suspend () -> Unit): Boolean {
-        if (closed || mutating || stopping) return false
-        mutating = true
-        host.busy(true)
-        try {
-            branchJob?.cancelAndJoin()
-            operationJob?.cancelAndJoin()
-            coordinator.cancelOwned()
-            flushSavedEvidence()
-            refreshSaveState()
-            if (pendingSave) return false
-            action()
-            return true
-        } finally {
-            mutating = false
-            if (!closed) host.busy(busy)
-        }
     }
 
     fun editReply(target: ParallelReplyEditTarget, text: String) {
         if (closed || mutating || stopping || host.unavailable) return
         mutating = true
         host.busy(true)
-        scope.launch {
+        val token = operationToken
+        editJob = scope.launch {
             try {
                 coordinator.cancelOwned(ResponseGroupTarget(host.chatId, target.assistantMessageId, target.groupId),
                     target.slotId, target.versionId)
+                if (token != operationToken) return@launch
                 flushSavedEvidence()
+                if (token != operationToken) return@launch
                 refreshSaveState()
                 if (pendingSave) return@launch
                 val index = host.messages.indexOfFirst { it["message_id"] == target.assistantMessageId }
@@ -328,8 +348,10 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 if (canonical) host.canonicalEdited()
                 host.changed(index, canonical)
             } finally {
-                mutating = false
-                if (!closed) { host.busy(busy); if (!busy) host.settled() }
+                if (token == operationToken) {
+                    mutating = false
+                    if (!closed) { host.busy(busy); if (!busy) host.settled() }
+                }
             }
         }
     }
@@ -349,12 +371,116 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
             group.slots.flatMap { it.versions }.flatMap { it.attempts }.any { it.requestId in coordinator.unsavedRequestIds() }
     }
 
+    /**
+     * Message deletion: stops every request and any send or branch choice in
+     * progress at once, without waiting for them, so a new message can be
+     * sent immediately. Requests keep winding down in the background; what
+     * they report for surviving messages is saved as usual, and the deletion
+     * passes deleted groups to [keepDeletedGroups].
+     */
+    fun abandonForDeletion() {
+        if (closed) return
+        operationToken += 1
+        operationJob?.cancel(ParallelUserStop())
+        branchJob?.cancel(ParallelUserStop())
+        stopJob?.cancel()
+        editJob?.cancel()
+        operationJob = null
+        branchJob = null
+        stopJob = null
+        editJob = null
+        pendingTurn = null
+        preparing = false
+        active = false
+        stopping = false
+        selectingBranch = false
+        mutating = false
+        pendingTitleReceipts.values.forEach { keepAbandonedTitleReceipt(it.entry) }
+        pendingTitleReceipts.clear()
+        pendingSave = false
+        if (coordinatorDelegate.isInitialized()) coordinator.signalCancelAll()
+        settleRunningGroupsNow()
+        host.busy(busy)
+    }
+
+    /**
+     * Records the stop in every still-running group now, while its row can
+     * still change: once a newer turn follows it, the history accepts only a
+     * receipt for that row, which is all a stopped request's late result adds.
+     */
+    private fun settleRunningGroupsNow() {
+        host.messages.indices.forEach { index ->
+            val row = host.messages[index]
+            val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return@forEach
+            if (!ParallelResponseSelection.running(group)) return@forEach
+            val change = try {
+                ResponseGroupHistory.replace(host.chatId, host.messages, ResponseGroupTarget(host.chatId,
+                    group.assistantMessageId, group.groupId), row[ResponseGroupCodec.KEY] as? String,
+                    ResponseGroupEdits.stoppedByUser(group))
+            } catch (_: Exception) { return@forEach }
+            host.messages[index] = HashMap(change.after)
+            host.save()
+            host.changed(index, change.canonicalChanged)
+        }
+    }
+
+    /** The deleted rows' groups: late results go only to the usage log. */
+    fun keepDeletedGroups(rows: List<Map<String, Any>>) {
+        rows.forEach { row ->
+            val group = (ResponseGroupCodec.read(row) as? ResponseGroupRead.Valid)?.group ?: return@forEach
+            deletedGroups[group.assistantMessageId] = DeletedGroup(HashMap(row), group)
+        }
+        if (closed || !coordinatorDelegate.isInitialized()) return
+        pendingSave = unsavedOutsideDeleted()
+        host.busy(busy)
+        // Results held back by an earlier failed save now go to the usage log.
+        if (coordinator.unsavedTargets().any { it.assistantMessageId in deletedGroups }) scope.launch {
+            coordinator.flush()
+            refreshSaveState()
+            if (!closed) host.busy(busy)
+        }
+    }
+
+    /** Unsaved evidence that still belongs to the chat (a deleted group's is
+     *  routed to the usage log instead). */
+    private fun unsavedOutsideDeleted(): Boolean =
+        coordinator.unsavedTargets(includeRetired = false).any { it.assistantMessageId !in deletedGroups } ||
+            pendingTitleReceipts.isNotEmpty()
+
+    private fun keepAbandonedTitleReceipt(entry: UsageLogEntry) {
+        CoroutineScope(NonCancellable + Dispatchers.Main.immediate).launch {
+            var waitMs = 250L
+            while (true) {
+                val owner = prefs
+                val saved = withContext(Dispatchers.IO) {
+                    try { titleUsageWriter?.invoke(entry) ?: UsageLogStore.putRequest(owner, entry) }
+                    catch (_: Exception) { false }
+                }
+                if (saved) return@launch
+                delay(waitMs)
+                waitMs = (waitMs * 2).coerceAtMost(30_000L)
+            }
+        }
+    }
+
+    private fun keepDeleted(kept: DeletedGroup, transform: (ResponseGroup?) -> ResponseGroup): ResponseGroup {
+        val after = transform(kept.group)
+        kept.row = ResponseGroupEdits.install(kept.row, after)
+        kept.group = after
+        val settled = after.slots.none { slot ->
+            slot.versions.any { version -> version.attempts.any { it.state == MessageCompletionState.STREAMING } }
+        }
+        if (settled) host.deletedGroupSettled(HashMap(kept.row))
+        return after
+    }
+
     fun retrySave() {
         if (active || closed || mutating || stopping || !pendingSave) return
+        val token = operationToken
         scope.launch {
             active = true; host.busy(true)
             try { flushSavedEvidence(); refreshSaveState() }
-            finally { active = false; host.busy(busy); if (!busy) host.settled() }
+            finally { if (token == operationToken) { active = false; host.busy(busy); if (!busy) host.settled() } }
         }
     }
 
@@ -370,7 +496,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     }
 
     private fun refreshSaveState() {
-        pendingSave = coordinator.unsavedRequestIds().isNotEmpty() || pendingTitleReceipts.isNotEmpty()
+        pendingSave = unsavedOutsideDeleted()
         host.messages.indices.forEach { position ->
             if (host.messages[position].containsKey(ResponseGroupCodec.KEY)) host.changed(position, false)
         }
