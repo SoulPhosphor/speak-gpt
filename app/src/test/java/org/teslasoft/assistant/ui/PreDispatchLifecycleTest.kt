@@ -138,12 +138,18 @@ class PreDispatchLifecycleTest {
     @Test
     fun preDispatchCancellationIsClassifiedRequestNotSent() {
         val chat = source(chatActivity)
-        // request_not_sent is used by BOTH catch paths (exception + the
-        // non-user, non-teardown cancellation branch).
-        val uses = chat.split("Termination.REQUEST_NOT_SENT").size - 1
+        // request_not_sent is used by BOTH catch paths: the exception path in
+        // the chat screen, and the non-user, non-teardown cancellation branch,
+        // whose plan is shared with message deletion (CancelledReplyTerminal).
+        val plan = source("src/main/java/org/teslasoft/assistant/ui/chat/CancelledReplyTerminal.kt")
         assertTrue(
-            "request_not_sent must classify both the pre-dispatch exception and cancellation paths",
-            uses >= 2
+            "request_not_sent must classify the pre-dispatch exception path",
+            chat.contains("Termination.REQUEST_NOT_SENT")
+        )
+        assertTrue(
+            "request_not_sent must classify the pre-dispatch cancellation path",
+            plan.contains("ResponseLifecycle.Termination.REQUEST_NOT_SENT") &&
+                chat.contains("CancelledReplyTerminal.plan(")
         )
     }
 
