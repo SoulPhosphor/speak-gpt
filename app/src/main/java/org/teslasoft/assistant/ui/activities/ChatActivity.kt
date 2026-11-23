@@ -913,6 +913,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (position < boundary) askToRecompactAfterDelete(boundary, sourceChanged = true)
             }
         }
+        override suspend fun nameTurn(group: ResponseGroup) = ParallelChatTitles.name(
+            this@ChatActivity, chatId, group, AUTO_NAME_MAX_ATTEMPTS,
+            { !isFinishing && !isDestroyed }, this@ChatActivity::summarizerChatTitle, this@ChatActivity::applyAutoName)
         override fun canonicalEdited() = onMessageEdited()
         override fun settled() {
             syncChatProjection(); summarizerCycle(); showPendingContextHelperFailure()
@@ -14547,6 +14550,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val placeholderName = ChatPreferences.getChatPreferences().getChatName(this, chatId)
 
             if (placeholderName.trim().contains("_autoname_")) {
+                val useSummarizerForTitles = preferences?.getUseSummarizerForTitles() == true
+                if (useSummarizerForTitles && !org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)) return
                 autoNameAttempts++
                 disableTurnControlsUnlessTheyAreStops()
                 setGenerationProgressVisible(false)
@@ -14592,7 +14597,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Thinking text a model writes before the title is looked
                 // past; a reply with no usable title counts as a failed
                 // attempt, the same as a request error.
-                val newChatName: String? = try {
+                val newChatName: String? = if (useSummarizerForTitles) summarizerChatTitle(m) else try {
                     org.teslasoft.assistant.util.ChatTitleExtractor.extract(
                         withAuxiliaryTextUsage(
                             requestModel = titleModel,
@@ -14615,10 +14620,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // backup — even when summarizing is off for this chat. With
                 // no summarizer set up, the chat stays "Untitled chat".
                 val lastMainAttempt = autoNameAttempts >= AUTO_NAME_MAX_ATTEMPTS
-                val renamed = !newChatName.isNullOrBlank() && applyAutoName(newChatName, placeholderName)
-                if (!renamed && lastMainAttempt && !isFinishing && !isDestroyed) {
+                val selectionCurrent = preferences?.getUseSummarizerForTitles() == useSummarizerForTitles
+                val renamed = selectionCurrent && !newChatName.isNullOrBlank() && applyAutoName(newChatName, placeholderName)
+                if (!renamed && !useSummarizerForTitles && selectionCurrent && lastMainAttempt && !isFinishing && !isDestroyed) {
                     val backupName = summarizerChatTitle(m)
-                    if (!backupName.isNullOrBlank() && backupName != newChatName) {
+                    if (preferences?.getUseSummarizerForTitles() == false && !backupName.isNullOrBlank() && backupName != newChatName) {
                         applyAutoName(backupName, placeholderName)
                     }
                 }

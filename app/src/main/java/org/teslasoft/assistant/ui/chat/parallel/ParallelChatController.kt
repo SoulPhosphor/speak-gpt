@@ -37,6 +37,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
         suspend fun beforeRegenerate(position: Int, action: suspend () -> Unit)
         fun canonicalEdited() {}
         fun settled()
+        suspend fun nameTurn(group: ResponseGroup) {}
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var active = false
@@ -149,6 +150,11 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
                 pendingTurn = PendingTurn(raw, base, group.groupId)
                 coordinator.dispatch(host.chatId, group, prepared.commitContext).await()
                 offerSaveRetry()
+                if (!closed && !pendingSave) {
+                    val settled = persistence.read(ResponseGroupTarget(host.chatId, group.assistantMessageId, group.groupId))
+                    if (settled.slots.any { slot -> slot.versions.any { it.fields["state"] == MessageCompletionState.DONE } })
+                        host.nameTurn(settled)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ParallelPreparationRefused) {

@@ -72,6 +72,8 @@ class ParallelControllerInstrumentedTest {
             assertEquals(4, ResponseGroupEdits.usage(settled).map { it.requestId }.distinct().size)
             assertEquals(1, host.preparations)
             assertEquals(1, host.contextCommits)
+            assertEquals(1, host.titleTurns.size)
+            assertEquals(settled.groupId, host.titleTurns.single())
             assertSame(host.committedUserRow, withContext(Dispatchers.Main.immediate) { host.messages.first() })
             withContext(Dispatchers.Main.immediate) {
                 host.finished = CompletableDeferred()
@@ -91,6 +93,7 @@ class ParallelControllerInstrumentedTest {
             assertSame(host.committedUserRow, withContext(Dispatchers.Main.immediate) { host.messages.first() })
             assertEquals(1, host.preparations)
             assertEquals(1, host.contextCommits)
+            assertEquals(1, host.titleTurns.size)
         } finally { withContext(Dispatchers.Main.immediate) { controller.close() } }
     }
 
@@ -466,6 +469,7 @@ class ParallelControllerInstrumentedTest {
         var contextCommits = 0
         var failCommit = false
         var canonicalEdits = 0
+        val titleTurns = arrayListOf<String>()
         var committedUserRow: HashMap<String, Any>? = null
         var failSave = false
         var finished = CompletableDeferred<Unit>()
@@ -493,6 +497,7 @@ class ParallelControllerInstrumentedTest {
         override suspend fun beforeRegenerate(position: Int, action: suspend () -> Unit) = action()
         override fun canonicalEdited() { canonicalEdits++ }
         override fun settled() { finished.complete(Unit) }
+        override suspend fun nameTurn(group: ResponseGroup) { titleTurns += group.groupId }
         fun group() = (ResponseGroupCodec.read(messages.last()) as ResponseGroupRead.Valid).group
         fun storedRow() = ChatPreferences.getChatPreferences().getChatByIdResult(context, chatId, DamagedChatOperation.OPENING_A_CHAT).messages.last()
         fun stored() = (ResponseGroupCodec.read(storedRow()) as ResponseGroupRead.Valid).group
