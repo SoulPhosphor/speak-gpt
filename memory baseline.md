@@ -1191,3 +1191,16 @@ failed classes and the changed pair-snapshot test were run again: 206 tests
 passed. The same recovery command completed `assembleBeta` and
 `assembleDebugAndroidTest`. Beta package, label and non-debuggable packaging were
 verified. Native instrumentation still requires the normal CI emulator run.
+
+Normal CI run 45110171904: all seven Pending-pair instrumented tests passed.
+The new native evaluation failed before inference because the suite runner
+removed `files/step2-model` after Step2, before the second consumer. This was a
+suite integration mistake, not an extraction/model failure: the diagnostics
+showed the emulator alive and booted at the assertion. The shared fixture is
+now retained until all suite classes finish, with the missing-file assertion
+unchanged. A shell harness verifies its lifetime on success, test failure and
+one bounded infrastructure retry. The same run later lost its adb connection
+before ChatStorageFoundations; diagnostics and `recovery-events.txt` show one
+reconnect followed by that class passing. No CI Reliability Log issue existed.
+Evidence: [run logs](https://github.com/SoulPhosphor/speak-gpt/actions/runs/45110171904)
+and [diagnostics artifact](https://github.com/SoulPhosphor/speak-gpt/actions/runs/45110171904/artifacts/14790290597).
