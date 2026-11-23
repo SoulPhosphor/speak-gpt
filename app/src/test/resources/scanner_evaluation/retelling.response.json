@@ -1,0 +1,14 @@
+{
+  "memories": [],
+  "model_rules": [],
+  "draft_edits": [],
+  "withdrawn_drafts": [],
+  "already_covered": [
+    {
+      "messages": [
+        1
+      ],
+      "memory_ref": "M1"
+    }
+  ]
+}

@@ -4266,4 +4266,24 @@
     </style>
     <!-- Hidden parallel-model control; all appearance comes from the shared toggle row. -->
     <style name="Widget.App.ParallelModels.AllowImages" parent="Widget.App.Row.Toggle" />
+    <style name="Widget.App.MemoryPair.Column" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginTop">@dimen/memory_pair_action_gap</item>
+    </style>
+    <style name="Widget.App.MemoryPair.Page" parent="Widget.App.MemoryPair.Column">
+        <item name="android:paddingHorizontal">@dimen/memory_pair_page_inset</item>
+    </style>
+    <style name="Widget.App.MemoryPair.Field" parent="Widget.App.Field.Box">
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:gravity">top</item>
+        <item name="android:minLines">3</item>
+    </style>
+    <style name="AppButton.Primary.Inline.MemoryPair" parent="AppButton.Primary.Inline">
+        <item name="android:layout_marginTop">@dimen/memory_pair_action_gap</item>
+    </style>
+    <style name="AppButton.Destructive.Inline.MemoryPair" parent="AppButton.Destructive.Inline">
+        <item name="android:layout_marginTop">@dimen/memory_pair_action_gap</item>
+    </style>
 </resources>
