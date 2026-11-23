@@ -90,6 +90,9 @@ class MessageDeletionWiringContractTest {
         )) {
             assertTrue("$name is not fenced", function(name).contains("if (turnFence.isStale()) return"))
         }
+        // A retired reply never starts another request phase.
+        assertTrue(activity.substringAfter("private suspend fun startLifecycle(").substringBefore("currentLifecycle?.let")
+            .contains("if (turnFence.isStale()) throw CancellationException("))
         // Both reply scopes carry the fence.
         assertFalse(activity.contains("parseMessageScope = CoroutineScope(Dispatchers.Main)\n"))
         assertTrue(activity.contains("parseMessageScope = CoroutineScope(Dispatchers.Main + turnFence.element())"))

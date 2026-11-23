@@ -10364,6 +10364,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  on. A still-pending recorder (e.g. the §8 first attempt that is about to
      *  be retried) is closed first so its record is never dropped. */
     private suspend fun startLifecycle(phase: String, requestedMaxOutput: Int?) {
+        // A reply retired by a message deletion never starts another request
+        // phase, even if a setup step swallowed its cancellation.
+        if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
         currentLifecycle?.let {
             if (!it.finalized) finalizeLifecycleTerminal(
                 ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
