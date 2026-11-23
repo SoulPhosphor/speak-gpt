@@ -1,11 +1,22 @@
 name: Android Checks
 
+# One full run per commit: pull requests into main, and main itself after a
+# merge. Branch pushes without a pull request do not run the suite, so a PR
+# commit is no longer checked twice (push + pull_request).
 on:
   push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
   workflow_dispatch:
+
+# A newer commit on the same pull request cancels the older, now obsolete run.
+# Runs on main (and manual runs) are never cancelled.
+concurrency:
+  group: android-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -34,6 +45,17 @@ jobs:
 
       - name: Ensure Gradle wrapper is executable
         run: chmod +x ./gradlew
+
+      # Robolectric downloads its Android framework jars from Maven Central
+      # while the unit tests run, outside the Gradle cache. Keeping them
+      # avoids repeat downloads that Maven Central has rate-limited (HTTP 429).
+      - name: Cache Robolectric framework jars
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('app/build.gradle') }}
+          restore-keys: |
+            robolectric-${{ runner.os }}-
 
       - name: Run unit tests
         # The three app variants have a large Android/PDF/OCR classpath. Keep
@@ -138,38 +160,7 @@ jobs:
           chmod +x ./gradlew
 
       - name: Start disposable x86_64 emulator
-        run: |
-          set -euo pipefail
-          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
-          mkdir -p "$ANDROID_AVD_HOME"
-          echo no | avdmanager create avd \
-            --force \
-            --name recovery-matrix \
-            --package "system-images;android-35;google_apis;x86_64" \
-            --device pixel_6 \
-            --path "$ANDROID_AVD_HOME/recovery-matrix.avd"
-          sudo chmod 666 /dev/kvm
-          nohup "$ANDROID_HOME/emulator/emulator" @recovery-matrix \
-            -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
-            -camera-back none -camera-front none -wipe-data \
-            > "$RUNNER_TEMP/recovery-emulator.log" 2>&1 &
-          emulator_pid=$!
-          for attempt in $(seq 1 90); do
-            if ! kill -0 "$emulator_pid" 2>/dev/null; then
-              tail -n 200 "$RUNNER_TEMP/recovery-emulator.log"
-              exit 1
-            fi
-            if adb devices | grep -q '^emulator-' && \
-              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
-              adb shell settings put global window_animation_scale 0
-              adb shell settings put global transition_animation_scale 0
-              adb shell settings put global animator_duration_scale 0
-              exit 0
-            fi
-            sleep 5
-          done
-          tail -n 200 "$RUNNER_TEMP/recovery-emulator.log"
-          exit 1
+        run: .github/scripts/emulator-suite.sh start
 
       - name: Build x86_64 recovery test APKs
         run: >-
@@ -213,74 +204,38 @@ jobs:
           diff -u "$model_dir/host-hashes.txt" "$model_dir/device-hashes.txt"
 
       - name: Run recovery instrumentation and fault suite
+        # Each class runs in its own instrumentation call. The script records
+        # every attempt in recovery-results/suite-summary.tsv and the job
+        # summary, collects diagnostics on any failure, and recovers a lost
+        # emulator at most a bounded number of times (see the script header).
+        # Test failures, app crashes and timeouts are never retried.
         run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/recovery-results"
-          classes=(
-            org.teslasoft.assistant.preferences.memory.Step2RecallInstrumentedTest
-            org.teslasoft.assistant.preferences.memory.MemoryLengthInstrumentedTest
-            org.teslasoft.assistant.ui.widgets.MemoryTokenMeterTest
-            org.teslasoft.assistant.ui.util.PromptLibrarySearchInstrumentedTest
-            org.teslasoft.assistant.preferences.backup.PortableRecoveryMatrixInstrumentedTest
-            org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreInstrumentedTest
-            org.teslasoft.assistant.preferences.memory.MemorySharedRestoreInstrumentedTest
-            org.teslasoft.assistant.preferences.memory.ScannerComparisonCacheInstrumentedTest
-            org.teslasoft.assistant.preferences.memory.ScanFilingInstrumentedTest
-            org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporterImageValidationInstrumentedTest
-            org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecoveryInstrumentedTest
-            org.teslasoft.assistant.preferences.includes.PdfAttachmentStoreInstrumentedTest
-            org.teslasoft.assistant.preferences.includes.PdfFallbackExtractorInstrumentedTest
-            org.teslasoft.assistant.conversation.responsegroups.ResponseGroupStorageInstrumentedTest
-            org.teslasoft.assistant.conversation.parallel.ParallelUsageScreenInstrumentedTest
-            org.teslasoft.assistant.ui.chat.parallel.ParallelResponseUiInstrumentedTest
-            org.teslasoft.assistant.ui.chat.parallel.ParallelPreparationInstrumentedTest
-            org.teslasoft.assistant.ui.chat.parallel.ParallelControllerInstrumentedTest
-            org.teslasoft.assistant.preferences.chatstore.ChatStoreInstrumentedTest
-            org.teslasoft.assistant.preferences.chatstore.ChatStorageFoundationsInstrumentedTest
+          .github/scripts/emulator-suite.sh run-suite \
+            org.teslasoft.assistant.preferences.memory.Step2RecallInstrumentedTest \
+            org.teslasoft.assistant.preferences.memory.MemoryLengthInstrumentedTest \
+            org.teslasoft.assistant.ui.widgets.MemoryTokenMeterTest \
+            org.teslasoft.assistant.ui.util.PromptLibrarySearchInstrumentedTest \
+            org.teslasoft.assistant.preferences.backup.PortableRecoveryMatrixInstrumentedTest \
+            org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreInstrumentedTest \
+            org.teslasoft.assistant.preferences.memory.MemorySharedRestoreInstrumentedTest \
+            org.teslasoft.assistant.preferences.memory.ScannerComparisonCacheInstrumentedTest \
+            org.teslasoft.assistant.preferences.memory.ScanFilingInstrumentedTest \
+            org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporterImageValidationInstrumentedTest \
+            org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecoveryInstrumentedTest \
+            org.teslasoft.assistant.preferences.includes.PdfAttachmentStoreInstrumentedTest \
+            org.teslasoft.assistant.preferences.includes.PdfFallbackExtractorInstrumentedTest \
+            org.teslasoft.assistant.conversation.responsegroups.ResponseGroupStorageInstrumentedTest \
+            org.teslasoft.assistant.conversation.parallel.ParallelUsageScreenInstrumentedTest \
+            org.teslasoft.assistant.ui.chat.parallel.ParallelResponseUiInstrumentedTest \
+            org.teslasoft.assistant.ui.chat.parallel.ParallelPreparationInstrumentedTest \
+            org.teslasoft.assistant.ui.chat.parallel.ParallelControllerInstrumentedTest \
+            org.teslasoft.assistant.preferences.chatstore.ChatStoreInstrumentedTest \
+            org.teslasoft.assistant.preferences.chatstore.ChatStorageFoundationsInstrumentedTest \
             org.teslasoft.assistant.preferences.backup.LargeChatBackupInstrumentedTest
-          )
-          failed=0
-          for class_name in "${classes[@]}"; do
-            result_name="${class_name##*.}"
-            adb logcat -c
-            if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
-              wifi_before=$(adb shell settings get global wifi_on | tr -d '\r')
-              data_before=$(adb shell settings get global mobile_data | tr -d '\r')
-              adb shell svc wifi disable
-              adb shell svc data disable
-            fi
-            set +e
-            adb shell am instrument -w -r \
-              -e class "$class_name" \
-              com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner \
-              | tee "$RUNNER_TEMP/recovery-results/$result_name.txt"
-            instrument_status=${PIPESTATUS[0]}
-            set -e
-            if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
-              if [ "$wifi_before" = 1 ]; then adb shell svc wifi enable; fi
-              if [ "$data_before" = 1 ]; then adb shell svc data enable; fi
-              adb shell run-as com.soulphosphor.phosphorshines rm -rf files/step2-model
-            fi
-            adb logcat -d -v threadtime \
-              > "$RUNNER_TEMP/recovery-results/$result_name-logcat.txt"
-            if [ "$result_name" = "Step2RecallInstrumentedTest" ]; then
-              adb pull /sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-match.png \
-                "$RUNNER_TEMP/recovery-results/step2-match.png" || true
-              for folder in recall_test_set recall_independent_set; do
-                adb pull "/sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-$folder-parity.json" \
-                  "$RUNNER_TEMP/recovery-results/step2-$folder-parity.json" || true
-              done
-              for folder in recall_carryover_set recall_carryover_holdout; do
-                adb pull "/sdcard/Android/data/com.soulphosphor.phosphorshines/files/step2-$folder-similarities.json" \
-                  "$RUNNER_TEMP/recovery-results/step2-$folder-similarities.json" || true
-              done
-            fi
-            if [ "$instrument_status" -ne 0 ] || \
-              ! grep -Fq "OK (" "$RUNNER_TEMP/recovery-results/$result_name.txt"; then
-              failed=1
-            fi
-          done
-          exit "$failed"
+
+      - name: Collect end-of-job emulator diagnostics
+        if: always()
+        run: .github/scripts/emulator-suite.sh diagnostics job-end || true
 
       - name: Record recovery proof metadata
         if: always()
