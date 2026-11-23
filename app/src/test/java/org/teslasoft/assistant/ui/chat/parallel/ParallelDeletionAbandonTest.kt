@@ -6,6 +6,10 @@ import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -57,6 +61,11 @@ class ParallelDeletionAbandonTest {
     private val started = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     /** Counted down when a regeneration's setup reads its group (off the main thread). */
     @Volatile private var setupReading = CountDownLatch(1)
+    private lateinit var engine: ParallelRequestCoordinator
+    private val outputs = ConcurrentHashMap<String, org.teslasoft.assistant.conversation.parallel.ParallelOutput>()
+    @Volatile private var elapsed = 0L
+    private var cancellationDrain: CompletableDeferred<Unit>? = null
+    private val cancelling = CompletableDeferred<Unit>()
 
     private class Host(override val chatId: String) : ParallelChatController.Host {
         override val messages = arrayListOf<HashMap<String, Any>>()
@@ -65,9 +74,10 @@ class ParallelDeletionAbandonTest {
         override val manualMemoryIds = emptyList<String>()
         override val unavailable = false
         val deletedRows = mutableListOf<HashMap<String, Any>>()
+        var failSave = false
         override suspend fun prepareBase(raw: String, setup: ExperimentalSetup): ParallelTurnBase = error("unused")
         override fun commitTurn(raw: String, base: ParallelTurnBase, group: ResponseGroup): Boolean = error("unused")
-        override fun save() = true
+        override fun save() = !failSave
         override fun changed(position: Int, canonical: Boolean) {}
         override fun busy(value: Boolean) {}
         override suspend fun adopt(position: Int, discardDescendants: Boolean) = false
@@ -125,6 +135,7 @@ class ParallelDeletionAbandonTest {
             }
             ParallelRequestCoordinator(scope, observed, { _, _ -> null }, { request ->
                 ParallelTransport { r, out ->
+                    outputs[r.target.assistantMessageId] = out
                     r.usage.beginObservation()
                     try {
                         r.usage.noteTypedUsage(10, 2, 12)
@@ -132,15 +143,72 @@ class ParallelDeletionAbandonTest {
                         started.getOrPut(r.target.assistantMessageId) { CompletableDeferred() }.complete(Unit)
                         // Runs until stopped, like a reply still thinking.
                         awaitCancellation()
-                    } finally { r.usage.finishObservation() }
+                    } finally {
+                        cancelling.complete(Unit)
+                        cancellationDrain?.let { withContext(NonCancellable) { it.await() } }
+                        r.usage.finishObservation()
+                    }
                 }
-            }, { TokenPricingCatalog(it.assignment.modelId) }, worker = Dispatchers.IO)
+            }, { TokenPricingCatalog(it.assignment.modelId) }, elapsedMs = { elapsed }, worker = Dispatchers.IO)
+                .also { engine = it }
         }
     }
 
     @After fun tearDown() {
+        cancellationDrain?.complete(Unit)
         controller.close()
         shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    @Test fun aSurvivingFailedCheckpointDoesNotKeepTheNextTurnBusy() {
+        val (earlierUser, earlierRow) = turn()
+        val (user, row) = turn()
+        host.messages += listOf(earlierUser, earlierRow, user, row)
+        assertTrue(controller.regenerate(3))
+        waitUntil { startedFor(row).isCompleted }
+        host.failSave = true
+        elapsed = 3_000L
+        val checkpointed = CompletableDeferred<Unit>()
+        CoroutineScope(Dispatchers.IO).launch {
+            outputs.getValue(groupOf(row).assistantMessageId).text("another chunk")
+            checkpointed.complete(Unit)
+        }
+        waitUntil { checkpointed.isCompleted }
+        assertTrue(engine.unsavedRequestIds().isNotEmpty())
+        controller.abandonForDeletion()
+        val removed = host.messages.take(2)
+        controller.keepDeletedGroups(removed)
+        host.messages.subList(0, 2).clear()
+        assertFalse(controller.busy)
+        host.failSave = false
+        waitUntil { engine.unsavedRequestIds().isEmpty() }
+        assertFalse(controller.busy)
+        assertEquals(2, host.messages.size)
+    }
+
+    @Test fun deletionAbandonsAnEditWaitingForACancelledRequest() {
+        val (earlierUser, earlierRow) = turn()
+        val (user, row) = turn()
+        host.messages += listOf(earlierUser, earlierRow, user, row)
+        cancellationDrain = CompletableDeferred()
+        assertTrue(controller.regenerate(3))
+        waitUntil { startedFor(row).isCompleted }
+        val target = ParallelReplyEditing.target(groupOf(host.messages[3]))
+        controller.editReply(target, "obsolete edit")
+        waitUntil { cancelling.isCompleted }
+        controller.abandonForDeletion()
+        val removed = host.messages.take(2)
+        controller.keepDeletedGroups(removed)
+        host.messages.subList(0, 2).clear()
+        assertFalse(controller.busy)
+        cancellationDrain!!.complete(Unit)
+        waitUntil { groupOf(host.messages[1]).slots.any { slot ->
+            slot.versions.last().attempts.last().usageRecord != null
+        } }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(groupOf(host.messages[1]).slots.flatMap { it.versions }
+            .any { it.fields["message"] == "obsolete edit" })
+        assertFalse(controller.busy)
     }
 
     @Test fun deletionFreesTheNextTurnAtOnceAndTheLateResultOnlyReachesTheUsageLog() {

@@ -14,6 +14,17 @@ import org.junit.Test
 import java.util.concurrent.Executors
 
 class ConversationTurnFenceTest {
+    @Test fun anObserverOutsideTheReplyCoroutineKeepsItsOriginalOwner() {
+        val fence = ConversationTurnFence()
+        val oldObserver = fence.deliveryGuard()
+        assertTrue(oldObserver())
+        fence.retire()
+        val newObserver = fence.deliveryGuard()
+        assertFalse(oldObserver())
+        assertTrue(newObserver())
+        fence.retire()
+        assertFalse(newObserver())
+    }
     @Test fun aReplyStartedBeforeRetireIsStaleOnlyInsideItsOwnCoroutine() = runBlocking {
         val main = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
         try {

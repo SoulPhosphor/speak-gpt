@@ -32,6 +32,12 @@ class ParallelRequestCoordinatorTest {
         var writes = 0
         @Volatile var failSlot: String? = null
         @Volatile var failAll = false
+        var durabilityGate: CompletableDeferred<Unit>? = null
+        val durabilityEntered = CompletableDeferred<Unit>()
+        override suspend fun awaitSaved(target: ResponseGroupTarget) {
+            durabilityEntered.complete(Unit)
+            durabilityGate?.await()
+        }
         override fun read(target: ResponseGroupTarget): ResponseGroup =
             (ResponseGroupCodec.read(rows.single { it["message_id"] == target.assistantMessageId }) as ResponseGroupRead.Valid).group
         override fun update(target: ResponseGroupTarget, transform: (ResponseGroup?) -> ResponseGroup): ResponseGroup = synchronized(this) {
@@ -75,6 +81,91 @@ class ParallelRequestCoordinatorTest {
             request.usage.noteTypedUsage(tokens, 2, tokens + 2); true
         } }
         suspend fun fail(category: String = "fixture_failure") { commands.send { _, _ -> throw ParallelTransportFailure(category) } }
+    }
+
+    @Test fun queuedReservationDoesNotDispatchUntilItsSaveIsDurable() = runBlocking {
+        withTimeout(10_000) {
+            val f = Fixture(group(2), this)
+            val durable = CompletableDeferred<Unit>()
+            f.store.durabilityGate = durable
+            val dispatch = async { f.engine.dispatch("chat", f.g) {} }
+            f.store.durabilityEntered.await()
+            assertEquals(0, f.calls)
+            assertFalse(dispatch.isCompleted)
+            durable.complete(Unit)
+            val run = dispatch.await()
+            f.lanes.values.forEach { it.started.await() }
+            f.completePricing()
+            f.lanes.values.forEach { it.done() }
+            run.await()
+            assertEquals(2, f.calls)
+        }
+    }
+
+    @Test fun stopDuringAContinuationSaveSettlesTheReservedAttemptWithoutDispatch() = runBlocking {
+        withTimeout(10_000) {
+            val g = group(2)
+            val target = ResponseGroupTarget("chat", assistantId, g.groupId)
+            val store = Store(userId, assistantId)
+            val reserved = CompletableDeferred<Unit>()
+            val durable = CompletableDeferred<Unit>()
+            var barriers = 0
+            val persistence = object : ParallelGroupPersistence by store {
+                override suspend fun awaitSaved(target: ResponseGroupTarget) {
+                    if (++barriers == 2) { reserved.complete(Unit); durable.await() }
+                }
+            }
+            val calls = AtomicInteger()
+            val engine = ParallelRequestCoordinator(this, persistence, { _, _ -> null }, { request ->
+                ParallelTransport { _, _ ->
+                    if (request.slotId == g.slots.first().slotId) {
+                        calls.incrementAndGet()
+                        throw ParallelTransportFailure("tools_not_supported")
+                    } else awaitCancellation()
+                }
+            }, { TokenPricingCatalog(it.assignment.modelId) })
+            val run = engine.dispatch("chat", g) {}
+            reserved.await()
+            engine.signalCancelAll()
+            run.await()
+            val attempts = store.read(target).slots.first().versions.single().attempts
+            assertEquals(listOf(MessageCompletionState.FAILED, MessageCompletionState.STOPPED), attempts.map { it.state })
+            assertEquals(1, calls.get())
+            assertTrue(engine.unsavedRequestIds().isEmpty())
+        }
+    }
+
+    @Test fun deletionDuringTheDurabilityWaitCannotSendTheAbandonedRequest() = runBlocking {
+        withTimeout(10_000) {
+            val f = Fixture(group(2), this)
+            val durable = CompletableDeferred<Unit>()
+            f.store.durabilityGate = durable
+            val dispatch = async { f.engine.dispatch("chat", f.g) {} }
+            f.store.durabilityEntered.await()
+            f.engine.signalCancelAll()
+            durable.complete(Unit)
+            dispatch.await().await()
+            assertEquals(0, f.calls)
+            assertEquals(MessageCompletionState.STOPPED, f.version(0).fields["state"])
+        }
+    }
+
+    @Test fun retiredFailedSavesRetryWithoutBlockingNewRequestsOrResending() = runBlocking {
+        withTimeout(10_000) {
+            val f = Fixture(group(2), this)
+            val run = f.start()
+            f.completePricing()
+            f.lanes.values.forEach { it.started.await().usage.noteTypedUsage(27, 3, 30) }
+            f.store.failAll = true
+            f.engine.signalCancelAll()
+            run.await()
+            assertTrue(f.engine.unsavedRequestIds().isNotEmpty())
+            assertTrue(f.engine.unsavedTargets(includeRetired = false).isEmpty())
+            f.store.failAll = false
+            while (f.engine.unsavedRequestIds().isNotEmpty()) delay(10)
+            assertTrue(ResponseGroupEdits.usage(f.saved()).all { it.inputTokens == 27 })
+            assertEquals(2, f.calls)
+        }
     }
 
     private inner class Fixture(val g: ResponseGroup, scope: CoroutineScope) {

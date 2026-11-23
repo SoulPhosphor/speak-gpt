@@ -11,6 +11,15 @@ import org.junit.Test
  * never waits for stopped work; that work is fenced off from the chat.
  */
 class MessageDeletionWiringContractTest {
+    @Test fun deletionWithdrawsRegenerationRecoveryBeforeItsLifecycleCanClose() {
+        assertTrue(function("finishPendingRegeneration").contains("if (holdSavesForDeletion) preferences?.clearPendingRegeneration()"))
+        val merge = function("mergePendingRetryVariants")
+        assertTrue(merge.indexOf("last[ChatAdapter.KEY_IMAGE_PROGRESS] == true") < merge.indexOf("pendingRetryVariants = null"))
+        val retire = function("retireRunningWorkForDeletion")
+        assertTrue(retire.lastIndexOf("settlePendingRegeneration()") > retire.indexOf("applyImageTerminal("))
+        assertTrue(retire.indexOf("removeImageConfirmationCard()") < retire.indexOf("applyCancelledReplyPlan(plan)"))
+        assertTrue(function("requestImageConfirmation").contains("if (pendingImageConfirmation === decision)"))
+    }
     private fun source(relative: String): String {
         val candidates = listOf(File(relative), File("app/$relative"), File("../$relative"))
         return candidates.firstOrNull { it.exists() }?.readText()
@@ -90,7 +99,7 @@ class MessageDeletionWiringContractTest {
     @Test fun everyLateWriterOfARetiredReplyIsFenced() {
         for (name in listOf(
             "restoreUIState", "putMessage", "markLastAssistantStreaming", "settlePendingRegeneration",
-            "showPendingContextHelperFailure", "showTerminalFailure"
+            "showPendingContextHelperFailure", "showTerminalFailure", "attachActiveMemoryAttribution", "onContextHelperOutcome"
         )) {
             assertTrue("$name is not fenced", function(name).contains("if (turnFence.isStale()) return"))
         }
@@ -182,7 +191,8 @@ class MessageDeletionWiringContractTest {
         val takers = activity.split("completePendingUsageRecord()").size - 1
         assertEquals(4, takers) // the definition, two safe callers, and the no-carrier drop
         val safe = function("recordTakenUsageSafely")
-        assertTrue(safe.contains("withContext(kotlinx.coroutines.NonCancellable)"))
+        assertTrue(safe.contains("ReplyUsageCompletion.finish"))
+        assertTrue(function("completeClaimedTerminal").contains("ReplyUsageCompletion.finish"))
         assertTrue(safe.indexOf("val records = take()") < safe.indexOf("attachUsageRecords(carrier, records"))
         assertTrue(safe.contains("keepUsageOfDeletedRows("))
         assertTrue(safe.contains("if (turnFence.isStale()) throw CancellationException("))

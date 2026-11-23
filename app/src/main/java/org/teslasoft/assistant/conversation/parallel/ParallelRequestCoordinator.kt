@@ -93,6 +93,8 @@ internal class ParallelRequestCoordinator(
         @Volatile var job: Job? = null
         val registered = CompletableDeferred<Job>()
         @Volatile var unsaved = false
+        @Volatile var retiredForDeletion = false
+        var receiptRevision = 0L
     }
 
     /** The entire group (all IDs/assignments/input) commits before any pricing/client/network work.
@@ -103,7 +105,7 @@ internal class ParallelRequestCoordinator(
         return withContext(worker) { dispatchFrom(generation, chatId, input, commitTurnContext) }
     }
 
-    private fun dispatchFrom(generation: Long, chatId: String, input: ResponseGroup, commitTurnContext: () -> Unit): Run {
+    private suspend fun dispatchFrom(generation: Long, chatId: String, input: ResponseGroup, commitTurnContext: () -> Unit): Run {
         val group = detach(input)
         val target = ResponseGroupTarget(chatId, group.assistantMessageId, group.groupId)
         val prepared = prepare(target, group, group.slots)
@@ -111,6 +113,7 @@ internal class ParallelRequestCoordinator(
             require(old == null) { "group_already_dispatched" }
             group
         }
+        persistence.awaitSaved(target)
         commitTurnContext()
         return launch(prepared, generation)
     }
@@ -123,7 +126,7 @@ internal class ParallelRequestCoordinator(
         return withContext(worker) { regenerateFrom(generation, target, slotId) }
     }
 
-    private fun regenerateFrom(generation: Long, target: ResponseGroupTarget, slotId: String): Run {
+    private suspend fun regenerateFrom(generation: Long, target: ResponseGroupTarget, slotId: String): Run {
         val before = persistence.read(target)
         val oldSlot = before.slots.single { it.slotId == slotId }
         require(oldSlot.versions.none { v -> v.attempts.any { it.state == MessageCompletionState.STREAMING } }) {
@@ -141,6 +144,7 @@ internal class ParallelRequestCoordinator(
             require(current == before) { "stale_regeneration" }
             after
         }
+        persistence.awaitSaved(target)
         return launch(prepared, generation)
     }
 
@@ -153,6 +157,7 @@ internal class ParallelRequestCoordinator(
     /** Nonblocking stop of every owned request, for a caller that cannot wait. */
     fun signalCancelAll() {
         stopAllGeneration += 1
+        requests.values.forEach { it.retiredForDeletion = true }
         requests.keys.toList().forEach(::signalCancel)
     }
 
@@ -188,7 +193,8 @@ internal class ParallelRequestCoordinator(
 
     fun unsavedRequestIds(): Set<String> = requests.values.filter { it.unsaved }.mapTo(HashSet()) { it.request.requestId }
 
-    fun unsavedTargets(): Set<ResponseGroupTarget> = requests.values.filter { it.unsaved }.mapTo(HashSet()) { it.request.target }
+    fun unsavedTargets(includeRetired: Boolean = true): Set<ResponseGroupTarget> =
+        requests.values.filter { it.unsaved && (includeRetired || !it.retiredForDeletion) }.mapTo(HashSet()) { it.request.target }
 
     /** Explicit reopen reconciliation, with no launch/resume path. */
     suspend fun reconcileInterrupted(target: ResponseGroupTarget): ResponseGroup = withContext(worker) {
@@ -239,7 +245,10 @@ internal class ParallelRequestCoordinator(
         // Stopped while being prepared: registered as stopped, never sent.
         // Checked after registering, so a stop-all either sees these requests
         // or advanced the generation before this check.
-        if (generation != stopAllGeneration) prepared.forEach { pendingStops.add(it.request.requestId) }
+        if (generation != stopAllGeneration) prepared.forEach {
+            it.retiredForDeletion = true
+            pendingStops.add(it.request.requestId)
+        }
         val jobs = prepared.map { first ->
             val owned = java.util.concurrent.ConcurrentLinkedQueue<Running>().also { it.add(first) }
             ownedScope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -282,6 +291,7 @@ internal class ParallelRequestCoordinator(
                                     TokenUsageAccounting.PROVIDER_NOT_REPORTED, attempt.request.assignment.endpoint, reserved.requestId),
                                 omitTools = true)
                             val next = Running(request, version.fields, reserved.startedAtMs, elapsedMs())
+                            next.retiredForDeletion = first.retiredForDeletion || generation != stopAllGeneration
                             next.job = first.registered.await()
                             next.registered.complete(next.job!!)
                             require(requests.putIfAbsent(request.requestId, next) == null)
@@ -289,6 +299,9 @@ internal class ParallelRequestCoordinator(
                             running = next
                             if (pendingStops.remove(request.requestId)) next.job!!.cancel(ParallelUserStop())
                             currentCoroutineContext().ensureActive()
+                            // Own the reserved continuation before suspending,
+                            // so Stop can settle its exact row during the wait.
+                            persistence.awaitSaved(request.target)
                             if (!retryWithoutTools) {
                                 val extra = tools!!.execute(request, attempt.toolMessage!!,
                                     reserveImage = {
@@ -305,6 +318,7 @@ internal class ParallelRequestCoordinator(
                                     })
                                 val frames = listOf(attempt.toolMessage!!) + extra
                                 continuation.freezeMessages(request, frames)
+                                persistence.awaitSaved(request.target)
                                 next.request = request.copy(continuationMessages = frames)
                             }
                         }
@@ -334,7 +348,10 @@ internal class ParallelRequestCoordinator(
                     owned.forEach { running ->
                         pendingStops.remove(running.request.requestId)
                         if (!running.unsaved) requests.remove(running.request.requestId, running)
-                        else running.request = running.request.copy(prompt = emptyList(), attachmentBytes = emptyMap())
+                        else {
+                            running.request = running.request.copy(prompt = emptyList(), attachmentBytes = emptyMap())
+                            if (running.retiredForDeletion) retryRetired(running)
+                        }
                     }
                 }
             }
@@ -359,6 +376,26 @@ internal class ParallelRequestCoordinator(
                 }
             }
             if (changed) checkpointGroup(running)
+        }
+    }
+
+    /** Abandoned evidence must keep retrying without owning the next turn's
+     * controls or the lifetime of its old screen. Never resends a request. */
+    private fun retryRetired(running: Running) {
+        CoroutineScope(NonCancellable + worker).launch {
+            var waitMs = 250L
+            while (true) {
+                delay(waitMs)
+                val saved = running.lock.withLock {
+                    if (running.unsaved) save(running)
+                    !running.unsaved
+                }
+                if (saved) {
+                    requests.remove(running.request.requestId, running)
+                    return@launch
+                }
+                waitMs = (waitMs * 2).coerceAtMost(30_000L)
+            }
         }
     }
 
@@ -405,7 +442,7 @@ internal class ParallelRequestCoordinator(
                 usage.counts.withDerivedTotal(), if (usage.counts.hasAnyValue()) TokenCountSource.PROVIDER_REPORTED else TokenCountSource.ESTIMATED_CL100K,
                 running.catalog?.takeIf { it.model.equals(usage.model, ignoreCase = true) }?.pricingFor(usage.provider) ?: TokenPricingSnapshot(), usage.providerCost)
                 .copy(requestId = request.requestId, requestedModel = request.assignment.modelId,
-                    requestStartedAtMs = running.startedAtMs)
+                    requestStartedAtMs = running.startedAtMs, receiptRevision = ++running.receiptRevision)
             val fields = running.initialFields + mapOf("message" to joinOutput(running.initialFields["message"], running.text.toString()), "state" to running.state,
                 "responseModel" to usage.model, "responseProvider" to usage.provider,
                 "messageTime" to (running.endedAtMs ?: running.startedAtMs).toString()) +

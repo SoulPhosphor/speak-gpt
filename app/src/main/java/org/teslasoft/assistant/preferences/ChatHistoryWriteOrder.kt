@@ -6,6 +6,7 @@
 package org.teslasoft.assistant.preferences
 
 import android.content.Context
+import kotlinx.coroutines.CompletableDeferred
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -38,6 +39,8 @@ class ChatHistoryWriteOrder internal constructor(
         var claimed = 0L
         var written = 0L
         var pending: Pending? = null
+        var saved = CompletableDeferred<Unit>().apply { complete(Unit) }
+        var withdrawn = false
     }
 
     private class Pending(
@@ -65,6 +68,13 @@ class ChatHistoryWriteOrder internal constructor(
         s.claimed
     }
 
+    /** Storage-side read/modify/write callers use this after their read. A
+     * deletion queued during that read takes precedence and they retry from
+     * its newer snapshot instead of acknowledging a stale transformation. */
+    fun isLatestClaim(chatId: String, seq: Long): Boolean = synchronized(stateLock) {
+        states[chatId]?.claimed == seq
+    }
+
     /**
      * Runs [write] for save [seq] unless a newer save already succeeded or
      * [stillWanted] (checked under the lock) says the save was withdrawn.
@@ -87,7 +97,10 @@ class ChatHistoryWriteOrder internal constructor(
             if (succeeded(result)) synchronized(stateLock) {
                 val s = state(chatId)
                 if (seq > s.written) s.written = seq
-                if ((s.pending?.seq ?: Long.MAX_VALUE) <= seq) s.pending = null
+                if ((s.pending?.seq ?: Long.MAX_VALUE) <= seq) {
+                    s.pending = null
+                    s.saved.complete(Unit)
+                }
             }
             result
         }
@@ -110,6 +123,7 @@ class ChatHistoryWriteOrder internal constructor(
             val current = s.pending
             // A newer kept snapshot already includes this one's changes.
             if (current != null && current.seq > seq) return
+            if (current == null) s.saved = CompletableDeferred()
             // An older kept snapshot keeps its bookmark flag for the replacement.
             s.pending = if (current != null && current.bookmarkChanged && !bookmarkChanged)
                 Pending(seq, messages, true, writer) else pending
@@ -188,14 +202,39 @@ class ChatHistoryWriteOrder internal constructor(
     /** True while a snapshot for [chatId] has not been saved yet. */
     fun hasPending(chatId: String): Boolean = synchronized(stateLock) { states[chatId]?.pending != null }
 
+    /** Main-thread callers queue their snapshots while the storage worker
+     * might own the history lock, rather than waiting on that lock. */
+    fun hasBackgroundWork(): Boolean = synchronized(stateLock) { states.values.any { it.pending != null } }
+
+    /** Provider dispatch can await durability without blocking the main
+     * thread. Cancellation belongs to the waiter, never to the save. */
+    suspend fun awaitSaved(chatId: String) {
+        while (true) {
+            val waiting = synchronized(stateLock) {
+                states[chatId]?.takeIf { it.pending != null }?.let { it to it.saved }
+            } ?: return
+            waiting.second.await()
+            if (synchronized(stateLock) { waiting.first.withdrawn })
+                throw kotlinx.coroutines.CancellationException("Chat history was withdrawn")
+        }
+    }
+
     /** The chats were deleted: nothing kept for them may be written again. */
     fun discard(chatIds: Collection<String>) = synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-        synchronized(stateLock) { chatIds.forEach { states.remove(it) } }
+        synchronized(stateLock) {
+            chatIds.forEach { id -> states.remove(id)?.let {
+                it.withdrawn = true
+                it.saved.cancel()
+            } }
+        }
     }
 
     /** The whole chat set was replaced; every kept snapshot is obsolete. */
     fun discardAll() = synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-        synchronized(stateLock) { states.clear() }
+        synchronized(stateLock) {
+            states.values.forEach { it.withdrawn = true; it.saved.cancel() }
+            states.clear()
+        }
     }
 
     /** A legacy chat moved to a new id; its order and kept snapshot follow it. */

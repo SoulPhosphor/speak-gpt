@@ -26,7 +26,7 @@ comments and tests cite its section numbers.
 - **`memory baseline.md`** remains the evidence record for every
   saved-memory measurement. Results are never copied into this plan.
 
-**Current handoff · November 21, 2026.** Stages 1–6 merged in [#209](https://github.com/SoulPhosphor/speak-gpt/pull/209), [#210](https://github.com/SoulPhosphor/speak-gpt/pull/210), [#211](https://github.com/SoulPhosphor/speak-gpt/pull/211), [#212](https://github.com/SoulPhosphor/speak-gpt/pull/212), [#213](https://github.com/SoulPhosphor/speak-gpt/pull/213), and [#214](https://github.com/SoulPhosphor/speak-gpt/pull/214). Stage 6 delivered the recall test chats; **Stage 6A — reliable reading and resume** merged in [#232](https://github.com/SoulPhosphor/speak-gpt/pull/232), **Stage 6B.1 — working-draft corrections and bounded context** in [#240](https://github.com/SoulPhosphor/speak-gpt/pull/240), and **Stage 6B.2 — scoped matching engine and comparison cache** and **Stage 6B.3 — reconciliation and safe filing** in their own PRs (Build record). The next assignment is **Stage 6C — Browser match cards and comparison**; read **Stage 6C handoff** in M.2 first. Complete 6C and 6D in that order before Stage 7. M.2 owns sequencing and the [November 18 scanner proposal](<Memory Scanner update proposal nov 18.md>) owns the scanner design.
+**Current handoff · November 23, 2026.** Stages 1–6 merged in [#209](https://github.com/SoulPhosphor/speak-gpt/pull/209), [#210](https://github.com/SoulPhosphor/speak-gpt/pull/210), [#211](https://github.com/SoulPhosphor/speak-gpt/pull/211), [#212](https://github.com/SoulPhosphor/speak-gpt/pull/212), [#213](https://github.com/SoulPhosphor/speak-gpt/pull/213), and [#214](https://github.com/SoulPhosphor/speak-gpt/pull/214). Stage 6 delivered the recall test chats; **Stage 6A — reliable reading and resume** merged in [#232](https://github.com/SoulPhosphor/speak-gpt/pull/232), **Stage 6B.1 — working-draft corrections and bounded context** in [#240](https://github.com/SoulPhosphor/speak-gpt/pull/240), and **Stage 6B.2 — scoped matching engine and comparison cache** and **Stage 6B.3 — reconciliation and safe filing** in their own PRs (Build record). Stages 6C and 6D merged (Build record). G35 is approved and Stage 7 is split into **Stage 7A — the passage cutter** and **Stage 7B — the passage stores and per-message updating**, one session and one PR each; read **Conversation index: Stages 7A and 7B** in M.2 first. M.2 owns sequencing and the [November 18 scanner proposal](<Memory Scanner update proposal nov 18.md>) owns the scanner design.
 
 # Part M: Roadmap, status, and consolidation
 
@@ -93,8 +93,9 @@ comments and tests cite its section numbers.
 | 6B.3 | **Reconciliation and safe filing** | Retelling detection, linked updates, evidence, cap decisions, publication rechecks and unresolved alternatives; showing Pending, Archived and draft matches to the scanner AI (M.2 below) | 6B.2 | Answered (**Stage 6B.3 owner decisions**) | Accurate nonduplicate Pending proposals |
 | 6C | **Browser match cards and comparison** | M.2 scanner work below | Stage 6B.3 match data | Card, comparison layout and labels | Open exact matched pair and return to same list position |
 | 6D | **Browser review actions and end-to-end evaluation** | M.2 scanner work below | Stage 6C pair view and Stage 6B.3 conflict data | New review actions and wording | Resolve Pending alternatives safely and complete scan-to-review workflow |
-| 7 | **Conversation index: cutter and stores** | Steps 7 and 8 | Stage 6 and Step 1 complete; scheduled after Stage 6D | G35 | Nothing |
-| 8 | **Conversation index: embedding and upkeep** | Steps 9 and 10 | Stage 7 | Nothing after G35 | Nothing |
+| 7A | **Conversation index: passage cutter** | Step 7 | Stage 6D | Nothing (G35 approved) | Nothing |
+| 7B | **Conversation index: passage stores and per-message updating** | Step 8 | Stage 7A and Step 1 | Nothing (G35 approved) | Nothing |
+| 8 | **Conversation index: embedding and upkeep** | Steps 9 and 10 | Stage 7B | Nothing after G35 | Nothing |
 | 9 | **Conversation index: settings, progress, after close** | Steps 11, 12 and 13 | Stage 8 | G20, G28, G31; Step 13's mechanism and stopped-for-the-day wording | Conversation Index settings, progress icon and pop-up, notification |
 | 10 | **Recall retrieval and inspector** | Steps 14 and 15 | Stages 2 and 8 | G36; inspector labels | Conversation Recall Test screen |
 | 11 | **Conversation Recall in real requests** | Step 16 | Stage 10 | AI-facing text, "what was sent" wording, recall-room setting, debug lines, G24 | Conversation Recall works |
@@ -106,16 +107,33 @@ comments and tests cite its section numbers.
 | Any time | Not a stage of its own | **Automatic companion linking** (M.6, Owner 2026-11-16): every companion the user creates is linked to the memory system automatically | Nothing unbuilt | Nothing; the behavior is decided | Nothing new; companions appear in the memory system as soon as they are saved |
 | Any time | Not a stage of its own | The memory-use instruction (D41) can be added to any stage that touches the memory instructions once its exact text is approved | — | D41 text | Changed AI behavior |
 
+### Conversation index: Stages 7A and 7B
+
+**Owner (2026-11-23):** G35 is approved, and Stage 7 is split into two coding stages, one session and one PR each, built in order. Do not combine them. Step 7 and Step 8 below keep their full work orders; this section fixes where each stage starts and ends.
+
+**Stage 7A — the passage cutter (Step 7).**
+- **Starts:** from current `main` after Stage 6D, with G35 approved.
+- **Builds:** new plain-Kotlin files only, in a new `conversation/index` package, and their unit tests. A cutter takes one message's text, a target size and a supplied size-measuring function, and returns each passage's start and end positions in order, together with the cutter version. It splits by paragraph, then line, then between words, then between two characters (never inside a surrogate pair, and never at periods), and joins short neighbouring pieces up to the target size (G.5b cutter rules 1–3 and Versions).
+- **Ends:** every test under G.5b's "With the cutter, in Step 7" passes. Nothing in the app calls the cutter yet, so nothing changes for the user.
+- **Not in 7A:** any database or storage; search text, overlap or speaker labels; connecting the real embedding token counter; eligibility, scope or exchange stamping; any hookup to chats; any screen, wording or log line.
+
+**Stage 7B — the passage stores and per-message updating (Step 8).**
+- **Starts:** after the Stage 7A PR merges, from current `main`. Uses the 7A cutter through its public function without changing its rules; a change to the cutting rules raises the cutter version (G.5b, Versions).
+- **Builds:** everything in Step 8: the separate encrypted index database with its four stores (G.5); keyword storage with no readable copy of message text (G.5, Storage design); one-transaction-per-message updates against a recorded chat version, comparing by permanent ID and original-text fingerprint (G.5a rule 4); eligibility (G.5a rules 1 and 7); search text with same-message overlap and the speaker label (G.5b cutter rules 5 and 7), sized with the Step 1 token counter passed into the cutter; scope stamping from values passed in (G.7); and vector rows created as "waiting".
+- **Confirms in code and records here:** which stored field holds the reply version the AI is sent.
+- **Before its PR:** the **Changes during waits** table required by `CLAUDE.md`, covering background updates that finish after the chat changed.
+- **Ends:** Step 8's "Done when" passes. No vectors are made and nothing in the app triggers indexing yet; those are Steps 9 and 10 (Stage 8).
+
 ### Scanner work between Stages 6 and 7
 
-The owner prioritized the scanner on November 18. **6B.1, 6B.2 and 6B.3 are separate coding stages, one session and one PR each.** This split follows the size of Stage 6A (#232). Keep every original 6B requirement and its approval gate; do not combine the substages. The numbered Steps in G.16 keep their original identities. Scanner work reads the original chat storage (**The chat is the source**, below) plus local memory records and existing embedding facilities. Stage 7’s conversation passage index serves later live recall. A broader Memory Browser redesign can proceed separately.
+The owner prioritized the scanner on November 18. **6B.1, 6B.2 and 6B.3 are separate coding stages, one session and one PR each.** This split follows the size of Stage 6A (#232). Keep every original 6B requirement and its approval gate; do not combine the substages. The numbered Steps in G.16 keep their original identities. Scanner work reads the original chat storage (**The chat is the source**, below) plus local memory records and existing embedding facilities. The conversation passage index built in Stages 7A and 7B serves later live recall. A broader Memory Browser redesign can proceed separately.
 
 1. **Stage 6A — the chat as the source, reliable reading and resume.** Use the existing single-chat and batch entry points. Replace the duplicated transcript store with direct reading of the original chat storage, and migrate existing data, as decided in **The chat is the source** and **Removing the duplicate transcript store** below. Assign missing message UUIDs with `MessageIdentity.ensure()` in the original chat storage before scanning. Verify current message content by UUID and fingerprint before sections, retries, resume and publication, and invalidate after edits, regeneration, hiding or deletion. Implement the short/long request paths, stable message and fragment references, bounded excerpts reread from the chat, cache-friendly request order, and lossless retry of an oversized message. Use paragraph, line and word boundaries before Unicode-safe character splitting, as in G.5b. Persist the validated working state and exact next unread position (message UUID and offset) together. Preserve cancellation, progress reporting, and automatic-backup coordination from #216–217. Add the Pause and Resume controls below. Demonstrate that killing the process after a completed section resumes from its checkpoint, that split fragments cover the entire original message, and that the migration and regression tests below pass.
 2. **Stage 6B.1 — working-draft corrections and bounded context.** Add stable scan-local draft IDs and validated create, edit, combine and withdraw operations; narrow repair of invalid/conflicting edits; and chronological corrections when later source clarifies earlier drafts. Persist the entire working collection, edits, passage references and exact next unread position atomically through the existing 6A checkpoint so pause, interruption and resume lose nothing. New unread source and drafts take precedence over earlier chat text; preceding dialogue and optional excerpts share a separately bounded token allowance. Measure token use; the setting and AI-facing instructions follow the **Stage 6B.1 owner decisions**. Keep original chat storage authoritative and existing scanning functional. **Not in 6B.1:** embedding comparison cache, filed-memory suppression, new Browser review actions. **Done when:** tests demonstrate a late reply correcting an early provisional draft, lossless edit/withdraw/combine behavior, invalid operations not destroying valid work, full unread-source coverage and faithful checkpoint recovery.
 3. **Stage 6B.2 — scoped matching engine and comparison cache.** Build pre- and post-extraction lookup against eligible Active, Pending, Archived and current working drafts. Apply scope/target/status eligibility first; include stored `activeMemoryAttribution` from chat replies as clues only when still eligible. Cover long messages with bounded overlapping windows, preserve the ends of turns, and support exact/keyword fallback when embeddings or vectors are absent (no fabricated similarity score). Reuse vectors by fingerprint/model, route new work through the existing lower-priority embedding queue, bound query count, missing-vector generation, comparisons and cache size. **Approve the separate encrypted scanner comparison-cache design and migration before any schema change.** Keep the cache separate from active chat retrieval and return validated IDs, status, matching method, score when available, and unresolved links. **Not in 6B.2:** suppression/filing decisions or new Browser actions. **Done when:** tests demonstrate correct scope and status boundaries, missing/stale vector behavior, deleted/changed memories, keyword-only results, bounded queue work, and long-turn search coverage.
 4. **Stage 6B.3 — reconciliation and safe filing.** Combine draft corrections and matching evidence to distinguish pure retellings from genuine developments, reconcile chronology and unresolved conflicts, and rank distinct proposals across the full scan under the user's cap (do not truncate by arrival order). Add the compact AI-returned `already covered` source-reference and existing-memory-ID entries, with owner-approved AI-facing format; validate and persist them with the checkpoint. Show the scanner AI the Pending, Archived and working-draft matches that 6B.2 collects, with their status, using owner-approved AI-facing wording (moved here from 6B.2 by the **Stage 6B.2 owner decisions**). At filing, recheck original chat source and all relevant existing memories, including edits, deletions, status/scope changes, approvals and discards made during or after the scan; perform model comparisons outside the transaction and atomically commit only validated results and bookmark. Never silently activate, overwrite or revive a filed memory. Expose linked alternatives and real match metadata to existing Possible Match review where representable, including a linked pair occupying one cap slot. **New human review actions wait for 6D.** **Done when:** tests show retellings create no extra card, real updates remain reviewable, in-flight changes cannot cause stale filing or false completion, cap and linked pair behavior is safe, and a paused scan revalidates changing dependencies before publication.
 5. **Stage 6C — Browser match cards and comparison.** Add the related-memory preview, status, match method and available similarity score to Pending cards. Open the exact pair by ID, show the full wording of both records, expose additional matches, and restore the user’s list position on return. Reuse the comparison screen and existing review actions where applicable. Cover changed or missing targets, and present keyword matches accurately when embeddings are unavailable. Keep the Stage 4 meter in the existing creating, editing and reading views.
-6. **Stage 6D — Browser review actions and end-to-end evaluation.** Add the decisions for two pending drafts and unresolved alternatives, including a linked pair that occupies one review choice at a cap of one. Keep both pending, edit or discard the redundant proposal, or apply an existing approval action according to the user's choice. Revalidate before applying a decision so reviewing a pair never activates or overwrites a memory accidentally. Exercise the complete scan-to-review path with and without embeddings and measure quality, token usage, conditional comparisons, total scan duration, battery consumption, embedding queue contention, cold/warm vector reuse and phone review effort as specified in the scanner proposal. Resume at **Stage 7 (Steps 7 and 8)**.
+6. **Stage 6D — Browser review actions and end-to-end evaluation.** Add the decisions for two pending drafts and unresolved alternatives, including a linked pair that occupies one review choice at a cap of one. Keep both pending, edit or discard the redundant proposal, or apply an existing approval action according to the user's choice. Revalidate before applying a decision so reviewing a pair never activates or overwrites a memory accidentally. Exercise the complete scan-to-review path with and without embeddings and measure quality, token usage, conditional comparisons, total scan duration, battery consumption, embedding queue contention, cold/warm vector reuse and phone review effort as specified in the scanner proposal. Resume at **Stage 7A** (Step 7), then **Stage 7B** (Step 8).
 
 **The chat is the source (Owner decision, 2026-11-21; final).**
 - **Rule.** The original chat is the single source of truth. The scanner reads directly from the original chat storage: the same current messages the user sees when opening that chat. No second persistent copy of conversation text exists for scanning, pausing, resuming, indexing or recovery, and an outdated saved copy is never used in place of the chat. Text may be held in working memory while an AI request is built; it is never saved. This decision is made. Builders implement around it and do not reopen it.
@@ -1001,7 +1019,7 @@ chat search index holds one keyword entry per message and includes hidden
 messages. The vector store holds saved memories only. The passages, their
 vectors, their scope labels, the cutter, and recall are new.
 
-## G.5 Index entries (Proposed)
+## G.5 Index entries (Approved, G35)
 
 **What one entry is.** An entry, called a passage, covers a stretch of one
 message: usually a few short paragraphs or one long one. It points to its
@@ -1049,6 +1067,18 @@ They are never mixed into a passage.
 - Only the canonical reply version used in AI requests. Browsing an
   alternative reply changes neither index eligibility nor the canonical
   version. Confirm the canonical field and promotion hooks in Steps 7–13.
+  **Confirmed in code (Step 8):** the reply version the AI is sent is the
+  one the stored message's top-level fields mirror. `message` (with
+  `state`, `memoryScope` and the other per-version fields in
+  `ChatAdapter.VARIANT_FIELDS`) always holds the version at
+  `canonicalVariant` for a regenerated reply, and the primary slot's
+  `canonicalVersionId` for a parallel response group
+  (`ResponseGroupCodec` refuses a row whose top-level fields do not match).
+  Browsing changes only `displayVariant` or the group's foreground choice.
+  The Summarizer snapshot's `Entry.text` is built from that top-level
+  `message`, and the index reads the stored message's top-level `state`,
+  hidden mark and `memoryScope` (`IndexSourceMessage.from`). Promotion
+  hooks are not connected until Step 10.
 - Never a message hidden from the AI (G.5a rule 1).
 
 **Attached documents and images are not indexed in this work (Owner,
@@ -1107,13 +1137,13 @@ of passages, and recall.
 the saved-memory vector table, the Summarizer, and the existing text
 splitters.
 
-## G.5a Rules the index must guarantee (Proposed)
+## G.5a Rules the index must guarantee (Approved, G35)
 
 Added after outside reviews and an audit of the code on 2026-11-10 and
 2026-11-11. Each point was checked in the code. This section, with G.5,
-G.5b, and G.7, is the design of the conversation index. It is Proposed
-until the owner approves it as a whole (G35), which is needed before
-Step 7. Once approved, these are requirements for Steps 7–13, not options.
+G.5b, and G.7, is the design of the conversation index. The owner
+approved it as a whole (G35, 2026-11-23); these are requirements for
+Steps 7–13, not options. Items G.7 marks as open stay open.
 
 **1. Only what the AI may be sent can be recalled.**
 - The app lets the user hide a message from the AI
@@ -1259,7 +1289,7 @@ Step 7. Once approved, these are requirements for Steps 7–13, not options.
    measuring each with the real tokenizer first.
 7. Mark the chat's index state complete when nothing is waiting.
 
-## G.5b Chunking: how a message is cut into passages (Proposed)
+## G.5b Chunking: how a message is cut into passages (Approved, G35)
 
 Chunking decides what each index entry means, so it is settled before the
 index is built. It runs on the phone, costs the user nothing, and uses no
@@ -1676,7 +1706,7 @@ therefore make recall miss a message, but can never hold a message back.
 This matters most in hands-free voice chat, where a delay is felt at
 once.
 
-## G.7 Scope walls (Proposed, on the owner's requirement)
+## G.7 Scope walls (Approved, G35, on the owner's requirement)
 
 **Owner:** recall across chats must be controlled. A roleplay chat must not
 reach companion-only material.
@@ -1711,6 +1741,48 @@ reach companion-only material.
 - **Scope is never guessed** from the chat's present settings.
 - **To verify during Steps 7–13:** how much existing conversation has a
   recorded scope.
+- **Glamour reference (Owner, 2026-11-23; confirmed in code in Step 8).**
+  The memory system is to support optional Glamour associations later; this
+  is preparation only and changes no visibility, retrieval or Glamour rule.
+  Glamours, roleplay characters and companions stay distinct, and are always
+  referred to by permanent ID, never by a display name.
+  - **In the code a Glamour is the memory store's user persona record**
+    (Glamour Studio edits it through `EditUserPersonaActivity`; the chat's
+    active Glamour is `Preferences.getChatUserPersonaId`). There is no separate
+    user-persona concept beside it.
+  - **Recorded now:** when a turn finishes, the active Glamour's ID is saved in
+    each message's `memoryScope` as `userPersona`, whether or not its name was
+    displayed (`ChatTurnMemoryScope.current`). Each regenerated version keeps
+    its own. A user message also records `userNameSource`
+    (`glamour:<id>` or `roleplay:<id>`), but only for the identity whose name
+    was shown, so a Glamour hidden by a roleplay name is not in it; the index
+    does not use `userNameSource` for identity.
+  - **In the index:** each passage stores that ID as `scope_user_persona`, or
+    nothing. A message with a recorded scope and no Glamour stores nothing with
+    `scope_known` set; a message with no recorded scope stays unknown. No
+    historical Glamour is guessed or taken from a name.
+  - **Not covered yet:** messages whose turn never finished (failed, stopped,
+    interrupted replies are not indexed) and older messages without migrated
+    scope have no Glamour. Linking a Glamour to memories, and any use of the
+    reference in retrieval, needs its own design and approval.
+- **Speaker labels (Owner, 2026-11-23):** the embedding model's title slot
+  says **Human** for the user's messages and **Companion** for the AI's
+  (G.5b cutter rule 7). These words are used only in that slot and in
+  approved user-facing wording; API message roles and existing internal role
+  values are unchanged, and the Memory Context Helper keeps the providers'
+  normal roles, with identity context supplied separately where needed.
+  Step 8 uses them as the default title (`SpeakerTitlePolicy.DEFAULT`).
+- **Per-message titles (Owner, 2026-11-23):** each message's passages get
+  their own title from a title policy, and the title is recorded on the
+  passages, so identity-aware titles can be tested without redesigning the
+  index. An identity-aware title uses the speaker of that message and the
+  name recorded on the message when it was written
+  (`IndexSourceMessage.recordedSpeakerName`, from `userName` or
+  `companionName`), not the identity's current display name, so a later
+  rename does not re-embed the identity's history unless that is decided
+  explicitly. The title is supplementary search information; permanent IDs
+  remain authoritative for associations and scope. Which titles are used is
+  decided by the Steps 14–15 evaluation.
 
 ## G.8 Context assembly: what the AI actually receives (Proposed)
 
@@ -3196,7 +3268,7 @@ questions for each situation.
 ### Step 7: the passage cutter (Routine)
 
 **Agent checklist for this step**
-- **Approval gate:** G35 must be explicitly approved before coding: it covers the full index design in G.5, G.5a, G.5b, and G.7.
+- **Stage:** 7A (M.2, **Conversation index: Stages 7A and 7B**). G35, the full index design in G.5, G.5a, G.5b, and G.7, is approved.
 - **Change only:** New plain-Kotlin cutter files and their tests. Input is one message, a target size, and a supplied size-measuring function; output is ordered original-text start/end positions and the cutter version.
 - **Preserve:** Every original character exactly once, with no changes to chat text. Use paragraphs, lines, words, then characters when necessary; **never split at periods**. No storage, screen, embedding call, search text, or overlap in this step.
 - **Verify:** Run every test under G.5b's “With the cutter, in Step 7”; the other G.5b test groups belong to later steps.
@@ -3221,7 +3293,8 @@ questions for each situation.
 ### Step 8: the passage stores and per-message updating (Hard)
 
 **Agent checklist for this step**
-- **Prerequisites:** Steps 1 and 7, with G35 already approved before Step 7.
+- **Stage:** 7B (M.2, **Conversation index: Stages 7A and 7B**), after the Stage 7A PR merges.
+- **Prerequisites:** Steps 1 and 7. G35 is approved.
 - **Change:** The separate encrypted index's four stores; per-message ID/fingerprint comparisons and transactional updates; eligibility, same-message search-text overlap, scope stamps, and waiting-vector rows. Confirm the AI-facing reply-version field in code and record it in this plan where required.
 - **Preserve:** Stored chats, existing chat search and its database, saved memories. **Do not** implement borrowed context from a neighbouring message (G.5b cutter rule 6), or generate vectors here.
 - **Verify:** New/edited/deleted/hidden/unfinished/failed cases, G.5b's step-8 search-text tests, and interrupted updates leaving the previous correct state intact.
@@ -3467,6 +3540,20 @@ carry-over. It does not reactivate Step 3's previous-message search.
   numbers, each sample checked on its own as in Step 0, and
   `conversation_recall_baseline.md` is created with every sample's
   "found" and "left out" results plus totals by situation.
+- **Speaker-title evaluation (Owner, 2026-11-23).** Index the same chats
+  three ways and score each with the real model: **A** generic titles only
+  (Human/Companion); **B** titles that also carry the speaker's recorded name
+  (for example "Companion: Ash"); **C** generic titles with the search limited
+  by the permanent identity IDs when a question names an identity; and B with
+  C together. Measure (1) questions that name a companion, Glamour or
+  roleplay identity, (2) ordinary topic questions with no name, to see
+  whether names cost accuracy, and (3) whether ID filtering, names, or both
+  work best. The test chats must include an identity that changes inside a
+  conversation, an identity renamed later, two characters with the same
+  name, and a roleplay name replacing a Glamour name; Step 6's set is
+  extended where these are missing. Results go in
+  `conversation_recall_baseline.md`; the title policy is chosen from them,
+  and Human/Companion stay the default until then.
 
 ### Step 15: the inspector and the measurements (Careful)
 
@@ -3482,7 +3569,8 @@ carry-over. It does not reactivate Step 3's previous-message search.
   labels are shown to the owner as one list.
 - **Done when:** the retrieval-related numbers in G.15 have measured
   starting values recorded in `conversation_recall_baseline.md`, with
-  search time on the owner's phone. Assembly-related measurements and
+  search time on the owner's phone. The speaker-title evaluation in Step 14 is
+  shown in the inspector with which title each passage was read under. Assembly-related measurements and
   inspector fields wait for Step 16.
 
 ### Step 16: context assembly (Hard)
@@ -3613,14 +3701,14 @@ about to start. Each has a recommendation.
 | G32 | Can the user choose how many of their previous messages are searched for follow-ups (G.9a)? | **Superseded (owner, 2026-11-16):** searching with the previous messages is not the carry-over method and is not a context-assistance choice. Replaced by G37 and G38 | Superseded |
 | G33 | Is the embedding model's reading limit for saved memories raised from 512 tokens to the model's real 2,048 (G.2)? | **Decided:** Step 1 reads saved memories up to the model's full 2,048-token capacity. G34 uses the actual model capacity, not a word-count approximation. Speed and memory use on the phone are checked before it ships | Step 1 |
 | G34 | How is a saved memory limited to what the model can read, and how is its length shown? | **Decided (owner, 2026-11-17):** informational content count exactly "348 Words"; actual complete-input tokens against the selected embedding model's capacity, plus a filling bar at the top of creating/editing/reading views. Exact local token counting off the UI thread, including content, extra searchable text, tags, document prefix and special tokens; the same fresh calculation gates Save. No word-based saving cap or warnings. Overflow pop-up: **Memory Cannot Be Saved** / "This memory exceeds the embedding model's reading limit." / **Okay**, without advice; all entered and stored text preserved. The Memory Assistant splits oversized proposals without losing information; splitting is also enforced in code. No separate existing-overlength-memory design. See the corrected Step 5 work order | Decided |
-| G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | Open. The agent explains it in plain terms and the owner approves it once, before Step 7. No builder treats it as approved before then | Step 7 |
+| G35 | The design of the conversation index as a whole (G.5, G.5a, G.5b, G.7): a new encrypted database on the phone holding where each piece of a conversation is, its searchable words, and the embedding model's numbers; what is and is not stored; and how it is kept correct after edits, deletions, and restores | **Decided (owner, 2026-11-23):** approved as written in G.5, G.5a, G.5b and G.7 | Decided |
 | G36 | The design of retrieval and delivery (G.6, G.8), mode-specific follow-ups, conservative repeat handling and total pre-send time budget | Open. Resolve the review requirements before Step 14, explain the combined design in plain terms, and obtain one approval before Step 14 | Step 14 |
 | G37 | How do follow-ups keep their saved memories? | **Decided (owner, 2026-11-16):** through context assistance: Off, Code-based subject tracking, API AI with its own model in the initial rollout, and Local AI later; separate from the embedding model (G.9, G.9b, G.9c) | Decided |
 | G38 | The context helper's setting | **Decided (owner, 2026-11-16):** on Memory Context Helper Settings (M.11); optional, an on/off toggle that starts off; when on, a dropdown of Code-based or API AI, one at a time; Code-based selected when first turned on; Local AI not shown now; no placeholder screens. Labels and explanations are asked when Step 4a starts (M.10). How Code-based rebuilds the subject after a restart is an engineering choice for the builder | Decided |
 | G39 | The Memory Context Helper Tool API (M.4) | **Decided (owner, 2026-11-16):** the name and place, the user's own API model, every parameter, Memory Scanner Tool API's arrangement, and the ten defaults in M.4 (input, fixed instructions, 8 s / 3 s time allowance, failure fallback, cost, no separate privacy warning, its own model only, logging as "Memory Context Helper", starting state, testing). Corrected by the owner on 2026-11-16: no fixed token cap on the conversation input, and no privacy disclosure. Wording of the notices and labels, and the model and cost of the scored run, are asked when Step 4b starts (M.10) | Decided |
 | G40 | May a +3 memory pass without the relevance gate's full stand-out? | **Decided (owner, 2026-11-16):** only under the top-match condition in G.10. The unrestricted lower bar is rejected | Decided |
 | G41 | Which other embedding models are offered, local or API, and their privacy and cost | Open. The architecture is required now (G.9c, M.5) | Later |
-| G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection. Updated November 18: complete the scanner update after Stage 6 and before Stage 7 (M.2) | Decided |
+| G42 | The build order in M.2 | **Decided (owner, 2026-11-16):** as M.2. Provenance first, so the Memory Scanner records sources before the owner builds a memory collection. Updated November 18: complete the scanner update after Stage 6 and before Stage 7 (M.2). Updated November 23: Stage 7 is split into Stages 7A and 7B (M.2) | Decided |
 | G43 | The memory provenance design (M.3) and its details | **Decided (owner, 2026-11-16):** the source is the whole conversation, never a scanner-chosen message; the memory editor shows User, Companion, Date, Last Message Date and Source Conversation as M.3 describes; no sources are carried through Replace, Supersede or merge; a memory the user writes shows its creation date; the user cannot edit sources or dates; the important date is built in Phase 4. Participant-specific attribution and user-added sources are possible later features | Decided |
 | G44 | Release Step 4a's setting before Step 4b adds API AI | **Decided (owner, 2026-11-16):** yes; the setting ships with On-device (Code-Based) only, shown as plain text until API AI makes it a dropdown | Decided |
 | G45 | Include the frozen-path lorebook repeat check (memory plan step 1.13, A.9) in Step 4a | **Decided (owner, 2026-11-16):** yes, on typed sending, voice and resending alike. With it the owner decided that every way of sending uses the same lorebook rules: every match after duplicate removal up to Maximum Lorebook Entries (Lorebook Settings, default 20, 1–99, no unlimited), an optional character limit (off, up to 9,999), an optional entry limit on RAG Active Memory Settings that replaces it while memory is on and a valid number is entered, and lorebook text never uses Memory Space | Decided |
@@ -3808,3 +3896,5 @@ request. Detailed results stay in the file named by G.16.
 - Stage 6C — Browser match cards and comparison (`PendingMatchPresentation.kt`, `PendingMatchLoader.kt`, `PendingMatchText.kt`): Pending cards with Possible Matches show the closest related memory, its status (Active, Pending, Archived or Superseded), how it was found (Exact Match, Alternative Suggestion, Similarity Match with its live score, or Linked by the Scanner; no keyword layer) and the number of additional matches, in that priority order. Tapping the preview opens that exact pair by memory ID in Possible Match Review (Related Memory, then Additional Matches); only the opened match starts ticked and Pending matches are review-only until 6D. A tapped memory that changed into a non-match or was removed shows the current matches with a notice; every resolution is refused inside the store transaction if the proposal or a selected memory changed after it was shown. Returning restores the list position. No database migration. Unit tests (`PendingMatchPresentationTest`) and `MemoryStoreInstrumentedTest` cover ordering, labels, scores, selection and stale decisions.
 
 - Stage 6D — dedicated Pending-pair review actions (`PendingPairReviewController`, `PendingPairSnapshot`), preserving links and Pending status on keep/edit, discarding only the named suggestion, and activating only an explicitly saved suggestion; both displayed records and relationship sets are rechecked atomically, and legacy approval actions reject Pending targets. Thirteen independent synthetic extraction responses are replayed through production prompt/parsing/draft/matching/filing code; native embedding/cache and encrypted-store review coverage runs in ordinary Android Checks. Detailed results and outstanding phone/provider measurements are in `memory baseline.md`. PR: [Stage 6D branch](https://github.com/SoulPhosphor/speak-gpt/pulls?q=is%3Apr+head%3Afeature%2Fscanner-stage6d). Stage 7 is not implemented.
+- Stage 7A, Step 7 — the passage cutter (`conversation/index/PassageCutter.kt`): one message's text, a target size and a supplied size function give ordered, non-overlapping passage positions covering every character exactly once, with the cutter version. Pieces are split only when too large, at paragraphs, then lines, then between words (the platform's word boundaries for writing without spaces), then between user-perceived characters, and last between code points; never at periods; neighbouring pieces are joined while the measured text fits. Connected to nothing: no storage, search text, token counter, screen or log. Every G.5b "With the cutter, in Step 7" test is in `PassageCutterTest`. Stage 7B (Step 8) is next.
+- Stage 7B, Step 8 — the passage stores and per-message updating (`conversation/index/`): a separate SQLCipher database (`conversation_index.db`, its own key) with passages (positions, exchange, speaker, time, chat position, fingerprints, scope or unknown, cutter version, vector model), waiting vector rows keyed by search-text fingerprint, model and size, a word index with no stored content and no word positions (FTS5 `content=''`, `detail=none`), and one index-state row per chat. `ConversationIndexUpdater` compares eligible messages (permanent ID, visible to the AI, finished, the canonical version) by ID and original-text fingerprint and replaces, restamps or removes one message per transaction, rechecking the recorded chat version and the compared state inside it; stale or failed runs leave the chat marked for refresh. Search text is the passage with up to a given number of words from the passage before it in the same message, measured with the model's tokenizer, with a per-message title in the model's title slot (default Human/Companion; the name recorded on each message is available for a later identity-aware title) recorded on its passages; the active Glamour's ID recorded on each message is stored as its nullable Glamour reference; vectors unused by any passage are removed. No vectors are made and nothing calls the updater yet. The overlap word count is passed in and is decided before Step 10 connects indexing. Tests: `IndexEligibilityTest`, `PassageSearchTextTest`, `ConversationIndexUpdaterTest`, `PassageSearchTextGemmaTest` (real EmbeddingGemma tokenizer), `ConversationIndexStoreInstrumentedTest` (encrypted store on a device).

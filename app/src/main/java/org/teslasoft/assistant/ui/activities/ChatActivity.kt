@@ -512,13 +512,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         private val reasoningObservationAttribute =
             AttributeKey<ReasoningObservationContext>("ReasoningObservation")
 
+        private val generationOwnerAttribute = AttributeKey<GenerationRequestContext>("GenerationOwner")
+
     }
 
     private data class ReasoningObservationContext(
         val accumulator: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator,
         val endpointId: String,
         val modelId: String,
-        val showReasoning: Boolean
+        val showReasoning: Boolean,
+        val messageId: String,
+        val observed: CompletableDeferred<Unit>?,
+        val canDeliver: () -> Boolean
     )
 
     private class PdfPreparationException(
@@ -8215,6 +8220,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         if (isGenerationRequest) {
+            boundContext?.let { request.attributes.put(generationOwnerAttribute, it) }
             recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
             (boundContext?.usageAttempt ?: currentProviderUsageAttempt)?.let {
                 // Raw OpenRouter usage (cost and cache details) is richer than
@@ -8475,7 +8481,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             (capability.canReturnVisibleReasoning || wantLearning)
         val wantContinuationState = isOpenRouter && bodyHasTools &&
             capability.support != org.teslasoft.assistant.reasoning.ReasoningSupport.ABSENT
-        currentTurnReasoning?.takeIf {
+        val owner = if (request.attributes.contains(generationOwnerAttribute))
+            request.attributes[generationOwnerAttribute] else null
+        owner?.reasoningAccumulator?.takeIf {
             wantLearning || wantDisplay || wantContinuationState
         }?.let { accumulator ->
             request.attributes.put(
@@ -8484,10 +8492,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     accumulator = accumulator,
                     endpointId = apiEndpointObject?.id.orEmpty(),
                     modelId = model,
-                    showReasoning = wantDisplay
+                    showReasoning = wantDisplay,
+                    messageId = owner.messageId,
+                    observed = owner.reasoningObserved,
+                    canDeliver = owner.canDeliver
                 )
             )
-            currentTurnReasoningObservationActive = true
+            if (owner.canDeliver()) currentTurnReasoningObservationActive = true
         }
 
         // 1) The reasoning request fields for this turn.
@@ -8504,7 +8515,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         var continuationAttached = false
         if (isOpenRouter) {
             val withState = org.teslasoft.assistant.reasoning.ReasoningContinuationSerializer
-                .attachToToolCallMessage(newBody, currentTurnReasoning?.reasoningDetails())
+                .attachToToolCallMessage(newBody, owner?.reasoningAccumulator?.reasoningDetails())
             if (withState != newBody) {
                 newBody = withState
                 continuationAttached = true
@@ -8692,15 +8703,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun deliverObservedReasoning(
-        acc: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator,
+        observation: ReasoningObservationContext,
         learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
     ) {
+        val acc = observation.accumulator
         if (!acc.hasReasoning()) return
         val snapshot = acc.snapshot()
         if (snapshot.text.isBlank()) return
         runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
-            val index = messages.indexOfLast { it["isBot"] == true }
+            if (isFinishing || isDestroyed || !observation.canDeliver()) return@runOnUiThread
+            val index = messages.indexOfFirst {
+                it["isBot"] == true && org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == observation.messageId
+            }
             if (index < 0) return@runOnUiThread
             val msg = messages[index]
             msg[ChatAdapter.KEY_MESSAGE_REASONING] = snapshot.text
@@ -8892,7 +8906,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                                 // many characters — presence and count only, never
                                                 // the reasoning text (§7.8).
                                                 val inbound = reasoningAcc.inboundDiagnostics()
-                                                lastReasoningInbound =
+                                                if (reasoningObservation.canDeliver()) lastReasoningInbound =
                                                     "reasoning=${inbound.reasoning}, " +
                                                         "reasoning_content=${inbound.reasoningContent}, " +
                                                         "reasoning_details=${inbound.reasoningDetails}, " +
@@ -8904,11 +8918,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                                 // reasoning_details for a tool-call continuation are
                                                 // held in the accumulator regardless.
                                                 if (reasoningObservation.showReasoning) {
-                                                    deliverObservedReasoning(reasoningAcc, learnedCapability)
+                                                    deliverObservedReasoning(reasoningObservation, learnedCapability)
                                                 }
                                                 // Signal capture complete so a tool continuation can
                                                 // echo reasoning_details on its follow-up.
-                                                currentTurnReasoningObserved?.complete(Unit)
+                                                reasoningObservation.observed?.complete(Unit)
                                             }
                                         }
                                     }
@@ -9256,6 +9270,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Ordered with any background save of this chat (see
         // saveSettingsInBackground): an older snapshot never lands after this.
         val order = org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared
+        if (order.hasBackgroundWork()) {
+            // The save worker may own CHAT_LIST_LOCK during a disk commit.
+            // Queue the newest complete snapshot; never wait on it from here.
+            ChatPreferences.getChatPreferences().prepareForSave(this, chatId, messages)
+            order.saveInBackground(chatId, order.claim(chatId),
+                org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.snapshotOf(persistableMessages),
+                bookmarkChanged, org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.historyWriter(this))
+            return ChatStorageHealth.WriteOutcome.OK
+        }
         val seq = order.claim(chatId)
         return order.writeIfNewest(chatId, seq, { it == ChatStorageHealth.WriteOutcome.OK }) {
             ChatPreferences.getChatPreferences().saveChatHistory(
@@ -9347,7 +9370,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // commit; the commit itself creates the row with the current timestamp.
         // Existing chats continue to move to the top as soon as a turn starts.
         if (!pendingConversation) {
-            ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
+            val timestampChatId = chatId
+            val app = applicationContext
+            // Metadata shares the history lock too. Its timestamp update must
+            // not bring a background deletion's disk wait back onto the UI.
+            CoroutineScope(Dispatchers.IO).launch {
+                ChatPreferences.getChatPreferences().putTimestampToChatById(app, timestampChatId)
+            }
         }
         try {
             if (mediaPlayer?.isPlaying == true) {
@@ -9964,8 +9993,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         try {
             return decision.await()
         } finally {
-            pendingImageConfirmation = null
-            runOnUiThread { removeImageConfirmationCard() }
+            // Deletion may have withdrawn this decision and a newer turn may
+            // already own another confirmation card by the time we unwind.
+            runOnUiThread {
+                if (pendingImageConfirmation === decision) {
+                    pendingImageConfirmation = null
+                    removeImageConfirmationCard()
+                }
+            }
         }
     }
 
@@ -10285,7 +10320,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val pricingCatalogEndpointFingerprint: String? = null,
         /** A Condense/Reduce/reminder request: capture its usage only, with no
          *  chat-turn diagnostics attached. */
-        val auxiliaryUsage: Boolean = false
+        val auxiliaryUsage: Boolean = false,
+        val messageId: String = "",
+        val reasoningAccumulator: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator? = null,
+        val reasoningObserved: CompletableDeferred<Unit>? = null,
+        val canDeliver: () -> Boolean = { false }
     )
     private val generationRequestContext = ThreadLocal<GenerationRequestContext?>()
     private var currentTurnNativePdfs: List<NativePdfPayload> = emptyList()
@@ -10296,7 +10335,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             currentLifecycle,
             currentPricingCatalog,
             currentTurnNativePdfs,
-            currentPricingCatalogEndpointFingerprint
+            currentPricingCatalogEndpointFingerprint,
+            messageId = messages.lastOrNull { it["isBot"] == true }
+                ?.let(org.teslasoft.assistant.preferences.MessageIdentity::idOf).orEmpty(),
+            reasoningAccumulator = currentTurnReasoning,
+            reasoningObserved = currentTurnReasoningObserved,
+            canDeliver = turnFence.deliveryGuard()
         )
         return try {
             kotlinx.coroutines.withContext(generationRequestContext.asContextElement(context)) {
@@ -10368,6 +10412,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // A reply retired by a message deletion never starts another request
         // phase, even if a setup step swallowed its cancellation.
         if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
+        providerRequestDispatched = false
+        org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared.awaitSaved(chatId)
+        if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
         currentLifecycle?.let {
             if (!it.finalized) finalizeLifecycleTerminal(
                 ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
@@ -10383,7 +10430,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Reset the dispatch boundary for THIS attempt regardless of whether
         // lifecycle logging is on, because the Provider Failure Log gate also
         // depends on it.
-        providerRequestDispatched = false
         val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
         currentProviderUsageAttempt = ProviderUsageAttempt(
             requestedModel = usedModel,
@@ -10548,14 +10594,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         carrier: HashMap<String, Any>?,
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
         streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
-    ): Boolean {
-        val records = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+    ): Boolean = org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.finish {
+        val records = run {
             // A completed request the deletion caught before its usage was
             // recorded keeps its own price wait (it owns pendingPricing then).
             val completedRecord = claimed.completed?.let {
                 completeUsageRecordFrom(
                     it, claimed.pendingPricing, claimed.completedFingerprint,
-                    claimed.completedAtElapsedMs, claimed.completedRows
+                    claimed.completedAtElapsedMs, claimed.completedRows, updateCachingEvidence = false
                 )
             }
             listOfNotNull(completedRecord, completeTerminalUsageRecord(claimed.attempt, claimed.pricing))
@@ -10568,15 +10614,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 attachUsageRecords(it, records, it["isBot"] == true)
                 mirrorUsageRecordsToCanonicalVariant(it)
                 attached = true
-                // A carrier deleted meanwhile cannot repair the usage log later.
-                if (messages.none { row -> row === it }) keepUsageOfDeletedRows(listOf(HashMap(it)))
+                // The append can fail even when the row survives. Retain the
+                // receipt independently of both the cancelled caller and disk.
+                keepUsageOfDeletedRows(listOf(HashMap(it)))
             }
         }
         val r = claimed.lifecycle
         if (r != null && !r.finalized) {
             writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
         }
-        return attached
+        attached
     }
 
     /** A reply with versions is totalled from its version list, and its
@@ -10603,7 +10650,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ): TurnUsageRecord? {
         val snapshot = attempt?.snapshot() ?: return null
         if (!snapshot.counts.hasAnyValue() && !snapshot.providerCost.hasAnyValue()) return null
-        val catalog = kotlinx.coroutines.withTimeoutOrNull(500L) { pricingDeferred?.await() }
+        val catalog = org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.awaitPricing(pricingDeferred, 500L)
         val pricing = catalog
             ?.takeIf { it.model.equals(snapshot.model, ignoreCase = true) }
             ?.pricingFor(snapshot.provider)
@@ -11934,6 +11981,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Attach the final request's exact Memory/Lorebook ids to this reply. */
     private fun attachActiveMemoryAttribution(references: List<ActiveMemoryReference>) {
+        if (turnFence.isStale()) return
         val last = messages.lastOrNull() ?: return
         if (last["isBot"] != true) return
         val encoded = ActiveMemoryAttribution.encode(references)
@@ -12001,6 +12049,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val history = pendingRetryVariants ?: return
         val last = messages.lastOrNull() ?: return
         if (last["isBot"] != true) return
+        // Confirmation/progress cards disappear when the image ends. Earlier
+        // versions must be folded into its real terminal row instead.
+        if (last[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true || last[ChatAdapter.KEY_IMAGE_PROGRESS] == true) return
         pendingRetryVariants = null
 
         org.teslasoft.assistant.ui.chat.RegenerationRecovery.foldInto(last, history, pendingRetryMessageId)
@@ -12097,6 +12148,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pendingRegenerationAwaitsImageJob = false
         val recompactBoundary = pendingRecompactBoundary
         pendingRecompactBoundary = null
+        // A deletion withdraws recovery now. A lifecycle-scoped deferred clear
+        // can be cancelled by Back, leaving a journal that restores the reply
+        // the user just deleted when the chat is reopened.
+        if (holdSavesForDeletion) preferences?.clearPendingRegeneration()
         lifecycleScope.launch {
             // Terminal callers persist the new canonical reply before we read it.
             kotlinx.coroutines.yield()
@@ -12169,10 +12224,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         mirrorCompactMetadata: Boolean = true,
         take: suspend () -> List<TurnUsageRecord>
     ) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+        org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.finish {
             val records = take()
             attachUsageRecords(carrier, records, mirrorCompactMetadata)
-            if (records.isNotEmpty() && messages.none { it === carrier }) keepUsageOfDeletedRows(listOf(HashMap(carrier)))
+            if (records.isNotEmpty()) {
+                mirrorUsageRecordsToCanonicalVariant(carrier)
+                if (turnFence.isStale() || messages.none { it === carrier })
+                    keepUsageOfDeletedRows(listOf(HashMap(carrier)))
+                // Deletion already saved its earlier snapshot, and the stale
+                // completion will not reach its normal save below.
+                if (turnFence.isStale() && messages.any { it === carrier }) saveSettingsInBackground()
+            }
         }
         if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
     }
@@ -12334,8 +12396,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pricingDeferred: Deferred<TokenPricingCatalog>?,
         pricingEndpointFingerprint: String?,
         pricingCompletedAtElapsedMs: AtomicLong?,
-        messageSnapshot: List<Map<String, Any>>?
+        messageSnapshot: List<Map<String, Any>>?,
+        updateCachingEvidence: Boolean = true
     ): TurnUsageRecord {
+        val pricingEndpoint = org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.pricingEndpoint(
+            apiEndpointObject?.takeIf {
+                pricingEndpointFingerprint == null || promptCachingEndpointFingerprint(it) == pricingEndpointFingerprint
+            }, snapshot.apiEndpoint
+        )
         val estimate = if (snapshot.counts.hasAnyValue() || messageSnapshot == null) {
             null
         } else {
@@ -12344,16 +12412,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val (counts, source) = TokenUsageAccounting.chooseCounts(snapshot.counts) {
             estimate ?: TokenCounts(null, null, null)
         }
-        var catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) { pricingDeferred?.await() }
+        var catalog = org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.awaitPricing(pricingDeferred, 2000L)
         if (catalog == null) pricingDeferred?.cancel()
         val promptCachingCatalog = catalog
         if (catalog != null && !catalog.model.equals(snapshot.model, ignoreCase = true)) {
             catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) {
-                TokenPricingCatalogClient.load(apiEndpointObject, snapshot.model)
+                TokenPricingCatalogClient.load(pricingEndpoint, snapshot.model)
             }
         }
         val completedAtElapsedMs = pricingCompletedAtElapsedMs?.get()?.takeIf { it >= 0L }
-        if (promptCachingCatalog != null && pricingEndpointFingerprint != null &&
+        if (updateCachingEvidence && !turnFence.isStale() && promptCachingCatalog != null && pricingEndpointFingerprint != null &&
             completedAtElapsedMs != null
         ) {
             lastPromptCachingCatalog = PromptCachingCatalogEvidence(
@@ -13279,6 +13347,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun onContextHelperOutcome(
         failure: org.teslasoft.assistant.preferences.memory.context.HelperFailure?
     ) {
+        if (turnFence.isStale()) return
         if (ContextHelperNotice.shouldShow(failure)) pendingContextHelperFailure = failure
     }
 
@@ -14018,6 +14087,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             } catch (e: Exception) {
                 if (manualMemoryIds.isNotEmpty()) throw e
+                if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
                 org.teslasoft.assistant.preferences.memory.MemoryLog.log(
                     this,
                     "Enforcer",
@@ -14430,6 +14500,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             } catch (e: Exception) {
                 if (manualMemoryIds.isNotEmpty()) throw e
+                if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
                 org.teslasoft.assistant.preferences.memory.MemoryLog.log(
                     this, "Enforcer", "error", "Assembly failed, lore-books-only this turn: ${e.message}"
                 )
@@ -14543,6 +14614,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         attachActiveMemoryAttribution(activeMemoryReferences)
         }
 
+        if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
         currentTurnNativePdfs = preparedTurn?.nativePdfs
             ?: legacyConversationProjection?.nativePdfs.orEmpty()
 
@@ -15837,6 +15909,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         turnFence.retire()
         generationJobs.forEach { it.cancel() }
         stopReadback()
+        val confirmation = pendingImageConfirmation
+        pendingImageConfirmation = null
+        confirmation?.cancel()
+        removeImageConfirmationCard()
 
         if (replyTerminalPending) {
             // Exactly what the reply's own cancellation handler would write.
@@ -15863,7 +15939,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         requestPreparationInProgress = false
         generationRequestActive = false
-        settlePendingRegeneration()
         showPendingContextHelperFailure()
 
         if (imageJob != null && imageJob.chatId == chatId) {
@@ -15876,6 +15951,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
             )
         }
+        // The terminal image row now owns the earlier versions; transient
+        // progress/confirmation rows must never be their only carrier.
+        settlePendingRegeneration()
         // Stops a running summary update before the bookmark is realigned;
         // its unfinished batch is discarded.
         summarizerController?.cancelSummarizing()

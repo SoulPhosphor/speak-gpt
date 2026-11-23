@@ -80,6 +80,16 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 | Whether legacy approval actions may affect a selected memory | Recheck the displayed fingerprint and reject every Pending target inside the existing resolution transaction | `PendingPairReviewInstrumentedTest.ordinaryPendingMatchesHaveTheSameProtectionAndLegacyActionsRejectAllPendingTargets` |
 | Whether another action may run while an edit or confirmation is open | Lock pair actions, navigation, importance edits and legacy controls; Cancel restores the original meter and Pending content | `PendingPairReviewInstrumentedTest.actualControlsEditAndCancelWithoutDispatchingAWritingOperation` |
 
+### Changes during waits — Stage 7B
+
+| Decision | Detect changes during the wait | Verification |
+| --- | --- | --- |
+| Whether an update may start for the recorded chat version | Compare the chat's current version with the recorded one before any write | `ConversationIndexUpdaterTest.aResultForAnOlderChatVersionIsDiscarded` |
+| Which messages are new, changed, moved or gone (compared by permanent ID and original-text fingerprint) | Each message write rechecks, inside its transaction, the chat version and that the message's stored stamp is still the one compared, and checks the chat version again just before commit; on any mismatch the transaction rolls back | `ConversationIndexStoreInstrumentedTest.aResultThatFinishesAfterTheChatChangedIsThrownAway`; `aChatChangeWhileAWriteIsInProgressRollsTheWriteBack`; `ConversationIndexUpdaterTest.aChatThatChangesDuringTheUpdateKeepsThePreviousStateForUnwrittenMessages` |
+| A message's passages, keywords and waiting vector rows, built while cutting and measuring | Replaced in one transaction; a failure part-way rolls back to the previous rows | `ConversationIndexStoreInstrumentedTest.anUpdateInterruptedInsideAMessageLeavesItsPreviousRows`; `ConversationIndexUpdaterTest.aFailureHalfwayLeavesEveryMessageWholeAndTheChatMarkedForRefresh` |
+| Whether a vector row is still used | Unused rows are removed in the same transaction that removes their last passage | `ConversationIndexStoreInstrumentedTest.aSharedSearchTextKeepsItsVectorUntilTheLastPassageUsingItGoes` |
+| That the index describes the recorded chat version | The finishing transaction rechecks the chat version and that the indexed messages are exactly those written; otherwise the chat stays marked for refresh | `ConversationIndexUpdaterTest.aChatThatChangesDuringTheUpdateKeepsThePreviousStateForUnwrittenMessages`; `cancellingBetweenMessagesWritesNothingMore` |
+
 ### External services and costs
 
 - Obtain model catalogs, capabilities, voice lists, prices, and other provider-controlled information from the provider or an authorized live source. Do not hard-code data that providers can change.
@@ -131,12 +141,12 @@ For code work, use this sequence:
 2. Run the local checks and fix failures: `./gradlew testDebugUnitTest assembleBeta assembleDebugAndroidTest` (one invocation, so build outputs are shared). Do not open a code PR with known failed local checks.
 3. Open one pull request once the work is complete, required owner decisions are resolved, and local checks pass.
 4. Android Checks must pass on **the final commit**. Investigate and fix real failures, rerunning the relevant local checks before pushing.
-5. Codex reviews are owner-controlled (see **Codex reviews** below). If the owner approves a review, validate each finding against the actual code and owner-approved behavior, fix valid findings, reply with the reason for any finding not fixed, and request another review after each round of fixes until Codex reports no findings.
+5. Codex reviews each PR automatically when it is opened (see **Codex reviews** below). Validate each finding against the actual code and owner-approved behavior, fix valid findings, and reply with the reason for any finding not fixed.
 6. Do not merge work whose checks are still running or failed. Merge only with the owner's explicit permission for that PR, into **`main`** (or a different integration branch the owner designates), using an ordinary merge method and no force-push.
 
 **One pull request per session.** Combine all changes made in one session into a single pull request, including documentation, instruction and code changes. Split them only for an extremely good reason, and state that reason in each PR.
 
-**Codex reviews:** Codex usage is limited and the owner decides when it is used. Never request `@codex review` automatically, and never for documentation-only changes. For a PR with actual code changes, finish implementation, self-review and the necessary testing first, then ask the owner whether a Codex review is needed; request it only after explicit approval. Once the owner approves a Codex review for a PR, keep going: after pushing fixes for its findings, request `@codex review` again, and repeat until Codex reports no findings. Required testing and CI verification apply in full whether or not Codex reviews.
+**Codex reviews:** Codex usage is limited. Codex starts a review automatically when a pull request is opened, so open a PR only once implementation, self-review and the necessary testing are finished. Never comment `@codex review` to request that opening review. After fixing valid Codex findings and rerunning the relevant checks, comment `@codex review` on the corrected commit without asking, and repeat until Codex reports no remaining valid findings. Request no other Codex review without the owner's explicit approval. Required testing and CI verification apply in full whether or not Codex reviews.
 
 **Documentation-only PRs:** do not run local checks or Android builds when every change is documentation; inspect the complete replacement text, links, scope, and diff instead, and never claim tests were executed when they were not. A PR containing both documentation and code follows the code workflow above.
 

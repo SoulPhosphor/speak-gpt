@@ -9,6 +9,33 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.MessageIdentity
 
 class UsageLogTest {
+    @Test fun aDelayedCheckpointRepairCannotReplaceANewerFinalReceipt() {
+        val part = org.teslasoft.assistant.conversation.parallel.ParallelInputPart.Text("question")
+        val group = org.teslasoft.assistant.conversation.parallel.ParallelInput.freeze(
+            java.util.UUID.randomUUID().toString(), java.util.UUID.randomUUID().toString(),
+            "full_history", emptyList(), listOf(part),
+            List(2) { index -> org.teslasoft.assistant.conversation.parallel.ParallelSlotInput(
+                org.teslasoft.assistant.conversation.responsegroups.ResponseModelAssignment(
+                    "model", "Model", "profile-$index", "https://example.invalid/v1/", "chat_completions",
+                    emptyMap(), emptyMap(), emptyMap(), emptyMap()), listOf(part)) }, 0, 1L)
+        val attempt = group.slots.first().versions.single().attempts.single()
+        fun row(receipt: TurnUsageRecord): Map<String, Any> {
+            val after = group.copy(slots = group.slots.map { slot -> if (slot != group.slots.first()) slot else slot.copy(versions = slot.versions.map { version ->
+                version.copy(attempts = listOf(attempt.copy(usageRecord = TokenUsageAccounting.encodeRecords(listOf(receipt)))))
+            }) })
+            return org.teslasoft.assistant.conversation.responsegroups.ResponseGroupEdits.install(
+                mapOf(MessageIdentity.KEY to group.assistantMessageId, "isBot" to true), after)
+        }
+        val checkpoint = record("model", 20, 4, 4.0).copy(requestId = attempt.requestId, receiptRevision = 1)
+        // A later provider correction can lower a count or cost. Revision,
+        // rather than a numeric maximum, determines which evidence is newer.
+        val final = record("model", 15, 3, 1.0).copy(requestId = attempt.requestId, receiptRevision = 2)
+        val current = UsageLog.EMPTY.seed(listOf(row(checkpoint)), 1L).seed(listOf(row(final)), 2L)
+        val retried = current.seed(listOf(row(checkpoint)), 3L)
+        assertEquals(2, retried.entries.size)
+        assertEquals(final, retried.entries.single { it.record.requestId == attempt.requestId }.record)
+        assertEquals(final, UsageLog.decode(UsageLog.encode(retried))!!.entries.single { it.record.requestId == attempt.requestId }.record)
+    }
     private fun record(model: String, input: Int, output: Int, cost: Double) = TurnUsageRecord(
         model = model, provider = "Provider", inputTokens = input, outputTokens = output,
         totalTokens = input + output, cachedInputTokens = 0, source = TokenCountSource.PROVIDER_REPORTED.storedValue,

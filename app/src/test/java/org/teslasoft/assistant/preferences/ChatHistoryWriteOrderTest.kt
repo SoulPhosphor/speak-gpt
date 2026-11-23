@@ -10,8 +10,69 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.*
 
 class ChatHistoryWriteOrderTest {
+    @Test fun aQueuedRequestIsCancelledWhenItsChatOrChatSetIsRemoved() = runBlocking {
+        for (wholeSet in listOf(false, true)) {
+            val storage = Storage().apply { failuresLeft = 1 }
+            val order = ChatHistoryWriteOrder(scheduler = null)
+            order.saveInBackground(chat, order.claim(chat), rows("kept"), false, storage.writer)
+            var dispatched = false
+            val request = launch(start = CoroutineStart.UNDISPATCHED) {
+                order.awaitSaved(chat)
+                dispatched = true
+            }
+            if (wholeSet) order.discardAll() else order.discard(listOf(chat))
+            request.join()
+            assertTrue(request.isCancelled)
+            assertFalse(dispatched)
+        }
+    }
+    @Test fun anExternalMutationRetriesWhenADeletionWasQueuedDuringItsRead() {
+        val storage = Storage().apply { failuresLeft = 1 }
+        val order = ChatHistoryWriteOrder(scheduler = null)
+        val mutation = order.claim(chat)
+        order.saveInBackground(chat, order.claim(chat), rows("kept"), false, storage.writer)
+        val outcome = order.writeIfNewest(chat, mutation, { it },
+            stillWanted = { order.isLatestClaim(chat, mutation) }) {
+            storage.writer.write(chat, rows("kept", "deleted"), false)
+        }
+        assertNull(outcome)
+        assertTrue(order.hasPending(chat))
+        order.attemptNow(chat)
+        assertEquals(listOf("kept"), storage.stored[chat])
+    }
+
+    @Test fun aQueuedNewTurnDoesNotWaitOnTheMainThreadAndItsDispatchWaitIsCancellable() = runBlocking {
+        val scheduler = Executors.newSingleThreadScheduledExecutor()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val storage = Storage()
+        val slowWriter = ChatHistoryWriteOrder.Writer { chatId, messages, bookmark ->
+            entered.countDown()
+            check(release.await(5, TimeUnit.SECONDS))
+            storage.writer.write(chatId, messages, bookmark)
+        }
+        try {
+            val order = ChatHistoryWriteOrder(scheduler)
+            order.saveInBackground(chat, order.claim(chat), rows("kept"), false, slowWriter)
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            assertTrue(order.hasBackgroundWork())
+            order.saveInBackground(chat, order.claim(chat), rows("kept", "new turn"), false, storage.writer)
+            val waiter = launch(start = CoroutineStart.UNDISPATCHED) { order.awaitSaved(chat) }
+            assertFalse(waiter.isCompleted)
+            waiter.cancelAndJoin()
+            assertTrue(order.hasPending(chat))
+            release.countDown()
+            withTimeout(5_000) { order.awaitSaved(chat) }
+            assertEquals(listOf("kept", "new turn"), storage.stored[chat])
+            assertFalse(order.hasBackgroundWork())
+        } finally {
+            release.countDown()
+            scheduler.shutdownNow()
+        }
+    }
     private val chat = "chat-a"
 
     /** Stands in for stored history: the last list written per chat. */

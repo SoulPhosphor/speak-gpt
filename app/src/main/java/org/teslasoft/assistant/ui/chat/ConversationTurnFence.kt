@@ -31,6 +31,14 @@ class ConversationTurnFence {
         epoch += 1
     }
 
+    /** A callback may run outside the reply's coroutine (for example Ktor's
+     * response observer). Capture its owner before dispatch, then check again
+     * on the main thread before delivering anything. */
+    fun deliveryGuard(): () -> Boolean {
+        val started = epoch
+        return { started == epoch }
+    }
+
     /** True inside a reply that started before the latest [retire]. */
     fun isStale(): Boolean {
         val started = running.get() ?: return false
