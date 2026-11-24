@@ -31,8 +31,8 @@ fun interface IndexTaskRunner {
  *    a time, after any reported change (G.12, "Existing chats, first time").
  *    A chat whose index already describes the chat as stored now, under the
  *    current cutting settings and model, is not touched again.
- *  - A chat whose messages lack permanent IDs waits until it is opened
- *    (G.5a rule 7).
+ *  - Messages without permanent IDs are not indexed; a chat not opened
+ *    since IDs were introduced has no passages until it is opened (G.5a rule 7).
  *  - After updates, a vector pass is requested (Step 9).
  *
  * An index failure is never a chat error: a chat that cannot be read or
@@ -61,7 +61,7 @@ class ConversationIndexCoordinator(
     private val staleRetries = HashMap<String, Int>()
     private val drainScheduled = AtomicBoolean(false)
 
-    /** The chat was saved: a new message, a finished reply, an edit, a deletion, hiding or showing, another version. */
+    /** The chat was saved: a new message, a finished reply, an edit, a deletion, hiding or showing, another version, or IDs given on opening. */
     fun chatChanged(chatId: String) {
         if (chatId.isBlank()) return
         synchronized(lock) {
@@ -163,7 +163,10 @@ class ConversationIndexCoordinator(
                 ready to false
             } else {
                 wait = changed.values.minOfOrNull { changeWaitMillis - (now - it) }
-                catchUp.removeFirstOrNull()?.let { it to true }
+                // A chat still waiting out its changes (a streaming reply) is compared when they settle.
+                var item = catchUp.removeFirstOrNull()
+                while (item != null && item in changed) item = catchUp.removeFirstOrNull()
+                item?.let { it to true }
             }
         }
         if (next == null) {
@@ -191,12 +194,16 @@ class ConversationIndexCoordinator(
             !state.needsRefresh && state.describedVersion == describedVersion(source.chatVersion(chatId), settings)
         } == true
         if (upToDate) ChatResult.SKIPPED else when (val read = source.read(chatId)) {
-            IndexChatSource.Read.Unavailable, IndexChatSource.Read.WithoutPermanentIds -> ChatResult.SKIPPED
+            IndexChatSource.Read.Unavailable -> ChatResult.SKIPPED
             is IndexChatSource.Read.Messages -> {
                 val described = describedVersion(read.version, settings)
                 when (val outcome = updater.update(
                     chatId, described, read.messages,
-                    { describedVersion(source.chatVersion(chatId), settings) },
+                    {
+                        // A change reported since the read counts at once, before it reaches the disk.
+                        if (source.changeCount(chatId) != read.changeCount) null
+                        else describedVersion(source.chatVersion(chatId), settings)
+                    },
                     { !isOn() }
                 )) {
                     is ConversationIndexUpdater.Outcome.Updated -> {

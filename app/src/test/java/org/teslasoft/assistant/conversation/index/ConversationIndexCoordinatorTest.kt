@@ -48,6 +48,9 @@ class ConversationIndexCoordinatorTest {
     private class Chats : IndexChatSource {
         val chats = LinkedHashMap<String, List<IndexSourceMessage>>()
         val versions = HashMap<String, Int>()
+        /** Changes reported in this run of the app; a restart clears them. */
+        val changes = HashMap<String, Long>()
+        /** Chats saved before permanent IDs and not opened since: their messages have no ID. */
         val withoutIds = HashSet<String>()
         val unavailable = HashSet<String>()
         val reads = ArrayList<String>()
@@ -58,6 +61,7 @@ class ConversationIndexCoordinatorTest {
             chats.remove(chatId)
             chats[chatId] = messages // the most recently saved chat is the newest
             versions[chatId] = (versions[chatId] ?: 0) + 1
+            changes[chatId] = (changes[chatId] ?: 0L) + 1
         }
 
         fun remove(chatId: String) {
@@ -68,13 +72,16 @@ class ConversationIndexCoordinatorTest {
         override fun read(chatId: String): IndexChatSource.Read {
             reads.add(chatId)
             if (chatId in unavailable) return IndexChatSource.Read.Unavailable
-            if (chatId in withoutIds) return IndexChatSource.Read.WithoutPermanentIds
-            val read = IndexChatSource.Read.Messages(chatVersion(chatId), chats[chatId].orEmpty())
+            val messages = chats[chatId].orEmpty().let { list ->
+                if (chatId in withoutIds) list.map { it.copy(messageId = "") } else list
+            }
+            val read = IndexChatSource.Read.Messages(chatVersion(chatId), changeCount(chatId), messages)
             afterRead?.invoke(chatId)
             return read
         }
 
         override fun chatVersion(chatId: String) = (versions[chatId] ?: 0).toString()
+        override fun changeCount(chatId: String) = changes[chatId] ?: 0L
         override fun chatIdsNewestFirst() = chats.keys.reversed()
         override fun currentMessage(chatId: String, messageId: String) =
             chats[chatId]?.firstOrNull { it.messageId == messageId }
@@ -523,7 +530,12 @@ class ConversationIndexCoordinatorTest {
         assertEquals(setOf("c"), stamps("newest").keys)
         assertEquals(setOf("a"), stamps("oldest").keys)
         assertTrue(stamps("never-opened").isEmpty())
-        assertNull(index.indexState("never-opened"))
+        assertTrue(index.rows.none { it.chatId == "never-opened" })
+
+        // It is not read again until it changes.
+        coordinator.appStarted()
+        runner.runAll()
+        assertEquals(listOf("newest", "never-opened", "oldest"), chats.reads)
 
         // Opening the chat gives its messages IDs and saves it; then it is indexed.
         chats.withoutIds.remove("never-opened")
@@ -553,6 +565,35 @@ class ConversationIndexCoordinatorTest {
         runner.runAll()
         assertEquals(listOf("two"), chats.reads.drop(readsBefore))
         assertEquals(setOf("t1", "t2"), stamps("two").keys)
+    }
+
+    @Test fun afterARestartChatsSavedInThePreviousRunAreNotReadAgain() {
+        save("one", chat())
+        save("two", listOf(user("t1", "Another chat.")))
+        runner.runAll()
+        val readsBefore = chats.reads.size
+
+        chats.changes.clear() // the app closed and started again; the files are unchanged
+        coordinator.appStarted()
+        runner.runAll()
+        assertEquals(readsBefore, chats.reads.size)
+    }
+
+    @Test fun aChangeReportedBeforeItReachesTheDiskMakesARunningUpdateStale() {
+        save("chat", chat())
+        var reported = false
+        chats.afterRead = { chatId ->
+            if (!reported) {
+                reported = true
+                // The save is reported; its file write has not landed, so the stored version is the same.
+                chats.changes[chatId] = (chats.changes[chatId] ?: 0L) + 1
+                chats.chats[chatId] = chat() + user("u3", "Saved during the update.")
+                coordinator.chatChanged(chatId)
+            }
+        }
+        runner.runAll()
+        assertEquals(2, chats.reads.size)
+        assertEquals(setOf("u1", "a1", "u2", "a2", "u3"), stamps("chat").keys)
     }
 
     @Test fun aChatThatCannotBeReadIsLeftAsItWasAndTriedAgainLater() {

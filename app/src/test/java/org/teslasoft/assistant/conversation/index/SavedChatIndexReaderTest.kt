@@ -73,7 +73,7 @@ class SavedChatIndexReaderTest {
 
     @Test fun theIndexedTextIsTheTextTheChatSendsForTheSameMessages() {
         val stored = chat()
-        val read = IndexSourceMessages.fromStored(context, stored)!!
+        val read = IndexSourceMessages.fromStored(context, stored)
 
         // The image confirmation card is not a stored message for the AI.
         assertEquals(listOf("u1", "a1", "u2", "a2", "u3"), read.map { it.messageId })
@@ -106,9 +106,12 @@ class SavedChatIndexReaderTest {
         assertEquals("The second version.", read.single { it.messageId == "a2" }.modelText)
     }
 
-    @Test fun aChatWithAMessageWithoutAPermanentIdWaitsUntilItIsOpened() {
+    @Test fun aMessageWithoutAPermanentIdIsNeverEligibleAndIsNotGivenOne() {
         val stored = chat() + row(null, false, "Saved before permanent IDs.")
-        assertNull(IndexSourceMessages.fromStored(context, stored))
+        val read = IndexSourceMessages.fromStored(context, stored)
+        assertEquals("", read.last().messageId)
+        assertFalse(IndexEligibility.isEligible(read.last()))
+        assertEquals(listOf("u1", "a1", "a2", "u3"), read.filter(IndexEligibility::isEligible).map { it.messageId })
         // Nothing was written to the stored messages.
         assertTrue(stored.last()[MessageIdentity.KEY] == null)
     }
@@ -124,7 +127,7 @@ class SavedChatIndexReaderTest {
         // What the chat screen does when a turn finishes, with no memory database.
         assertTrue(ChatTurnMemoryScope.stamp(messages, scope))
 
-        val read = IndexSourceMessages.fromStored(context, messages)!!
+        val read = IndexSourceMessages.fromStored(context, messages)
         assertNull(read[0].scope)
         assertEquals(scope, read[1].scope)
         assertEquals(scope, read[2].scope)

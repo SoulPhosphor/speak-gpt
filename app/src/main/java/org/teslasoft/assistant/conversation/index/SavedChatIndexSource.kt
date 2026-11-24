@@ -11,7 +11,6 @@ import org.teslasoft.assistant.preferences.ChatHistoryWriteOrder
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatSetSourceGeneration
 import org.teslasoft.assistant.preferences.ChatStorageHealth
-import org.teslasoft.assistant.preferences.MessageIdentity
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.ui.chat.ModelFacingMessageText
@@ -24,11 +23,11 @@ import org.teslasoft.assistant.ui.chat.ModelFacingMessageText
 interface IndexChatSource : IndexMessageSource {
 
     sealed interface Read {
-        /** Every stored message, in stored order, as read at [version]. */
-        data class Messages(val version: String, val messages: List<IndexSourceMessage>) : Read
-
-        /** A message has no permanent ID yet: the chat waits until it is opened (G.5a rule 7). */
-        data object WithoutPermanentIds : Read
+        /**
+         * Every stored message, in stored order, as read at [version] and
+         * [changeCount] (both taken before the messages were read).
+         */
+        data class Messages(val version: String, val changeCount: Long, val messages: List<IndexSourceMessage>) : Read
 
         /** Locked or damaged storage, or a save still in progress; tried again later. */
         data object Unavailable : Read
@@ -36,8 +35,19 @@ interface IndexChatSource : IndexMessageSource {
 
     fun read(chatId: String): Read
 
-    /** The chat's version now: cheap, and different after every change to the stored chat. */
+    /**
+     * The chat's stored version now: cheap, kept across app restarts, and
+     * different after every change that has reached the disk. Recorded with
+     * the index, so an unchanged chat is not read again after a restart.
+     */
     fun chatVersion(chatId: String): String
+
+    /**
+     * Changes to the chat reported while the app runs. It moves at once on a
+     * save, before the file reaches the disk, so an update running during the
+     * save notices it. Starts from zero in every run, so it is never recorded.
+     */
+    fun changeCount(chatId: String): Long
 
     /** Every chat in the chat list, newest first; null when the list cannot be read. */
     fun chatIdsNewestFirst(): List<String>?
@@ -50,10 +60,14 @@ interface IndexChatSource : IndexMessageSource {
  */
 object IndexSourceMessages {
 
-    /** The chat's messages for the index, or null when one has no permanent ID yet. */
-    fun fromStored(context: Context, messages: List<Map<String, Any>>): List<IndexSourceMessage>? {
+    /**
+     * The chat's messages for the index. A message without a permanent ID
+     * keeps a blank ID and is never eligible (G.5a rule 7): a chat that has
+     * not been opened since IDs were introduced has no passages until it is
+     * opened, which gives its messages IDs and saves it.
+     */
+    fun fromStored(context: Context, messages: List<Map<String, Any>>): List<IndexSourceMessage> {
         val entries = ModelFacingMessageText.summarizerEntries(context, messages)
-        if (entries.any { (stored, _) -> MessageIdentity.idOf(stored).isBlank() }) return null
         return entries.map { (stored, entry) ->
             IndexSourceMessage.from(stored, entry) ?: error("an entry always belongs to its message")
         }
@@ -79,7 +93,12 @@ class SavedChatIndexSource(context: Context) : IndexChatSource {
     private val app = context.applicationContext
     private val chats get() = ChatPreferences.getChatPreferences()
 
-    private data class Cached(val chatId: String, val version: String, val byId: Map<String, IndexSourceMessage>)
+    private data class Cached(
+        val chatId: String,
+        val version: String,
+        val changeCount: Long,
+        val byId: Map<String, IndexSourceMessage>
+    )
 
     /** The last chat read for the vector worker, which asks for one message at a time. */
     @Volatile private var cached: Cached? = null
@@ -89,6 +108,7 @@ class SavedChatIndexSource(context: Context) : IndexChatSource {
         // its save reports the change again.
         if (ChatHistoryWriteOrder.shared.hasPending(chatId)) return IndexChatSource.Read.Unavailable
         val version = chatVersion(chatId)
+        val changes = changeCount(chatId)
         val result = try {
             chats.getChatByIdResult(app, chatId, DamagedChatOperation.MEMORY)
         } catch (_: Exception) {
@@ -99,8 +119,8 @@ class SavedChatIndexSource(context: Context) : IndexChatSource {
             IndexSourceMessages.fromStored(app, result.messages)
         } catch (_: Exception) {
             return IndexChatSource.Read.Unavailable
-        } ?: return IndexChatSource.Read.WithoutPermanentIds
-        return IndexChatSource.Read.Messages(version, messages)
+        }
+        return IndexChatSource.Read.Messages(version, changes, messages)
     }
 
     override fun chatVersion(chatId: String): String {
@@ -109,10 +129,11 @@ class SavedChatIndexSource(context: Context) : IndexChatSource {
         return listOf(
             generation,
             if (file.exists()) file.length() else -1L,
-            file.lastModified(),
-            ConversationIndexChatChanges.count(chatId)
+            file.lastModified()
         ).joinToString(":")
     }
+
+    override fun changeCount(chatId: String): Long = ConversationIndexChatChanges.count(chatId)
 
     override fun chatIdsNewestFirst(): List<String>? {
         val list = try {
@@ -130,11 +151,16 @@ class SavedChatIndexSource(context: Context) : IndexChatSource {
     }
 
     override fun currentMessage(chatId: String, messageId: String): IndexSourceMessage? {
+        // A confirmed deletion whose save has not landed changes neither the file
+        // nor the count yet; the chat is not served from the cache meanwhile.
+        if (ChatHistoryWriteOrder.shared.hasPending(chatId)) return null
         val version = chatVersion(chatId)
-        cached?.takeIf { it.chatId == chatId && it.version == version }?.let { return it.byId[messageId] }
+        val changes = changeCount(chatId)
+        cached?.takeIf { it.chatId == chatId && it.version == version && it.changeCount == changes }
+            ?.let { return it.byId[messageId] }
         val read = read(chatId) as? IndexChatSource.Read.Messages ?: return null
         val byId = read.messages.associateBy { it.messageId }
-        cached = Cached(chatId, read.version, byId)
+        cached = Cached(chatId, read.version, read.changeCount, byId)
         return byId[messageId]
     }
 

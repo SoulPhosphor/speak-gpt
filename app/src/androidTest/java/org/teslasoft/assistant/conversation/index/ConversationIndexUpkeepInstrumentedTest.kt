@@ -125,14 +125,12 @@ class ConversationIndexUpkeepInstrumentedTest {
         ))
         runner.runAll()
         assertEquals(ids.toSet(), store.indexedMessages(chatId).keys)
-        val firstVersion = store.indexState(chatId)!!.describedVersion
 
         // Hidden from the AI: a save that does not wait for the disk.
         val hidden = stored(chatId).apply { this[3][MessageVisibility.KEY] = true }
         save(chatId, hidden, synchronous = false)
         runner.runAll()
         assertEquals(ids.take(3).toSet(), store.indexedMessages(chatId).keys)
-        assertNotEquals(firstVersion, store.indexState(chatId)!!.describedVersion)
         assertNull(source.currentMessage(chatId, ids[3])?.takeIf(IndexEligibility::isEligible))
 
         // Shown again, then edited through the app's edit path.
@@ -170,7 +168,11 @@ class ConversationIndexUpkeepInstrumentedTest {
         source.read(chatId)
         assertEquals(before, source.chatVersion(chatId))
         assertEquals(storedBefore, stored(chatId))
+        // A reported change counts at once; the stored version moves when the file is written.
+        val count = source.changeCount(chatId)
         ConversationIndexChatChanges.changed(chatId)
+        assertEquals(count + 1, source.changeCount(chatId))
+        assertEquals(ChatStorageHealth.WriteOutcome.OK, prefs.saveChatHistory(context, chatId, arrayListOf(message(UUID.randomUUID().toString(), "Two.")), synchronous = true))
         assertNotEquals(before, source.chatVersion(chatId))
     }
 
@@ -179,6 +181,8 @@ class ConversationIndexUpkeepInstrumentedTest {
         val ids = List(2) { UUID.randomUUID().toString() }
         save(chatId, arrayListOf(message(ids[0], "Keep this."), message(ids[1], "Delete this.", bot = true)))
         runner.runAll()
+        // The vector worker has the chat cached.
+        assertEquals("Delete this.", source.currentMessage(chatId, ids[1])?.modelText)
         val order = org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared
         try {
             // A message deletion the chat screen has confirmed, whose save is refused for now.
@@ -186,6 +190,8 @@ class ConversationIndexUpkeepInstrumentedTest {
                 chatId, order.claim(chatId), arrayListOf(message(ids[0], "Keep this.")), false
             ) { _, _, _ -> false }
             assertEquals(IndexChatSource.Read.Unavailable, source.read(chatId))
+            assertNull("the cached copy is not served either", source.currentMessage(chatId, ids[1]))
+            assertNull(source.currentMessage(chatId, ids[0]))
             coordinator.chatChanged(chatId)
             runner.runAll()
             assertEquals("the index is left as it was", ids.toSet(), store.indexedMessages(chatId).keys)
@@ -202,11 +208,12 @@ class ConversationIndexUpkeepInstrumentedTest {
         val chatId = newChat()
         assertEquals(ChatStorageHealth.WriteOutcome.OK, prefs.saveChatHistory(context, chatId, arrayListOf(message(null, "Saved before permanent IDs.")), synchronous = true))
         val before = stored(chatId)
-        assertEquals(IndexChatSource.Read.WithoutPermanentIds, source.read(chatId))
+        val read = source.read(chatId) as IndexChatSource.Read.Messages
+        assertEquals("", read.messages.single().messageId)
         coordinator.chatChanged(chatId)
         runner.runAll()
         assertTrue(store.indexedMessages(chatId).isEmpty())
-        assertNull(store.indexState(chatId))
+        assertFalse("checked, so catching up does not read it again", store.indexState(chatId)!!.needsRefresh)
         assertEquals(before, stored(chatId))
     }
 
