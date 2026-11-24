@@ -54,6 +54,8 @@ class ConversationIndexRecoveryTest {
 
     @Test fun onlyACorruptFileOrAMissingKeyIsDamage() {
         assertTrue(IndexFailures.isDamage(SQLiteDatabaseCorruptException("file is not a database")))
+        // SQLCipher's own type for SQLITE_NOTADB, as a real unreadable file reports it on a device.
+        assertTrue(IndexFailures.isDamage(net.zetetic.database.sqlcipher.SQLiteNotADatabaseException("file is not a database (code 26)")))
         assertTrue(IndexFailures.isDamage(IllegalStateException("wrapped", SQLiteDatabaseCorruptException("bad page"))))
         assertTrue(IndexFailures.isDamage(IndexKeyUnavailableException(missing = true)))
         assertFalse(IndexFailures.isDamage(IndexKeyUnavailableException(missing = false)))

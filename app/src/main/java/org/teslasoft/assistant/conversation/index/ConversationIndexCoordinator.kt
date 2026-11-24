@@ -151,9 +151,10 @@ class ConversationIndexCoordinator(
     /**
      * The user deletes the index (G.12): everything derived is removed; the
      * chats are untouched. [onDone] runs on the index's thread with null
-     * when the deletion committed, or what made it fail.
+     * when the deletion committed, or what made it fail. Without
+     * [whenIndexExists] there is no index to open, so none is created.
      */
-    fun deleteIndex(onDone: (Exception?) -> Unit = {}) {
+    fun deleteIndex(whenIndexExists: Boolean = true, onDone: (Exception?) -> Unit = {}) {
         synchronized(lock) {
             changed.clear()
             catchUp.clear()
@@ -161,7 +162,7 @@ class ConversationIndexCoordinator(
         }
         runner.run(0) {
             val failure = try {
-                maintenance().deleteEverything()
+                if (whenIndexExists) maintenance().deleteEverything()
                 null
             } catch (e: Exception) {
                 e

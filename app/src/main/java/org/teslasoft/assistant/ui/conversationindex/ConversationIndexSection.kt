@@ -52,13 +52,23 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
         }
     }
 
+    /** Reads the counts again while the screen is open and indexing can change them. */
+    private val periodicRefresh = object : Runnable {
+        override fun run() {
+            if (ConversationIndexSetting.isOn(activity) || ConversationIndexConditions.rebuilding) refresh()
+            status.postDelayed(this, REFRESH_MILLIS)
+        }
+    }
+
     fun onResume() {
         ConversationIndexConditions.addListener(onConditionChanged)
         refresh()
+        status.postDelayed(periodicRefresh, REFRESH_MILLIS)
     }
 
     fun onPause() {
         ConversationIndexConditions.removeListener(onConditionChanged)
+        status.removeCallbacks(periodicRefresh)
     }
 
     fun onDestroy() {
@@ -84,15 +94,14 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
 
     private fun deleteIndex() {
         delete.isEnabled = false
-        val app = activity.applicationContext
-        background.execute {
-            ConversationIndexRuntime.deleteIndex(app) {
-                activity.runOnUiThread {
-                    delete.isEnabled = true
-                    refresh()
-                }
+        // Turns the setting off at once; the removal runs on the index's thread.
+        ConversationIndexRuntime.deleteIndex(activity.applicationContext) {
+            activity.runOnUiThread {
+                delete.isEnabled = true
+                refresh()
             }
         }
+        setToggle(false)
     }
 
     /** Shows the setting and condition now, and the counts once read. */
@@ -156,6 +165,9 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
     }
 
     companion object {
+        /** How often the counts are read again while indexing runs and the screen is open. */
+        private const val REFRESH_MILLIS = 3_000L
+
         /** Tests only: stands in for the installed-model check. */
         @Volatile var modelInstalledForTest: Boolean? = null
 

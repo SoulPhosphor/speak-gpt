@@ -242,6 +242,26 @@ class ConversationIndexSettingsInstrumentedTest {
         assertTrue(store!!.chatProgress("chat").fullyIndexed)
     }
 
+    @Test fun deletingTheIndexAlsoRemovesADamagedFileAnUnfinishedRecoveryKeptAside() {
+        val app = context.applicationContext
+        val primary = app.getDatabasePath(ConversationIndexStore.DATABASE_NAME)
+        val aside = File(primary.path + ".damaged")
+        aside.parentFile?.mkdirs()
+        aside.writeBytes(ByteArray(4096) { 1 })
+        try {
+            val done = java.util.concurrent.CountDownLatch(1)
+            var gone = false
+            ConversationIndexRuntime.deleteIndex(app) { gone = it; done.countDown() }
+            assertTrue(done.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(gone)
+            assertFalse(aside.exists())
+            // Nothing is left that a later recovery could bring back.
+            assertTrue(AppIndexRecoveryFiles(app).readKeptVectors().vectors.isEmpty())
+        } finally {
+            aside.delete()
+        }
+    }
+
     // --- RAG Active Memory Settings ---------------------------------------------------
 
     private fun withScreen(block: (ActivityScenario<MemoryControlsActivity>) -> Unit) {

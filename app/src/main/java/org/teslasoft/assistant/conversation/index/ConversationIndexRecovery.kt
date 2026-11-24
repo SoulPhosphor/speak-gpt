@@ -8,6 +8,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabaseCorruptException
 import java.io.File
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import net.zetetic.database.sqlcipher.SQLiteNotADatabaseException
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 
 /**
@@ -55,7 +56,8 @@ object IndexFailures {
         var current: Throwable? = e
         var depth = 0
         while (current != null && depth++ < 8) {
-            if (current is SQLiteDatabaseCorruptException) return true
+            // SQLCipher reports a file it cannot read as a database with its own type (SQLITE_NOTADB).
+            if (current is SQLiteDatabaseCorruptException || current is SQLiteNotADatabaseException) return true
             if (current is IndexKeyUnavailableException) return current.missing
             current = current.cause?.takeIf { it !== current }
         }
@@ -194,6 +196,9 @@ class AppIndexRecoveryFiles(
         File(damaged.path).delete()
         for (suffix in JOURNAL_SUFFIXES) File(damaged.path + suffix).delete()
     }
+
+    /** Whether a damaged file set aside by an unfinished recovery is still there. */
+    fun hasDamaged(): Boolean = damaged.exists()
 
     override fun discardNew() {
         closeIndex()

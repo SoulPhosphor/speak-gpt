@@ -115,20 +115,27 @@ object ConversationIndexRuntime {
     /**
      * Delete Conversation Index (G.16a): the setting is turned off, so nothing
      * is rebuilt, and everything derived is removed; the chats are not read or
-     * changed. [onDone] runs off the main thread with whether the index is
-     * gone. A damaged index that cannot run the deletion has its files removed.
+     * changed. The setting is off when this returns; [onDone] runs off the
+     * main thread with whether the index is gone. A damaged index that cannot
+     * run the deletion has its files removed, and a damaged file kept aside by
+     * an unfinished recovery is removed too, so nothing deleted comes back.
      */
     fun deleteIndex(context: Context, onDone: (Boolean) -> Unit) {
         val app = context.applicationContext
         ConversationIndexSetting.set(app, false)
-        if (!ConversationIndexStore.exists(app)) {
-            onDone(true)
-            return
-        }
-        coordinator(app).deleteIndex { failure ->
-            val gone = failure == null || (IndexFailures.isDamage(failure) && removeDamagedFiles(app))
+        coordinator(app).deleteIndex(whenIndexExists = ConversationIndexStore.exists(app)) { failure ->
+            val gone = (failure == null || (IndexFailures.isDamage(failure) && removeDamagedFiles(app))) &&
+                removeSetAside(app)
             onDone(gone)
         }
+    }
+
+    /** Removes a damaged file an unfinished recovery kept aside; true when none is left. */
+    private fun removeSetAside(app: Context): Boolean = try {
+        ConversationIndexAccess.exclusive { AppIndexRecoveryFiles(app).discardDamaged() }
+        !AppIndexRecoveryFiles(app).hasDamaged()
+    } catch (_: Exception) {
+        false
     }
 
     private fun removeDamagedFiles(app: Context): Boolean = try {
