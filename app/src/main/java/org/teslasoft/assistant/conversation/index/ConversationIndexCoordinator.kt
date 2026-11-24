@@ -289,6 +289,17 @@ class ConversationIndexCoordinator(
         drainScheduled.set(false)
         // While paused nothing is counted, compared or cut; resuming starts a catch-up.
         if (!isOn() || isPaused()) return
+        // Step 13: the app may have closed, with no background service, after the catch-up was
+        // admitted. Its queued chats then wait for the next opening, which starts it again;
+        // a changed chat's own update below is not held.
+        val catchUpQueued = synchronized(lock) { catchUp.isNotEmpty() || toCount.isNotEmpty() }
+        if (catchUpQueued && catchUpWaits()) {
+            synchronized(lock) {
+                catchUp.clear()
+                toCount.clear()
+            }
+            report { progress.catchUpStopped() }
+        }
         val now = clock()
         var wait: Long? = null
         val next = synchronized(lock) {

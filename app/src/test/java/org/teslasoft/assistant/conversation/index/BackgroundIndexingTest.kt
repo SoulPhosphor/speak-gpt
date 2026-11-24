@@ -384,10 +384,14 @@ class BackgroundIndexingTest {
     private lateinit var platform: Platform
     private lateinit var controller: BackgroundIndexingController
 
+    /** Runs while a catch-up reads its work, before it is shown. */
+    private var whileFindingWork: () -> Unit = {}
+
     private val source = object : IndexProgressSource {
         var settingsKey: String? = null
         override fun work(chats: List<String>, settingsKey: String): IndexWork {
             this.settingsKey = settingsKey
+            whileFindingWork()
             return IndexWorkFinder.work(
                 chats, index.chatSummaries(MODEL, DIMENSIONS), index.waitingPassages(MODEL, DIMENSIONS),
                 this@BackgroundIndexingTest.chats::chatVersion, settingsKey
@@ -716,6 +720,24 @@ class BackgroundIndexingTest {
         tasks.runAll()
         assertTrue("nothing indexed without a screen or the notification", model.inputs.isEmpty())
         assertTrue(platform.calls.isEmpty())
+
+        controller.appOpened()
+        tasks.runAll()
+        assertTrue(allMade())
+        assertEquals(6, model.inputs.size)
+        assertNothingReadTwice()
+    }
+
+    @Test fun leavingWhileACatchUpIsStillBeingAdmittedLeavesItWaitingForTheApp() {
+        putChats(2)
+        controller.appOpened()
+        // The app is left after the catch-up passed its check but before it is shown.
+        whileFindingWork = { whileFindingWork = {}; controller.appLeft() }
+        coordinator.turnedOn()
+        tasks.runAll()
+        assertEquals("not shown yet, so no service", listOf("clear"), platform.calls)
+        assertTrue("nothing indexed without the notification", model.inputs.isEmpty())
+        assertEquals(IndexingDisplay.Hidden, tracker.display.value)
 
         controller.appOpened()
         tasks.runAll()
