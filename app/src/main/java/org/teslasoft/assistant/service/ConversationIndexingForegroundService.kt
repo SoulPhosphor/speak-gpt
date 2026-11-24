@@ -203,7 +203,8 @@ class ConversationIndexingForegroundService : Service() {
             ConversationIndexRuntime.onIndexThread {
                 val step = try {
                     stepForTest?.invoke() ?: BackgroundIndexingRule.next(
-                        progress.display.value, progress.conditions(), progress.isPaused, controller.appVisible
+                        progress.display.value, progress.conditions(), progress.isPaused, controller.appVisible,
+                        progress.isStalled
                     )
                 } catch (e: Exception) {
                     handler.post { fail(e) }
@@ -263,7 +264,8 @@ class ConversationIndexingForegroundService : Service() {
     private fun currentContent(): BackgroundIndexingContent? = try {
         stepForTest?.let { (it() as? BackgroundIndexingStep.Show)?.content } ?: ConversationIndexRuntime.progressIfCreated()?.let { progress ->
             (BackgroundIndexingRule.next(
-                progress.display.value, progress.conditions(), progress.isPaused, appVisible = false
+                progress.display.value, progress.conditions(), progress.isPaused, appVisible = false,
+                stalled = progress.isStalled
             ) as? BackgroundIndexingStep.Show)?.content
         }
     } catch (_: Exception) {

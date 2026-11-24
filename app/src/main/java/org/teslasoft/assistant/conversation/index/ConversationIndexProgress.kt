@@ -227,6 +227,8 @@ class IndexProgressTracker(
     /** Changes with every catch-up, so a result for an older one is thrown away. */
     private var generation = 0L
     private var drained = false
+    /** The catch-up's last vector pass stopped on a failure and no pass has started since (Step 13). */
+    private var stalled = false
     private val pending = LinkedHashSet<String>()
     private val counted = HashMap<String, CountedChat>()
     private var latest: IndexingNumbers? = null
@@ -238,6 +240,9 @@ class IndexProgressTracker(
 
     val isPaused: Boolean get() = pause.paused
 
+    /** Whether the catch-up cannot go on by itself: its last vector pass stopped on a failure (Step 13). */
+    val isStalled: Boolean get() = synchronized(lock) { catchingUp && stalled }
+
     /** The Step 11 conditions the display is worked out from. */
     fun conditions(): IndexingConditions = source.conditions()
 
@@ -246,6 +251,7 @@ class IndexProgressTracker(
         val toCount = synchronized(lock) {
             generation++
             drained = false
+            stalled = false
             pending.clear()
             catchingUp = work != null && (work.notDescribed.isNotEmpty() || work.waitingVectors > 0)
             if (!catchingUp || work == null) {
@@ -296,7 +302,18 @@ class IndexProgressTracker(
      * A vector pass starts. Returns the catch-up it can finish: one whose
      * queued chats were all handled before the pass started; otherwise null.
      */
-    fun vectorPassStarting(): Long? = synchronized(lock) { if (catchingUp && drained) generation else null }
+    fun vectorPassStarting(): Long? = synchronized(lock) {
+        stalled = false
+        if (catchingUp && drained) generation else null
+    }
+
+    /**
+     * A vector pass stopped on a failure, or the model could not be loaded for
+     * it: nothing asks for another pass by itself, so the catch-up cannot end.
+     */
+    fun vectorPassFailed() {
+        synchronized(lock) { if (catchingUp) stalled = true }
+    }
 
     /** A vector pass found nothing more waiting; [token] is what [vectorPassStarting] returned. */
     fun vectorPassFinished(token: Long?) {
@@ -381,6 +398,7 @@ class IndexProgressTracker(
     private fun endCatchUp() {
         catchingUp = false
         drained = false
+        stalled = false
         pending.clear()
         counted.clear()
         latest = null

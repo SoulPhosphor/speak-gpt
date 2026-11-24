@@ -16,6 +16,8 @@ enum class BackgroundStopReason(val text: String) {
     MODEL_UNAVAILABLE("the on-device search model is unavailable"),
     REBUILD_FAILED("the conversation index could not be rebuilt"),
     APP_OPENED("the app was opened"),
+    INDEXING_FAILED("indexing could not go on after a failure; it continues when the app is opened"),
+    USER_WORK_RUNNING("work the user started is running; indexing continues when the app is opened"),
     TIME_LIMIT("Android's time limit for background data work was reached"),
     TIME_USED_UP_AT_START("Android did not allow it to start: the time limit for background data work is used up"),
     BACKGROUND_START_NOT_ALLOWED("Android did not allow it to start from the background"),
@@ -90,7 +92,9 @@ object BackgroundIndexingRule {
         display: IndexingDisplay,
         conditions: IndexingConditions,
         paused: Boolean,
-        appVisible: Boolean
+        appVisible: Boolean,
+        /** The catch-up's last vector pass failed and nothing will start another by itself. */
+        stalled: Boolean = false
     ): BackgroundIndexingStep = when {
         appVisible -> BackgroundIndexingStep.Stop(BackgroundStopReason.APP_OPENED)
         paused -> BackgroundIndexingStep.Stop(BackgroundStopReason.USER_PAUSED)
@@ -98,6 +102,8 @@ object BackgroundIndexingRule {
         !conditions.settingOn -> BackgroundIndexingStep.Stop(BackgroundStopReason.SETTING_OFF)
         conditions.rebuilding -> BackgroundIndexingStep.Show(BackgroundIndexingContent.Rebuilding)
         conditions.modelUnavailable -> BackgroundIndexingStep.Stop(BackgroundStopReason.MODEL_UNAVAILABLE)
+        // A catch-up that cannot go on by itself never keeps the service and the phone awake.
+        stalled -> BackgroundIndexingStep.Stop(BackgroundStopReason.INDEXING_FAILED)
         display is IndexingDisplay.Running -> BackgroundIndexingStep.Show(
             display.numbers?.let { BackgroundIndexingContent.Percent(it.percent) } ?: BackgroundIndexingContent.Counting
         )
@@ -254,9 +260,18 @@ class BackgroundIndexingController(
                 startService()
             }
             // Work the user started comes first; nothing else to continue: indexing waits for the app.
-            BackgroundStartDecision.YIELD, BackgroundStartDecision.NOT_NEEDED -> permit.closed()
+            BackgroundStartDecision.YIELD, BackgroundStartDecision.NOT_NEEDED -> {
+                permit.closed()
+                // A start asked for on an earlier leave and not yet stopped ends with this leave's reason.
+                if (serviceActive) platform.stopService(notStartedReason(decision))
+            }
         }
     }
+
+    private fun notStartedReason(decision: BackgroundStartDecision): BackgroundStopReason =
+        if (decision == BackgroundStartDecision.YIELD) BackgroundStopReason.USER_WORK_RUNNING
+        else (BackgroundIndexingRule.next(platform.display(), platform.conditions(), platform.userPaused(), appVisible = false)
+            as? BackgroundIndexingStep.Stop)?.reason ?: BackgroundStopReason.CATCH_UP_ENDED
 
     /** Asks Android for the service; a refusal is handled at once. */
     fun startService() {

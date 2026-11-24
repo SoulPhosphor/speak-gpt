@@ -355,7 +355,15 @@ class BackgroundIndexingTest {
         }
         override fun chatVersion(chatId: String) = (versions[chatId] ?: 0).toString()
         override fun changeCount(chatId: String) = 0L
-        override fun chatIdsNewestFirst() = chats.keys.reversed()
+        /** The next read of the chat list fails, as storage briefly unavailable after a restore does. */
+        var listFailsOnce = false
+        override fun chatIdsNewestFirst(): List<String> {
+            if (listFailsOnce) {
+                listFailsOnce = false
+                throw IllegalStateException("the chat list cannot be read for now")
+            }
+            return chats.keys.reversed()
+        }
         override fun currentMessage(chatId: String, messageId: String) = chats[chatId]?.firstOrNull { it.messageId == messageId }
     }
 
@@ -366,8 +374,14 @@ class BackgroundIndexingTest {
         override val tokenLimit = 400
         val inputs = ArrayList<String>()
         var afterRead: () -> Unit = {}
+        /** The next read fails before reading anything, as a model that cannot run for now does. */
+        var failNext = false
         override fun countTokens(modelInput: String) = words(modelInput)
         override fun read(modelInput: String): FloatArray {
+            if (failNext) {
+                failNext = false
+                throw IllegalStateException("the model could not run for now")
+            }
             inputs.add(modelInput)
             afterRead()
             return FloatArray(DIMENSIONS) { (modelInput.hashCode() + it).toFloat() }
@@ -388,10 +402,13 @@ class BackgroundIndexingTest {
     private val pause = SavedPause()
     private val saved = SavedNumbers()
     private val model = Model()
+    /** Runs each time a passage's search text is measured while a chat is cut. */
+    private var whileCutting: (String) -> Unit = {}
     private val reader = SearchTextReader(
         vectorModel = MODEL, vectorDimensions = DIMENSIONS, hardLimit = 400,
-        prefixFor = { "title: $it | text: " }, countModelInput = ::words
+        prefixFor = { "title: $it | text: " }, countModelInput = { whileCutting(it); words(it) }
     )
+    private var recoveries = 0
     private var settingOn = true
     private var modelInstalled = true
     private var modelProblem = false
@@ -454,6 +471,8 @@ class BackgroundIndexingTest {
                 PassageEmbeddingWorker(index, chats, reader, model, pause).runPass { !settingOn || !mayRun() }.also {
                     if (it is PassageEmbeddingWorker.Outcome.Finished) tracker.vectorPassFinished(catchUp)
                     if (it is PassageEmbeddingWorker.Outcome.Paused) tracker.vectorPassPaused()
+                    // As in the runtime: a pass that stopped on a failure leaves the catch-up unable to end by itself.
+                    if (it is PassageEmbeddingWorker.Outcome.Interrupted) tracker.vectorPassFailed()
                 }
             },
             runner = tasks,
@@ -471,6 +490,7 @@ class BackgroundIndexingTest {
                 override fun modelUnavailable(cause: Exception?) { modelProblem = true; tracker.publish() }
             },
             isPaused = { tracker.isPaused },
+            recover = { recoveries++; true },
             progress = tracker,
             mayRun = ::mayRun,
             clock = { tasks.now }
@@ -490,8 +510,9 @@ class BackgroundIndexingTest {
     }
 
     /** What the service does at its next update, as it works it out on the index's thread. */
-    private fun serviceStep() =
-        BackgroundIndexingRule.next(tracker.display.value, tracker.conditions(), tracker.isPaused, controller.appVisible)
+    private fun serviceStep() = BackgroundIndexingRule.next(
+        tracker.display.value, tracker.conditions(), tracker.isPaused, controller.appVisible, tracker.isStalled
+    )
 
     private fun shownContent() = (serviceStep() as? BackgroundIndexingStep.Show)?.content
 
@@ -840,6 +861,102 @@ class BackgroundIndexingTest {
         controller.appOpened()
         tasks.runAll()
         assertFinished(2)
+    }
+
+    @Test fun closingStopsAChatPartWayThroughItsUpdateAndOpeningFinishesItFromThere() {
+        chats.put("long", (1..6).flatMap { listOf(user("long-u$it", "Question $it"), reply("long-a$it", "Answer $it")) })
+        putChats(1)
+        leaveDuringTheCatchUp()
+        // Android's time limit arrives while the long chat's second message is being cut.
+        whileCutting = { text ->
+            if ("Question 2" in text && controller.serviceActive) controller.serviceStopped(BackgroundStopReason.TIME_LIMIT)
+        }
+        tasks.runAll()
+        whileCutting = {}
+        val longRows = index.rows.count { it.chatId == "long" }
+        assertTrue("the update stopped part way: $longRows of 12 messages", longRows in 1..11)
+        assertTrue("nothing read without the notification", model.inputs.isEmpty())
+
+        controller.appOpened()
+        tasks.runAll()
+        assertTrue(allMade())
+        assertEquals(12 + 3, model.inputs.size)
+        assertNothingReadTwice()
+    }
+
+    @Test fun aCatchUpThatCannotGoOnAfterAFailureStopsTheServiceAndOpeningContinuesIt() {
+        putChats(2)
+        leaveDuringTheCatchUp()
+        // The model cannot run for the third vector of the pass.
+        model.afterRead = { if (model.inputs.size == 2) model.failNext = true }
+        tasks.runAll()
+        model.afterRead = {}
+        assertEquals(2, model.inputs.size)
+        assertTrue("the catch-up has not ended", tracker.display.value is IndexingDisplay.Running)
+        assertEquals("the service never keeps the phone awake for nothing",
+            BackgroundIndexingStep.Stop(BackgroundStopReason.INDEXING_FAILED), serviceStep())
+        controller.serviceStopped(BackgroundStopReason.INDEXING_FAILED)
+        assertFalse("not an Android limit: no notice", "notice" in platform.calls)
+        assertFalse(permit.mayRun())
+
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(2)
+        assertEquals(IndexingDisplay.Hidden, tracker.display.value)
+    }
+
+    @Test fun aRecoveryWaitsWhileTheAppIsClosedAndRunsWhenItOpens() {
+        putChats(2)
+        assertNothingIndexedWhile {
+            coordinator.recoverIndex()
+            tasks.runAll()
+        }
+        assertEquals("no rebuild without a screen or the service", 0, recoveries)
+
+        controller.appOpened()
+        tasks.runAll()
+        assertEquals(1, recoveries)
+        assertFinished(2)
+    }
+
+    @Test fun openingContinuesWaitingWorkEvenWhenTheWaitingCatchUpCannotStartYet() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        chats.put("c2", chat("c2"))
+        coordinator.chatChanged("c2")
+        controller.appLeft()
+        assertNothingIndexedWhile {
+            coordinator.chatSetReplaced()
+            tasks.runAll()
+        }
+
+        chats.listFailsOnce = true
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(2)
+    }
+
+    @Test fun aStartNoLongerWantedEndsWithTheLatestLeavesReason() {
+        val platform = Platform().apply { display = IndexingDisplay.Running(numbers42) }
+        val permit = BackgroundIndexingPermit()
+        val controller = controllerFor(platform, permit)
+        controller.appOpened()
+        controller.appLeft()
+        // Reopened before the service started; then paused and left again.
+        controller.appOpened()
+        platform.paused = true
+        platform.display = IndexingDisplay.Paused(numbers42)
+        controller.appLeft()
+        assertEquals("stop:USER_PAUSED", platform.calls.last())
+
+        platform.paused = false
+        platform.display = IndexingDisplay.Running(numbers42)
+        platform.userWork = true
+        controller.appOpened()
+        controller.appLeft()
+        assertEquals("stop:USER_WORK_RUNNING", platform.calls.last())
     }
 
     // --- The user's pause and the other conditions ------------------------------------------

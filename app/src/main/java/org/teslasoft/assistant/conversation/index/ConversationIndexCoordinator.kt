@@ -104,6 +104,8 @@ class ConversationIndexCoordinator(
     private val drainScheduled = AtomicBoolean(false)
     /** A catch-up asked for while indexing could not run (Step 13). Read and written on the index's thread only. */
     private var catchUpWaiting = false
+    /** A recovery asked for while indexing could not run, and whether the user asked for it; index's thread only. */
+    private var recoveryWaiting: Boolean? = null
 
     /** The chat was saved: a new message, a finished reply, an edit, a deletion, hiding or showing, another version, or IDs given on opening. */
     fun chatChanged(chatId: String) {
@@ -193,10 +195,18 @@ class ConversationIndexCoordinator(
      * chat when the index can be used again (G.13a, Step 11).
      */
     fun recoverIndex(requestedByUser: Boolean = false) {
-        runner.run(0) {
-            val usable = try { recover(requestedByUser) } catch (_: Exception) { false }
-            if (usable) catchUpAll()
+        runner.run(0) { recoverNow(requestedByUser) }
+    }
+
+    /** While indexing may not run (Step 13) the recovery waits, still marked as rebuilding, for [mayRunAgain]. */
+    private fun recoverNow(requestedByUser: Boolean) {
+        if (!mayRun()) {
+            recoveryWaiting = (recoveryWaiting ?: false) || requestedByUser
+            return
         }
+        recoveryWaiting = null
+        val usable = try { recover(requestedByUser) } catch (_: Exception) { false }
+        if (usable) catchUpAll()
     }
 
     /** The setting was turned on: existing chats are caught up, newest first. */
@@ -220,12 +230,11 @@ class ConversationIndexCoordinator(
      */
     fun mayRunAgain() {
         runner.run(0) {
-            if (catchUpWaiting) {
-                catchUpAll()
-            } else {
-                scheduleDrain(0)
-                if (isOn() && !isPaused()) requestVectorsSafely()
-            }
+            recoveryWaiting?.let { recoverNow(it) }
+            if (catchUpWaiting) catchUpAll()
+            // Whatever else waited continues too, even when the catch-up could not start now.
+            scheduleDrain(0)
+            if (isOn() && !isPaused() && mayRun()) requestVectorsSafely()
         }
     }
 
@@ -236,6 +245,12 @@ class ConversationIndexCoordinator(
      */
     private fun catchUpAll() {
         if (!isOn()) return
+        if (!mayRun()) {
+            // Nothing is read, opened, queued or changed; [mayRunAgain] starts this catch-up.
+            catchUpWaiting = true
+            return
+        }
+        catchUpWaiting = false
         val chats = try { source.chatIdsNewestFirst() } catch (_: Exception) { null } ?: return
         val live = chats.toSet()
         val gone = try {
@@ -245,12 +260,6 @@ class ConversationIndexCoordinator(
             emptySet()
         }
         gone.forEach { id -> guarded(id) { maintenance().deleteChat(id) } }
-        if (!mayRun()) {
-            // Nothing is read, queued or changed; [mayRunAgain] starts this catch-up.
-            catchUpWaiting = true
-            return
-        }
-        catchUpWaiting = false
         val updater = if (chats.isEmpty()) null else try {
             updaterFor().also { if (it == null) report { events.modelUnavailable(null) } }
         } catch (e: Exception) {
@@ -409,7 +418,8 @@ class ConversationIndexCoordinator(
                         if (source.changeCount(chatId) != read.changeCount) null
                         else describedVersion(source.chatVersion(chatId), settings)
                     },
-                    { !isOn() || isPaused() }
+                    // Closing the app without the background service (Step 13) stops at the same point as a pause.
+                    { !isOn() || isPaused() || !mayRun() }
                 )) {
                     is ConversationIndexUpdater.Outcome.Updated -> {
                         synchronized(lock) { staleRetries.remove(chatId) }
@@ -421,7 +431,12 @@ class ConversationIndexCoordinator(
                         retryAfterChange(chatId)
                         ChatResult.COMPARED
                     }
-                    ConversationIndexUpdater.Outcome.Cancelled -> ChatResult.COMPARED
+                    ConversationIndexUpdater.Outcome.Cancelled -> {
+                        // Stopped by the closing, not by the user or the setting: the chat is compared
+                        // again first when indexing may run, from where its update stopped.
+                        if (isOn() && !isPaused() && !mayRun()) requeue(chatId, catchingUp)
+                        ChatResult.COMPARED
+                    }
                     is ConversationIndexUpdater.Outcome.Failed -> {
                         report { events.chatFailed(chatId, outcome.cause) }
                         ChatResult.COMPARED
@@ -432,6 +447,18 @@ class ConversationIndexCoordinator(
     } catch (e: Exception) {
         report { events.chatFailed(chatId, e) }
         ChatResult.COMPARED
+    }
+
+    /** Puts a chat whose update the closing stopped back at the front of its queue. */
+    private fun requeue(chatId: String, catchingUp: Boolean) {
+        synchronized(lock) {
+            if (catchingUp) {
+                if (chatId !in catchUp) catchUp.addFirst(chatId)
+            } else if (chatId !in changed) {
+                // Ready at once: its changes had already settled.
+                changed[chatId] = clock() - changeWaitMillis
+            }
+        }
     }
 
     /** The chat changed during its update; it is tried again a few times, then left marked for a refresh. */

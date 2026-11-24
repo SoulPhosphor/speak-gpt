@@ -348,10 +348,12 @@ object ConversationIndexRuntime {
                 PassageEmbeddingWorker.forInstalledModel(app, source)
             } catch (e: Exception) {
                 if (IndexFailures.isDamage(e)) damageFound(app, ConversationIndexErrorLog.cause(e))
+                progress(app).vectorPassFailed()
                 return@shared null
             }
             if (worker == null) {
                 events.modelUnavailable(null)
+                progress(app).vectorPassFailed()
                 return@shared null
             }
             // The model loaded and passed its check: a paused condition is over.
@@ -361,6 +363,7 @@ object ConversationIndexRuntime {
             when (outcome) {
                 is PassageEmbeddingWorker.Outcome.Finished -> progress(app).vectorPassFinished(catchUp)
                 is PassageEmbeddingWorker.Outcome.Paused -> progress(app).vectorPassPaused()
+                is PassageEmbeddingWorker.Outcome.Interrupted -> progress(app).vectorPassFailed()
                 else -> Unit
             }
             reporter(app).vectorPass(outcome, worker.tokenLimit) {
