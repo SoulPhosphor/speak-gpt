@@ -7,8 +7,10 @@ package org.teslasoft.assistant.ui.conversationindex
 import android.app.Activity
 import android.view.View
 import android.widget.TextView
+import androidx.appcompat.view.ContextThemeWrapper
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.snackbar.Snackbar
 import java.util.concurrent.Executors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.index.ConversationIndexConditions
@@ -28,8 +30,8 @@ import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorag
  *    beneath it, an ongoing condition: rebuilding, paused for the model, or
  *    stopped after a failed rebuild. Closing a notice never hides it here.
  *  - Delete Conversation Index asks first, turns the setting off and removes
- *    the index; the numbers are read again afterwards, so a failed deletion
- *    never shows zero.
+ *    the index; the numbers are read again afterwards, and a failed deletion
+ *    reports the failed step. An unreadable count is explained, never invented.
  */
 class ConversationIndexSection(private val activity: Activity, root: View) {
 
@@ -44,6 +46,7 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
     private val onConditionChanged: () -> Unit = { activity.runOnUiThread { refresh() } }
     /** Counts the last read asked for; an older read that finishes later is not shown. */
     @Volatile private var generation = 0
+    private var deleteFailure: Snackbar? = null
 
     init {
         toggle.setOnCheckedChangeListener { _, checked -> onToggle(checked) }
@@ -72,6 +75,7 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
     }
 
     fun onDestroy() {
+        deleteFailure?.dismiss()
         background.shutdown()
     }
 
@@ -93,12 +97,23 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
     }
 
     private fun deleteIndex() {
+        deleteFailure?.dismiss()
         delete.isEnabled = false
+        toggle.isEnabled = false
         // Turns the setting off at once; the removal runs on the index's thread.
-        ConversationIndexRuntime.deleteIndex(activity.applicationContext) {
+        ConversationIndexRuntime.deleteIndex(activity.applicationContext) { result ->
             activity.runOnUiThread {
+                if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
                 delete.isEnabled = true
+                toggle.isEnabled = true
                 refresh()
+                if (!result.deleted) {
+                    val themed = ContextThemeWrapper(activity, R.style.ThemeOverlay_App_Snackbar_Error)
+                    deleteFailure = Snackbar.make(
+                        themed, activity.findViewById(android.R.id.content),
+                        IndexFailureMessages.deletion(activity, result), Snackbar.LENGTH_INDEFINITE
+                    ).setAction(R.string.okay) { }.also { it.show() }
+                }
             }
         }
         setToggle(false)
@@ -128,7 +143,7 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
 
     private fun conditionText(): String? = when {
         ConversationIndexConditions.rebuilding -> activity.getString(R.string.conversation_index_rebuilding)
-        ConversationIndexConditions.recoveryFailed(activity) -> activity.getString(R.string.conversation_index_stopped_text)
+        ConversationIndexConditions.recoveryFailed(activity) -> activity.getString(R.string.conversation_index_stopped_status)
         ConversationIndexSetting.isOn(activity) -> when (ConversationIndexConditions.modelProblem(activity)) {
             IndexModelProblem.REMOVED -> activity.getString(R.string.conversation_index_paused_model_removed)
             IndexModelProblem.CANNOT_LOAD -> activity.getString(R.string.conversation_index_paused_model_cannot_load)
@@ -137,10 +152,11 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
         else -> null
     }
 
-    /** Hidden when the numbers could not be read, rather than showing numbers that are not real. */
-    private fun showCounts(counts: ConversationIndexCounts?) {
+    /** An unavailable count is explained; it is never replaced with zero or an old count. */
+    internal fun showCounts(counts: ConversationIndexCounts?) {
         if (counts == null) {
-            status.visibility = View.GONE
+            status.text = activity.getString(R.string.conversation_index_count_unavailable)
+            status.visibility = View.VISIBLE
             return
         }
         val lines = ArrayList<String>()

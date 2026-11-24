@@ -38,6 +38,17 @@
         <item name="linearProgressIndicatorStyle">@style/Widget.App.ProgressBar</item>
     </style>
 
+    <!-- Local opt-in for actionable failures: keep Material 3's appearance,
+         but let the complete explanation wrap instead of ellipsizing it. -->
+    <style name="ThemeOverlay.App.Snackbar.Error" parent="">
+        <item name="snackbarTextViewStyle">@style/Widget.App.Snackbar.Error.Text</item>
+    </style>
+
+    <style name="Widget.App.Snackbar.Error.Text" parent="Widget.Material3.Snackbar.TextView">
+        <item name="android:maxLines">2147483647</item>
+        <item name="android:ellipsize">none</item>
+    </style>
+
     <!-- The app's progress bar (owner ruling, Nov 18 2026): one continuous
          track with the filled part merged into it, never Material's split
          look of two pills separated by a gap, and no end dot. Every bar in

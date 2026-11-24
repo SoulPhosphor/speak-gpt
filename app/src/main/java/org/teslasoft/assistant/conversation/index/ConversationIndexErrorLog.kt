@@ -14,15 +14,22 @@ package org.teslasoft.assistant.conversation.index
 object ConversationIndexErrorLog {
     const val TAG = "ConversationIndex"
 
-    /** The exception's type and message, with up to two underlying causes. */
-    fun cause(e: Throwable): String {
-        val parts = ArrayList<String>()
-        var current: Throwable? = e
-        while (current != null && parts.size < 3) {
-            parts.add(current.javaClass.name + (current.message?.let { ": $it" } ?: ""))
-            current = current.cause?.takeIf { it !== current }
-        }
-        return parts.joinToString("; caused by ")
+    /** Includes underlying and suppressed cleanup failures, with cycle protection. */
+    fun cause(e: Throwable): String = org.teslasoft.assistant.util.DiagnosticCause.describe(e)
+
+    fun deletionFailed(result: IndexDeleteResult) =
+        "Conversation index deletion failed while ${result.stage!!.description}: ${cause(result.cause!!)}. " +
+            "Deletion is incomplete. Indexing is off. Retry: delete the conversation index again."
+
+    fun operationFailed(operation: IndexReadOperation, detail: String) = when (operation) {
+        IndexReadOperation.CHECK -> "Conversation index database integrity check failed: $detail. " +
+            "Database health is unknown; this failure does not confirm damage. Retry: run the database check again."
+        IndexReadOperation.COUNTS -> "Conversation index count could not be read: $detail. " +
+            "The current count is unavailable. Retry: automatically while indexing is on, or reopen the indexing settings."
+        IndexReadOperation.UPKEEP -> "Conversation index upkeep failed: $detail. " +
+            "Pending changes may not be indexed. Retry: while indexing is on, automatically at the next chat change or app start."
+        IndexReadOperation.VECTOR_START -> "Conversation search vector preparation could not start: $detail. " +
+            "Search vectors remain incomplete. Retry: automatically at the next chat change, model change or app start."
     }
 
     private fun passages(count: Int) = if (count == 1) "1 passage" else "$count passages"
@@ -48,12 +55,12 @@ object ConversationIndexErrorLog {
     }
 
     fun rebuildFailed(cause: String) =
-        "Conversation index rebuild failed: $cause. Index Conversations was disabled. " +
-            "Recovery requires another indexing attempt."
+        "Conversation index rebuild failed: $cause. Indexing was turned off. " +
+            "Retry: turn indexing on again in RAG active memory settings."
 
     fun chatFailed(chatId: String, cause: String) =
         "Conversation indexing failed for chat $chatId: $cause. Index remains incomplete. " +
-            "Retry: automatically when the chat next changes, or at the next app start."
+            "Retry: while indexing is on, automatically when the chat next changes or the app next starts."
 
     /** Vectors that will never be read for this text: the model input does not fit. */
     fun vectorsTooLong(count: Int, tokenLimit: Int) =
@@ -64,9 +71,9 @@ object ConversationIndexErrorLog {
             "embedding model changes."
 
     /** A vector pass stopped by a failure; the work stays waiting. */
-    fun vectorsInterrupted(waiting: Int, cause: String) =
-        "Conversation search vector preparation failed for ${passages(waiting)}: $cause. " +
-            "Effect: they stay waiting and cannot be found by meaning search yet. " +
+    fun vectorsInterrupted(waiting: Int?, cause: String) =
+        "Conversation search vector preparation failed for ${waiting?.let(::passages) ?: "an unknown number of passages (the waiting count could not be read)"}: $cause. " +
+            "Effect: unfinished passages stay waiting and cannot be found by meaning search yet. " +
             "Retry: automatically on the next indexing pass (after the next chat change, embedding model change " +
             "or app start)."
 
@@ -91,6 +98,15 @@ class ConversationIndexReporter(
     private val loggedChatFailures = java.util.concurrent.ConcurrentHashMap<String, String>()
     @Volatile private var loggedIndexFailure: String? = null
     @Volatile private var loggedVectorFailure: String? = null
+    private val loggedOperations = java.util.concurrent.ConcurrentHashMap<IndexReadOperation, String>()
+
+    fun operationFailed(operation: IndexReadOperation, detail: String) {
+        if (loggedOperations.put(operation, detail) != detail) {
+            write("error", ConversationIndexErrorLog.operationFailed(operation, detail))
+        }
+    }
+
+    fun operationSucceeded(operation: IndexReadOperation) { loggedOperations.remove(operation) }
 
     fun chatFailed(chatId: String, cause: Exception) {
         val text = ConversationIndexErrorLog.cause(cause)
@@ -113,10 +129,12 @@ class ConversationIndexReporter(
     fun chatIndexed(chatId: String) {
         loggedChatFailures.remove(chatId)
         loggedIndexFailure = null
+        operationSucceeded(IndexReadOperation.UPKEEP)
     }
 
     fun indexFailed(cause: Exception) {
         if (IndexFailures.isDamage(cause)) damageFound(ConversationIndexErrorLog.cause(cause))
+        else operationFailed(IndexReadOperation.UPKEEP, ConversationIndexErrorLog.cause(cause))
     }
 
     /** [newCondition]: the paused condition was not already recorded with this cause. */
@@ -145,7 +163,7 @@ class ConversationIndexReporter(
                     damageFound(cause)
                 } else if (cause != loggedVectorFailure) {
                     loggedVectorFailure = cause
-                    write("error", ConversationIndexErrorLog.vectorsInterrupted(waiting() ?: 0, cause))
+                    write("error", ConversationIndexErrorLog.vectorsInterrupted(waiting(), cause))
                 }
             }
             else -> Unit

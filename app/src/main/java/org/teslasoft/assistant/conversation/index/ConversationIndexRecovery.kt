@@ -197,8 +197,12 @@ class AppIndexRecoveryFiles(
         for (suffix in JOURNAL_SUFFIXES) File(damaged.path + suffix).delete()
     }
 
-    /** Whether a damaged file set aside by an unfinished recovery is still there. */
-    fun hasDamaged(): Boolean = damaged.exists()
+    /** Metadata only, for checking and explaining an incomplete deletion. */
+    fun remainingDamagedFiles(): List<String> = (listOf(damaged) + JOURNAL_SUFFIXES.map { File(damaged.path + it) })
+        .filter { it.exists() }.map { it.name }
+
+    /** Includes recovery journals even when the main damaged file has already gone. */
+    fun hasDamaged(): Boolean = remainingDamagedFiles().isNotEmpty()
 
     override fun discardNew() {
         closeIndex()

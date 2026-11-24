@@ -4744,15 +4744,30 @@
     </plurals>
     <string name="conversation_index_delete">Delete Conversation Index</string>
     <string name="conversation_index_delete_title">Delete Conversation Index?</string>
-    <string name="conversation_index_delete_text">This deletes the searchable index stored on this device. You can rebuild it by turning Index Conversations on again.</string>
+    <string name="conversation_index_delete_text">This deletes the searchable index stored on this device. You can rebuild it by turning indexing on again.</string>
     <string name="conversation_index_model_needed_title">On-Device Search Model Needed</string>
-    <string name="conversation_index_model_needed_text">Indexing conversations requires an on-device search model. Install one in AI Settings &gt; Embedding Model, then turn Index Conversations on.</string>
+    <string name="conversation_index_model_needed_text">Indexing conversations requires an on-device search model. Install one in AI settings &gt; embedding model, then turn indexing on.</string>
     <string name="conversation_index_open_model_settings">Open Model Settings</string>
     <string name="conversation_index_paused_title">Indexing Paused</string>
-    <string name="conversation_index_paused_model_removed">Indexing has paused because the on-device search model is no longer installed. Reinstall it in AI Settings &gt; Embedding Model. Indexing will resume automatically when the model is available.</string>
-    <string name="conversation_index_paused_model_cannot_load">Indexing has paused because the installed on-device search model could not be loaded. Reinstall it in AI Settings &gt; Embedding Model. Indexing will resume when the model can be loaded.</string>
+    <string name="conversation_index_paused_model_removed">Indexing has paused because the on-device search model is no longer installed. Reinstall it in AI settings &gt; embedding model. Indexing will resume automatically when the model is available.</string>
+    <string name="conversation_index_paused_model_cannot_load">Indexing has paused because the installed on-device search model could not be loaded. Reinstall it in AI settings &gt; embedding model. Indexing will resume when the model can be loaded.</string>
+    <string name="conversation_index_stopped_status">The conversation index could not be rebuilt. Turn indexing on again to retry.</string>
+    <string name="conversation_index_count_unavailable">Conversation index count is unavailable. Reopen this screen to retry.</string>
+    <string name="conversation_index_delete_failed">Could not finish deleting the conversation index.</string>
+    <string name="conversation_index_delete_failed_off">Indexing is off.</string>
+    <string name="conversation_index_delete_retry">Try deleting the index again. Technical details are available in the error log.</string>
+    <string name="conversation_index_check_retry">Try checking again. Technical details are available in the error log.</string>
+    <string name="conversation_index_failure_busy">The database is busy.</string>
+    <string name="conversation_index_failure_storage_full">Device storage is full.</string>
+    <string name="conversation_index_failure_storage_io">Device storage could not be read or written.</string>
+    <string name="conversation_index_failure_key">The encryption key could not be accessed.</string>
+    <string name="conversation_index_failure_access">Access to the database was denied.</string>
+    <string name="conversation_index_failure_read_only">The database is read-only.</string>
+    <string name="conversation_index_failure_open">The database could not be opened.</string>
+    <string name="conversation_index_failure_free_space">Free up some device storage.</string>
+    <string name="conversation_index_failure_reopen">Reopen the app.</string>
     <string name="conversation_index_stopped_title">Indexing Stopped</string>
-    <string name="conversation_index_stopped_text">The conversation index could not be rebuilt, so Index Conversations was turned off. Open RAG Active Memory Settings to try rebuilding the index again.</string>
+    <string name="conversation_index_stopped_text">The conversation index could not be rebuilt, so indexing was turned off. Open RAG active memory settings and turn indexing on again to retry.</string>
     <string name="conversation_index_open_rag_settings">Open RAG Active Memory Settings</string>
     <string name="conversation_index_rebuilding">The conversation index is being rebuilt.</string>
     <!-- Check Database Integrity: the conversation index's result line
@@ -4761,5 +4776,5 @@
     <string name="health_check_index_ok">%1$s: No problems found.</string>
     <string name="health_check_index_unchecked">%1$s: Could not be checked.</string>
     <string name="health_check_index_rebuilding">%1$s: The conversation index is being rebuilt.</string>
-    <string name="health_check_index_failed">%1$s: The conversation index could not be rebuilt. Index Conversations is off. Open RAG Active Memory Settings to try again.</string>
+    <string name="health_check_index_failed">%1$s: The conversation index could not be rebuilt. Indexing is off. Open RAG active memory settings and turn indexing on again to retry.</string>
 </resources>

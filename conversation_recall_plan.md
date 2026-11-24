@@ -2508,7 +2508,7 @@ permanently failed passage is recorded as permanent.
 |---|---|
 | Damage detected | Conversation index database problem detected: {technical cause}. Automatic recovery started. |
 | Rebuild completed | Conversation index rebuild completed. {number} conversations queued for indexing. {number} existing vectors retained. (When vectors could not be kept, the entry says why and that they are made again.) |
-| Rebuild failed | Conversation index rebuild failed: {technical cause}. Index Conversations was disabled. Recovery requires another indexing attempt. |
+| Rebuild failed | Conversation index rebuild failed: {technical cause}. Indexing was turned off. Retry: turn indexing on again in RAG active memory settings. |
 | A chat could not be indexed | Conversation indexing failed for chat {identifier}: {technical cause}. Index remains incomplete. Retry: {actual retry condition}. |
 | Vectors could not be made | Conversation search vector preparation failed for {number} passages: {technical cause}. Effect: {actual impact}. Retry: {actual retry condition or permanent-failure status}. |
 | Model unavailable | Conversation indexing paused because the on-device search model is unavailable: {technical cause}. Indexing will resume when the model is available. |
@@ -2543,9 +2543,9 @@ notice is shown once per unchanged condition, not once per message.
 | Hint under the button, replacing today's | Checks the memory, lorebook, user image, and conversation index databases for problems. Saved chats are not checked. |
 | Name in the report | Conversation Index Database |
 | Healthy | No problems found. |
-| Could not be checked | Could not be checked. (the app's existing wording for this state, in sentence case; awaiting the owner's confirmation) |
+| Could not be checked | Could not be checked. Follow with the known plain-language cause, an appropriate retry action, and a reference to the error log. Unknown causes are not guessed. The exception and cause chain are logged, never inserted into the report |
 | Automatic repair running | The conversation index is being rebuilt. |
-| Repair failed | The conversation index could not be rebuilt. Index Conversations is off. Open RAG Active Memory Settings to try again. |
+| Repair failed | The conversation index could not be rebuilt. Indexing is off. Open RAG active memory settings and turn indexing on again to retry. |
 
 Result messages use sentence case after the title-case name. The index uses
 its automatic rebuild, never the other databases' Repair and Revert
@@ -2599,11 +2599,11 @@ repair that succeeds has no pop-up.
 
 | Situation | Proposed wording and actions |
 |---|---|
-| Turning on Index Conversations with no model installed | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** On-Device Search Model Needed. **Text:** Indexing conversations requires an on-device search model. Install one in AI Settings > Embedding Model, then turn Index Conversations on. **Buttons:** Close, Open Model Settings (opens Embedding Model). The switch stays off. The wording for Conversation Recall is proposed with Step 16 |
-| The installed model was removed or no longer loads, with Index Conversations on | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** Indexing Paused. **Removed:** Indexing has paused because the on-device search model is no longer installed. Reinstall it in AI Settings > Embedding Model. Indexing will resume automatically when the model is available. **Cannot load:** Indexing has paused because the installed on-device search model could not be loaded. Reinstall it in AI Settings > Embedding Model. Indexing will resume when the model can be loaded. **Buttons:** Close, Open Model Settings. The setting stays on, finished work is kept, and indexing resumes by itself |
+| Turning on Index Conversations with no model installed | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** On-Device Search Model Needed. **Text:** Indexing conversations requires an on-device search model. Install one in AI settings > embedding model, then turn indexing on. **Buttons:** Close, Open Model Settings (opens Embedding Model). The switch stays off. The wording for Conversation Recall is proposed with Step 16 |
+| The installed model was removed or no longer loads, with Index Conversations on | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** Indexing Paused. **Removed:** Indexing has paused because the on-device search model is no longer installed. Reinstall it in AI settings > embedding model. Indexing will resume automatically when the model is available. **Cannot load:** Indexing has paused because the installed on-device search model could not be loaded. Reinstall it in AI settings > embedding model. Indexing will resume when the model can be loaded. **Buttons:** Close, Open Model Settings. The setting stays on, finished work is kept, and indexing resumes by itself |
 | Recall fails for one turn and no user action is available | Conversation Recall could not check earlier messages this time. Your message was sent normally without recalled conversation. No action is needed unless this keeps happening. |
 | Recall fails for one turn and the code knows an action | Conversation Recall could not check earlier messages because (plain cause). Your message was sent normally without recalled conversation. (Specific action.) |
-| The index cannot be rebuilt | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** Indexing Stopped. **Text:** The conversation index could not be rebuilt, so Index Conversations was turned off. Open RAG Active Memory Settings to try rebuilding the index again. **Buttons:** Close, Open RAG Active Memory Settings. Turning Index Conversations on again starts a new recovery attempt |
+| The index cannot be rebuilt | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** Indexing Stopped. **Text:** The conversation index could not be rebuilt, so indexing was turned off. Open RAG active memory settings and turn indexing on again to retry. **Buttons:** Close, Open RAG Active Memory Settings. Turning Index Conversations on again starts a new recovery attempt |
 | Recall reaches its sending-time allowance | **What was sent:** Conversation Recall did not finish in time, so this message was sent normally without recalled conversation. |
 | Android pauses background indexing until the app is reopened | **Notification/status:** Background indexing is paused. Open the app to continue. Finished work was saved. |
 | Long-message section search reaches its allowance | **Approved Step 2:** Time limit reached while searching your message in sections. The full-message search still ran, but only {checked} of {total} additional sections were checked. |
@@ -2631,13 +2631,55 @@ Near-miss labels explain the existing gate, similarity and meaningful-word rules
 they do not change those rules. Physical-phone timing remains pending;
 the emulator measurements are recorded in `memory baseline.md`.
 
-The two model-load/self-check messages remain assigned to Step 11; their
-proposed replacements are not implemented by Step 2:
-- self-check: The on-device memory-search model did not pass its check, so
-  saved-memory search is using keywords only. Cause: {cause}.
-- model load: The on-device memory-search model could not be loaded.
-  Saved-memory search is using keywords only, and Conversation Recall is
-  unavailable. Cause: {cause}.
+**Step 11 corrective wording (Owner, 2026-11-24).** The owner authorized the
+failure wording and diagnostics in this correction without further wording
+questions. The two existing Librarian **Memory Debug Log** entries become:
+- self-check: The on-device embedding model failed its self-check.
+  Saved-memory search is using keywords only. Model: {identifier}. Cause: {details}.
+- model load: The on-device embedding model could not be loaded.
+  Saved-memory search is using keywords only. Model: {identifier}. Cause: {details}.
+
+Model failure entries include exception types, causes, and any related cleanup
+failures. A self-check that throws is reported as a self-check failure, and the
+unpublished model is closed. If the model was already published and only
+background reread scheduling fails, the diagnostic identifies that preparation
+failure and states that meaning search remains available. These entries remain under the existing memory diagnostics switch;
+they are not messages sent to the companion and do not announce later recall
+features as active.
+
+The current settings screen uses a separate inline stopped status:
+"The conversation index could not be rebuilt. Turn indexing on again to retry."
+A notice elsewhere still includes the direct settings action. An unreadable
+count says "Conversation index count is unavailable. Reopen this screen to
+retry." It never becomes zero or a stale count.
+
+A failed user-requested deletion shows a persistent Material snackbar with
+**Okay**: "Could not finish deleting the conversation index." Then the known
+plain cause, "Indexing is off.", the relevant recovery action, and "Try deleting
+the index again. Technical details are available in the error log." The toggle
+and delete button wait for the outstanding deletion to finish. The count is
+read again regardless of the result. Verified deletion clears the obsolete failed
+or pending rebuild condition; a failed deletion does not clear it. An incomplete cleanup can coexist with a
+real zero count if the index data was deleted but recovery files remain.
+
+Plain causes distinguish a busy database, full device storage, storage I/O,
+an inaccessible encryption key, denied access, a read-only database, and a
+file that could not be opened. Full storage asks the user to free space; key
+access asks them to reopen the app. A key-access failure alone does not prove
+that the device is locked. Other failures offer
+retry. The app does not infer corruption, permanent key loss, or a specific
+cause from an unclassified failure or arbitrary words in an exception.
+
+Additional **Error Log** entries identify the failed operation (integrity
+check, count read, index upkeep, vector-worker startup, or deletion), its
+technical cause, actual effect, and retry condition. Deletion entries name the
+failed step: index data, damaged index files, or recovery files. Related
+exceptions are retained with cycle protection and a bounded diagnostic chain.
+Read/startup failures are deduplicated per operation and cause until that
+operation succeeds; each explicitly requested deletion failure is reported.
+An unreadable waiting-passage count is logged as unknown, never zero. No chat
+content is added to logs, no provider logs change, and automatic repairs do not
+acquire pop-ups.
 
 Before Step 11, the builder lists every failure cause the code can
 distinguish and maps each one to: automatic repair with no notice; affected
@@ -3696,7 +3738,7 @@ section above the test rows at the bottom:
 | Status | 310 conversations indexed (real number) |
 | Button | Delete Conversation Index |
 | Confirmation title | Delete Conversation Index? |
-| Confirmation text | This deletes the searchable index stored on this device. You can rebuild it by turning Index Conversations on again. (Owner, 2026-11-24, replacing the 2026-11-11 text) |
+| Confirmation text | This deletes the searchable index stored on this device. You can rebuild it by turning indexing on again. (Owner, 2026-11-24, replacing the 2026-11-11 text) |
 | Confirmation buttons | Cancel, Delete |
 
 **Owner (2026-11-24), built in Step 11:** the section sits between Memory
@@ -3706,7 +3748,7 @@ indexed." (G28). A conversation counts as indexed only when every eligible
 message and every search vector is done; a failed vector is never counted as
 indexed; conversations with nothing to index are in neither count. The count
 is shown while the setting is off too, and turning the setting off keeps the
-index. Delete Conversation Index stays visible and enabled, stops indexing,
+index. Delete Conversation Index stays visible and is enabled except while its deletion is running, stops indexing,
 removes all derived data and updates the count, with no success pop-up; a
 failed deletion never shows zero. An ongoing condition (rebuilding, paused,
 stopped) stays visible beneath the status after its notice is closed.
@@ -3970,3 +4012,4 @@ request. Detailed results stay in the file named by G.16.
 - Stage 8, Step 9 — background embedding of passages (`conversation/index/PassageEmbeddingWorker.kt`): one waiting vector at a time, each passage's search text is rebuilt from the message as stored now (permanent ID, original-text fingerprint, recorded title and cutting settings) and must give back the stored fingerprint of the exact model input; that input is counted whole with the model's tokenizer, prefix and special tokens included, and one that does not fit is recorded as failed, never read cut off and never retried for the same text. Vectors are read through the one embedding queue at background priority (a live read waits for at most the running one) with a new exact-input read that refuses rather than cuts, and stored in one transaction that rechecks the row, the passage and the message; a result for changed, hidden or deleted text is thrown away and the chat marked for refresh. Identical input is read once and shared; a model's vectors are kept until the new model's index is complete, then removed. Per-chat progress counts made, waiting and failed passages; the pause is saved and finished vectors persist, so reopening resumes without reading anything twice. No database version change was needed. A temporary model failure stops the pass and leaves the work waiting. Messages come through a supplied interface; the saved-chat reader and every hookup are Step 10, and nothing in the app starts the worker. Tests: `PassageEmbeddingWorkerTest`, `PassageEmbeddingGemmaTest` (real EmbeddingGemma tokenizer), `PassageEmbeddingInstrumentedTest` (encrypted store and the real model on a device).
 - Stage 8, Step 10 — keeping the index in step with the chats (`conversation/index/`): `SavedChatIndexSource` reads each chat through the app's chat-reading layer, never writing to it, and gives the index each message's AI-facing text, built by the same functions the chat screen now uses for its requests and Summarizer snapshot (`ui/chat/ModelFacingMessageText.kt`, moved out of the chat screen without change), with eligibility and the scope recorded on the message; a message without a permanent ID is never eligible, so a chat not opened since IDs were introduced has no passages until opening gives its messages IDs and saves it, and it is not read again until then. Its stored version is the chat file's size and time and the restore generation, recorded with the index so an unchanged chat is not read again after a restart; a count of changes reported while the app runs is checked alongside it during an update, so a save is seen at once. One-line hookups after a chat is saved (new messages, finished replies, edits, deletions, hiding, showing, another version), after a chat is deleted or an older chat's rename changes its ID, after a restore or merge, when the embedding model changes, and at app start hand the work to `ConversationIndexCoordinator` on a background thread: a changed chat is compared message by message once it has had no change for 3 seconds (so a streaming reply is compared once, after it finishes), existing chats are caught up newest first, skipped without being read when already up to date under the current settings and model, and passed over while still settling, a deleted chat's entries and unshared vectors are removed in one transaction, a renamed chat's entries move to the new ID, a restore marks every chat for a refresh and removes entries of chats that are gone, and a vector pass is requested afterwards (`IndexVectorPasses`). New store operations: delete a chat, move a chat, mark all for refresh, delete everything. Overlap 20 words, target 256 tokens (Owner, 2026-11-24). Everything is inert until Step 11's setting turns it on. Recorded scope coverage is in G.7. Tests: `ConversationIndexCoordinatorTest` (every G.12 row), `SavedChatIndexReaderTest`, `ConversationIndexUpkeepInstrumentedTest` (real chat storage and encrypted store on a device).
 - Stage 9, Step 11 — the Index Conversations setting, status, deletion, database check and notices (`conversation/index/`, `ui/conversationindex/`): the Conversation Index section of RAG Active Memory Settings with the approved wording and shared styles (new `Widget.App.Section.Status` and `AppButton.Destructive.Inline.Centered.BelowStatus`); the saved setting (`ConversationIndexSetting`, off by default) replaces the internal switch, so turning it on catches up existing chats while the app is open, turning it off stops at the next safe point and keeps the index, and deleted or renamed chats are still followed while an index exists; no on-device model blocks turning it on with On-Device Search Model Needed. A failed vector no longer counts as fully indexed (both `finishUpdate` and `recountChatsUsing`); the status counts only chats whose index describes them as stored now under the current settings and model with every vector made, and counts chats not opened since permanent IDs from a new per-chat count (index database version 2; derived stores rebuilt, vectors kept). Delete Conversation Index turns the setting off and removes everything derived, then re-reads the counts. Automatic recovery tells damage (a corrupt file, a missing key) from passing failures (key store unavailable, cannot open now), keeps the vectors it can read, sets the damaged file aside and removes it only after the new index passes its check; recovery failure turns the setting off, and turning it on again retries. Check Database Integrity gains the Conversation Index Database line (no problems, could not be checked, being rebuilt, could not be rebuilt). Indexing Paused (model removed or cannot load) and Indexing Stopped are shown once per ongoing condition on the screen in front, kept in the settings status until recovery is verified. Error Log entries follow the G.13a templates, each ongoing failure once. Tests: `ConversationIndexCountsTest`, `ConversationIndexConditionsTest`, `ConversationIndexRecoveryTest`, new cases in `ConversationIndexCoordinatorTest`, `ConversationIndexSettingsInstrumentedTest` (encrypted store, real damage, recovery and the settings screen on a device).
+- Stage 9, Step 11 correction — separate inline stopped status, an unavailable-count explanation, and a persistent deletion-failure snackbar using Material 3 with a shared wrapping-only variant. Database checks show known plain-language causes and retry actions. Error Log entries retain the failed operation, exception chain and related cleanup failures; distinguish deletion of index data, damaged files and recovery files; deduplicate ongoing read/startup failures; and report an unreadable waiting count as unknown. Model diagnostics distinguish loading, self-check and background preparation failures with the actual search consequence. Verified deletion clears obsolete failed/pending rebuild state. Coverage: 12 new JVM regressions and four added cases in `ConversationIndexSettingsInstrumentedTest`; existing exact log assertions updated without reducing coverage. The shared style guide and adoption record are updated; physical-device visual review remains pending.
