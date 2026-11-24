@@ -148,8 +148,8 @@ class ConversationIndexRecoveryTest {
         assertEquals(1, written.size)
         assertEquals(
             "Conversation indexing failed for chat chat-7: java.lang.IllegalArgumentException: speaker title must be " +
-                "one plain line. Index remains incomplete. Retry: automatically when the chat next changes, or at the " +
-                "next app start.",
+                "one plain line. Index remains incomplete. Retry: while indexing is on, automatically when the chat next " +
+                "changes or the app next starts.",
             written.single()
         )
         reporter.chatIndexed("chat-7")
@@ -221,8 +221,8 @@ class ConversationIndexRecoveryTest {
             ConversationIndexErrorLog.damageDetected("integrity check: page 4 is never used")
         )
         assertEquals(
-            "Conversation index rebuild failed: java.io.IOException: no space. Index Conversations was disabled. " +
-                "Recovery requires another indexing attempt.",
+            "Conversation index rebuild failed: java.io.IOException: no space. Indexing was turned off. " +
+                "Retry: turn indexing on again in RAG active memory settings.",
             ConversationIndexErrorLog.rebuildFailed("java.io.IOException: no space")
         )
     }

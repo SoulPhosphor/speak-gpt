@@ -541,7 +541,8 @@ class Librarian private constructor(private val appContext: Context) {
                 // The model was already published and is usable; preparation failing does not disable meaning search.
                 MemoryLog.log(appContext, "Librarian", "error",
                     "Saved-memory background preparation could not be scheduled. Meaning search remains available. " +
-                        "Model: ${catalog.id}. Cause: ${org.teslasoft.assistant.util.DiagnosticCause.describe(t)}.")
+                        "Model: ${catalog.id}. Cause: ${org.teslasoft.assistant.util.DiagnosticCause.describe(t)}. " +
+                        "Retry: when the on-device model is next loaded.")
                 model
             }
         }

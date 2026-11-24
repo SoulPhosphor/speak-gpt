@@ -2508,7 +2508,7 @@ permanently failed passage is recorded as permanent.
 |---|---|
 | Damage detected | Conversation index database problem detected: {technical cause}. Automatic recovery started. |
 | Rebuild completed | Conversation index rebuild completed. {number} conversations queued for indexing. {number} existing vectors retained. (When vectors could not be kept, the entry says why and that they are made again.) |
-| Rebuild failed | Conversation index rebuild failed: {technical cause}. Index Conversations was disabled. Recovery requires another indexing attempt. |
+| Rebuild failed | Conversation index rebuild failed: {technical cause}. Indexing was turned off. Retry: turn indexing on again in RAG active memory settings. |
 | A chat could not be indexed | Conversation indexing failed for chat {identifier}: {technical cause}. Index remains incomplete. Retry: {actual retry condition}. |
 | Vectors could not be made | Conversation search vector preparation failed for {number} passages: {technical cause}. Effect: {actual impact}. Retry: {actual retry condition or permanent-failure status}. |
 | Model unavailable | Conversation indexing paused because the on-device search model is unavailable: {technical cause}. Indexing will resume when the model is available. |

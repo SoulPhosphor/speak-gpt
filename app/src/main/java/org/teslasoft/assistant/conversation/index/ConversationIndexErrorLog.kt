@@ -27,7 +27,7 @@ object ConversationIndexErrorLog {
         IndexReadOperation.COUNTS -> "Conversation index count could not be read: $detail. " +
             "The current count is unavailable. Retry: automatically while indexing is on, or reopen the indexing settings."
         IndexReadOperation.UPKEEP -> "Conversation index upkeep failed: $detail. " +
-            "Pending changes may not be indexed. Retry: automatically at the next chat change or app start."
+            "Pending changes may not be indexed. Retry: while indexing is on, automatically at the next chat change or app start."
         IndexReadOperation.VECTOR_START -> "Conversation search vector preparation could not start: $detail. " +
             "Search vectors remain incomplete. Retry: automatically at the next chat change, model change or app start."
     }
@@ -55,12 +55,12 @@ object ConversationIndexErrorLog {
     }
 
     fun rebuildFailed(cause: String) =
-        "Conversation index rebuild failed: $cause. Index Conversations was disabled. " +
-            "Recovery requires another indexing attempt."
+        "Conversation index rebuild failed: $cause. Indexing was turned off. " +
+            "Retry: turn indexing on again in RAG active memory settings."
 
     fun chatFailed(chatId: String, cause: String) =
         "Conversation indexing failed for chat $chatId: $cause. Index remains incomplete. " +
-            "Retry: automatically when the chat next changes, or at the next app start."
+            "Retry: while indexing is on, automatically when the chat next changes or the app next starts."
 
     /** Vectors that will never be read for this text: the model input does not fit. */
     fun vectorsTooLong(count: Int, tokenLimit: Int) =
