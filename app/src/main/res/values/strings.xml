@@ -4770,6 +4770,13 @@
     <string name="conversation_indexing_percent">%1$d%%</string>
     <!-- The header icon's spoken label: the title, then the percentage or the status. -->
     <string name="conversation_indexing_icon_description">%1$s, %2$s</string>
+    <!-- The notification while indexing continues after the app is closed
+         (G.16a; Owner, 2026-11-24, Step 13). Its title and channel name are
+         conversation_indexing_title; counting uses conversation_indexing_counting. -->
+    <string name="conversation_indexing_notification_percent">%1$d%% done. Tap to open.</string>
+    <string name="conversation_indexing_notification_rebuilding">Rebuilding conversation index…</string>
+    <!-- Android's time limit or start restriction stopped indexing after the app was closed. -->
+    <string name="conversation_indexing_notification_paused">Background indexing is paused. Open the app to continue. Finished work was saved.</string>
     <!-- Check Database Integrity: the conversation index's result line
          (owner-approved, 2026-11-24; sentence case after the label). -->
     <string name="health_db_conversation_index">Conversation Index Database</string>

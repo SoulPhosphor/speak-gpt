@@ -50,6 +50,26 @@ object ConversationIndexRuntime {
 
     @Volatile private var progressInstance: IndexProgressTracker? = null
 
+    /** Holds indexing while the app is closed without its background service (Step 13). */
+    val backgroundHold = BackgroundIndexingHold()
+
+    /** The progress when something already created it; null otherwise, so asking creates nothing. */
+    fun progressIfCreated(): IndexProgressTracker? = progressInstance
+
+    /** Runs [task] on the index's thread, after the work handed to it before (Step 13). */
+    fun onIndexThread(task: () -> Unit) {
+        IndexTaskRunner.on(executor).run(0, task)
+    }
+
+    /**
+     * The app opened after indexing was held while it was closed (Step 13):
+     * the catch-up continues from where it stopped. A user's pause is kept.
+     */
+    fun resumeAfterHold(context: Context) {
+        val app = context.applicationContext
+        if (isOn(app)) coordinator(app).resumed()
+    }
+
     /** The indexing progress the chat header shows (Step 12). Creating it starts no work. */
     fun progress(context: Context): IndexProgressTracker =
         progressInstance ?: synchronized(this) {
@@ -114,7 +134,8 @@ object ConversationIndexRuntime {
             isOn = { isOn(app) },
             events = Events(app),
             recover = { requestedByUser -> recover(app, requestedByUser) },
-            isPaused = { progress(app).isPaused },
+            // The background hold stops work at the same safe points as the user's pause, without saving it.
+            isPaused = { progress(app).isPaused || backgroundHold.held },
             progress = progress(app)
         )
     }
@@ -339,7 +360,7 @@ object ConversationIndexRuntime {
             // The model loaded and passed its check: a paused condition is over.
             ConversationIndexConditions.clearModelProblem(app)
             val catchUp = progress(app).vectorPassStarting()
-            val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering }
+            val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering || backgroundHold.held }
             when (outcome) {
                 is PassageEmbeddingWorker.Outcome.Finished -> progress(app).vectorPassFinished(catchUp)
                 is PassageEmbeddingWorker.Outcome.Paused -> progress(app).vectorPassPaused()
@@ -386,7 +407,7 @@ object ConversationIndexRuntime {
 
     private val logLock = Any()
 
-    private fun log(app: Context, level: String, message: String) {
+    internal fun log(app: Context, level: String, message: String) {
         try {
             synchronized(logLock) { Logger.log(app, "crash", ConversationIndexErrorLog.TAG, level, message) }
         } catch (_: Exception) { }

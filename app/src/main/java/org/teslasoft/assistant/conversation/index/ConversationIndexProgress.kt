@@ -238,6 +238,9 @@ class IndexProgressTracker(
 
     val isPaused: Boolean get() = pause.paused
 
+    /** The Step 11 conditions the display is worked out from. */
+    fun conditions(): IndexingConditions = source.conditions()
+
     override fun catchUpStarted(chats: List<String>, settingsKey: String): List<String> {
         val work = try { source.work(chats, settingsKey) } catch (_: Exception) { null }
         val toCount = synchronized(lock) {
