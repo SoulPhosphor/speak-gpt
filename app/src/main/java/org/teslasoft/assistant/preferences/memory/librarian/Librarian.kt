@@ -389,6 +389,14 @@ class Librarian private constructor(private val appContext: Context) {
     @Volatile private var model: EmbeddingModel? = null
     @Volatile private var modelLoadFailed = false
 
+    /**
+     * Why the installed model could not be used, as technical detail, or null
+     * when it loaded or was never tried. Read by conversation indexing to
+     * report a model that cannot load (Step 11).
+     */
+    @Volatile var modelProblem: String? = null
+        private set
+
     // The ONNX model is not thread-safe and reads one text at a time. Every
     // read — the live query, lore overlap, the self-check, reindex, rebuild,
     // comparison, and the background repairs below — goes through this one
@@ -484,6 +492,7 @@ class Librarian private constructor(private val appContext: Context) {
                 if (failure != null) {
                     try { m.close() } catch (_: Throwable) { }
                     modelLoadFailed = true
+                    modelProblem = "self-check failed for ${catalog.id}: $failure"
                     MemoryLog.log(
                         appContext, "Librarian", "error",
                         "Embedding self-check FAILED for ${catalog.id}: $failure — semantic retrieval disabled, using keyword fallback"
@@ -494,10 +503,12 @@ class Librarian private constructor(private val appContext: Context) {
                 MemoryLog.log(appContext, "Librarian", "info", "Embedding self-check passed for ${catalog.id}")
             }
             model = m
+            modelProblem = null
             requestLongMemoryReread()
             m
         } catch (t: Throwable) {
             modelLoadFailed = true
+            modelProblem = "${catalog.id} failed to load: ${t.javaClass.name}: ${t.message}"
             MemoryLog.log(appContext, "Librarian", "error", "Embedding model failed to load: ${t.message}")
             null
         }
@@ -624,6 +635,7 @@ class Librarian private constructor(private val appContext: Context) {
         try { model?.close() } catch (_: Throwable) { }
         model = null
         modelLoadFailed = false
+        modelProblem = null
         synchronized(loreCacheLock) { loreVectorCache.clear() }
         synchronized(comparisonCacheLock) { comparisonVectorCache.clear() }
         org.teslasoft.assistant.conversation.index.ConversationIndexHooks.embeddingModelChanged(appContext)

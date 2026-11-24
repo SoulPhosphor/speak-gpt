@@ -664,6 +664,150 @@ class ConversationIndexCoordinatorTest {
         assertTrue(index.rows.isEmpty())
     }
 
+    // --- Step 11: the setting, failures, recovery and deletion ---------------
+
+    private class Recorded : IndexEvents {
+        val modelUnavailable = ArrayList<Exception?>()
+        val chatFailures = ArrayList<Pair<String, Exception>>()
+        val indexed = ArrayList<String>()
+        override fun modelUnavailable(cause: Exception?) { modelUnavailable.add(cause) }
+        override fun chatFailed(chatId: String, cause: Exception) { chatFailures.add(chatId to cause) }
+        override fun chatIndexed(chatId: String) { indexed.add(chatId) }
+    }
+
+    private fun coordinatorWith(
+        events: IndexEvents = IndexEvents.NONE,
+        storage: ConversationIndexStorage = index,
+        maintenance: ConversationIndexMaintenance = index,
+        updater: () -> ConversationIndexUpdater? = { ConversationIndexUpdater(storage, reader(model), targetTokens, OVERLAP) },
+        recover: (Boolean) -> Boolean = { false }
+    ) = ConversationIndexCoordinator(
+        source = chats, storage = { index }, maintenance = { maintenance }, updaterFor = updater,
+        requestVectors = { vectorRequests++ }, runner = runner, isOn = { on }, events = events,
+        recover = recover, clock = { runner.now }
+    )
+
+    @Test fun turningTheSettingOnCatchesUpTheChatsSavedWhileItWasOff() {
+        on = false
+        chats.put("older", chat())
+        chats.put("newer", chat() + user("u3", "And trains?"))
+        coordinator.appStarted()
+        runner.runAll()
+        assertTrue(index.rows.isEmpty())
+        on = true
+        coordinator.turnedOn()
+        runner.runAll()
+        assertEquals(setOf("older", "newer"), index.indexedChatIds())
+        assertEquals(listOf("newer", "older"), chats.reads)
+    }
+
+    @Test fun turningTheSettingOffStopsAtTheNextSafePointAndKeepsTheIndex() {
+        save("kept", chat())
+        runner.runAll()
+        val kept = index.rows.toList()
+        chats.put("second", chat())
+        chats.put("third", chat())
+        chats.afterRead = { on = false }
+        coordinator.turnedOn()
+        runner.runAll()
+        // The chat being read when the setting went off was not finished, and no other was read.
+        assertEquals(1, chats.reads.count { it != "kept" })
+        assertFalse("third" in chats.reads && "second" in chats.reads)
+        assertTrue(index.rows.containsAll(kept))
+    }
+
+    @Test fun withoutAModelIndexingWaitsAndSaysSoOnce() {
+        val events = Recorded()
+        val waiting = coordinatorWith(events = events, updater = { null })
+        chats.put("one", chat())
+        chats.put("two", chat())
+        waiting.turnedOn()
+        runner.runAll()
+        assertTrue(chats.reads.isEmpty())
+        assertTrue(index.rows.isEmpty())
+        // The rest of the catch-up was dropped rather than tried chat by chat.
+        assertEquals(1, events.modelUnavailable.size)
+        assertTrue(runner.tasks.isEmpty())
+    }
+
+    @Test fun aTokenizerThatCannotLoadIsReportedWithItsCause() {
+        val events = Recorded()
+        val failing = coordinatorWith(events = events, updater = { throw IllegalStateException("tokenizer.json unreadable") })
+        chats.put("one", chat())
+        failing.turnedOn()
+        runner.runAll()
+        assertEquals("tokenizer.json unreadable", events.modelUnavailable.single()?.message)
+    }
+
+    @Test fun aChatThatFailsIsReportedAndLeftMarkedForRefresh() {
+        val events = Recorded()
+        val broken = object : ConversationIndexStorage by index {
+            override fun writeMessage(
+                chatId: String, messageId: String, expected: MessageStamp?, replacement: MessageEntries?,
+                chatUnchanged: () -> Boolean
+            ): IndexWrite = throw IllegalStateException("disk full")
+        }
+        val failing = coordinatorWith(events = events, storage = broken)
+        chats.put("chat", chat())
+        failing.chatChanged("chat")
+        runner.runAll()
+        assertEquals("chat", events.chatFailures.single().first)
+        assertEquals("disk full", events.chatFailures.single().second.message)
+        assertTrue(index.indexState("chat")!!.needsRefresh)
+        assertTrue(events.indexed.isEmpty())
+    }
+
+    @Test fun aRecoveryThatMakesTheIndexUsableCatchesEveryChatUp() {
+        var attempts = 0
+        val recovering = coordinatorWith(recover = { attempts++; true })
+        chats.put("one", chat())
+        chats.put("two", chat())
+        recovering.recoverIndex()
+        runner.runAll()
+        assertEquals(1, attempts)
+        assertEquals(setOf("one", "two"), index.indexedChatIds())
+    }
+
+    @Test fun aRecoveryThatFailsIndexesNothing() {
+        val failed = coordinatorWith(recover = { false })
+        chats.put("one", chat())
+        failed.recoverIndex(requestedByUser = true)
+        runner.runAll()
+        assertTrue(chats.reads.isEmpty())
+        assertTrue(index.indexedChatIds().isEmpty())
+    }
+
+    @Test fun deletingTheIndexRemovesEverythingDerivedAndNeverTheChats() {
+        save("one", chat())
+        save("two", chat() + user("u3", "And trains?"))
+        runner.runAll()
+        makeVectors()
+        val stored = chats.chats.toMap()
+        val versions = chats.versions.toMap()
+        var result: Exception? = IllegalStateException("not called")
+        coordinator.deleteIndex { result = it }
+        runner.runAll()
+        assertNull(result)
+        assertTrue(index.rows.isEmpty())
+        assertTrue(index.vectors.isEmpty())
+        assertTrue(index.states.isEmpty())
+        assertEquals(stored, chats.chats.toMap())
+        assertEquals(versions, chats.versions.toMap())
+    }
+
+    @Test fun aDeletionThatFailsSaysSo() {
+        val broken = object : ConversationIndexMaintenance by index {
+            override fun deleteEverything() = throw IllegalStateException("database is locked")
+        }
+        save("one", chat())
+        runner.runAll()
+        var result: Exception? = null
+        coordinatorWith(maintenance = broken).deleteIndex { result = it }
+        runner.runAll()
+        assertEquals("database is locked", result?.message)
+        assertEquals(setOf("one"), index.indexedChatIds())
+    }
+
     // --- Vector passes ----------------------------------------------------
 
     @Test fun aVectorRequestDuringAPassRunsOneMorePassAfterIt() {

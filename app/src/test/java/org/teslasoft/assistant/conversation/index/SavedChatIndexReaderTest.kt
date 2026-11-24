@@ -40,7 +40,7 @@ class SavedChatIndexReaderTest {
     private val context = RuntimeEnvironment.getApplication()
 
     @After fun off() {
-        ConversationIndexActivation.isOn = false
+        ConversationIndexSetting.overrideForTest = null
     }
 
     private fun row(id: String?, isBot: Boolean, text: String, vararg extra: Pair<String, Any>): HashMap<String, Any> =
@@ -145,7 +145,7 @@ class SavedChatIndexReaderTest {
     }
 
     @Test fun theHookupsDoNothingWhileIndexingIsOff() {
-        ConversationIndexActivation.isOn = false
+        ConversationIndexSetting.overrideForTest = false
         val before = ConversationIndexChatChanges.count("off-chat")
         ConversationIndexHooks.chatSaved(context, "off-chat")
         ConversationIndexHooks.chatsDeleted(context, listOf("off-chat"))
@@ -158,7 +158,7 @@ class SavedChatIndexReaderTest {
     }
 
     @Test fun theHookupsReturnAtOnceAndAnIndexThatCannotOpenNeverReachesTheCaller() {
-        ConversationIndexActivation.isOn = true
+        ConversationIndexSetting.overrideForTest = true
         val started = System.nanoTime()
         ConversationIndexHooks.chatSaved(context, "on-chat")
         ConversationIndexHooks.chatsDeleted(context, listOf("gone-chat"))

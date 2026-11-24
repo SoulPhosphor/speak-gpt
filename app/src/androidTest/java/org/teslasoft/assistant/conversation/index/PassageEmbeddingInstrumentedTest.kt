@@ -161,6 +161,8 @@ class PassageEmbeddingInstrumentedTest {
         val progress = store.chatProgress("chat")
         assertEquals(outcome.counts.failed, progress.failed)
         assertEquals(0, progress.waiting)
+        // A failed vector is never retried for the same text, so the chat is not fully indexed (Step 11).
+        assertFalse(progress.fullyIndexed)
         assertTrue(vectorRows().values.filter { it.first == ConversationIndexStore.STATE_FAILED }.all { it.second == null })
         assertEquals(PassageEmbeddingWorker.Counts(0, 0, 0), finished(worker(vectors).runPass()).counts)
     }

@@ -218,6 +218,10 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
+            <!-- Conversation Index (G.16a, Step 11): between Memory Engine and
+                 the test row at the bottom (owner placement, Nov 24 2026). -->
+            <include layout="@layout/view_conversation_index_section" />
+
             <!-- Memory Search Test (owner placement, Nov 16 2026): last on this
                  screen; moved here from what is now Memory Repair Settings. -->
             <LinearLayout

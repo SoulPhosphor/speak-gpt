@@ -267,6 +267,12 @@
                 style="@style/Widget.App.Section.Hint"
                 android:visibility="gone" />
 
+            <!-- The conversation index's line (G.13a, Step 11). -->
+            <TextView
+                android:id="@+id/text_result_conversation_index"
+                style="@style/Widget.App.Section.Hint"
+                android:visibility="gone" />
+
             <!-- ============ 3. Backup ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"

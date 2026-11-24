@@ -93,6 +93,8 @@ class MainApplication : Application() {
         MemoryDiagnostics.processUptimeMinutes()
 
         DynamicColors.applyToActivitiesIfAvailable(this)
+        // Conversation index notices appear on the screen in front (Step 11).
+        org.teslasoft.assistant.ui.conversationindex.ConversationIndexNotices.register(this)
         ThemeManager.getThemeManager().applyTheme(this, isDarkThemeEnabled() && GlobalPreferences.getPreferences(this).getAmoledPitchBlack())
 
         if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
@@ -277,7 +279,7 @@ class MainApplication : Application() {
             // Search is derived and disposable. This idempotent call resumes a
             // first-use or policy/locale rebuild after source restore/recovery.
             ChatSearchIndexManager.get(this).ensureReady()
-            // The conversation index catches up in the background (inert until Step 11).
+            // The conversation index catches up in the background while Index Conversations is on.
             org.teslasoft.assistant.conversation.index.ConversationIndexHooks.appStarted(this)
             try {
                 // Crash-triggered integrity checking (Build Phase 1 gate,

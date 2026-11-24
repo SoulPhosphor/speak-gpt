@@ -102,6 +102,11 @@ class PassageEmbeddingWorker(
 
     val isPaused: Boolean get() = pauseState.paused
 
+    /** The model this worker reads with, and its input limit in tokens (for the Error Log, Step 11). */
+    val vectorModel: String get() = vectorReader.vectorModel
+    val vectorDimensions: Int get() = vectorReader.vectorDimensions
+    val tokenLimit: Int get() = vectorReader.tokenLimit
+
     /** Pauses after the read that is running, if any; saved across app restarts. */
     fun pause() {
         pauseState.paused = true

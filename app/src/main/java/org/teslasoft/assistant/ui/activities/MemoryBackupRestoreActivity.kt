@@ -148,6 +148,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     private var textResultMemory: TextView? = null
     private var textResultLorebook: TextView? = null
     private var textResultUserImage: TextView? = null
+    private var textResultConversationIndex: TextView? = null
 
     // One 3-strikes backup-failure dialog per screen visit at most, so a
     // resume loop cannot nag (Build Phase 3 item 8).
@@ -434,6 +435,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         textResultMemory = findViewById(R.id.text_result_memory)
         textResultLorebook = findViewById(R.id.text_result_lorebook)
         textResultUserImage = findViewById(R.id.text_result_userimage)
+        textResultConversationIndex = findViewById(R.id.text_result_conversation_index)
 
         textStatusMemory = findViewById(R.id.text_status_memory)
         textStatusLorebooks = findViewById(R.id.text_status_lorebooks)
@@ -2049,8 +2051,11 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         textResultMemory?.visibility = View.GONE
         textResultLorebook?.visibility = View.GONE
         textResultUserImage?.visibility = View.GONE
+        textResultConversationIndex?.visibility = View.GONE
         runOffThread {
             val results = DatabaseHealthChecker.checkAll(this)
+            // The conversation index repairs itself by rebuilding, never through Repair/Revert (G.13a).
+            val indexResult = org.teslasoft.assistant.conversation.index.ConversationIndexRuntime.checkIntegrity(this)
             DatabaseCheckHistory.record(this, results, System.currentTimeMillis())
             // B8 escalation: a DAMAGED manual-check result IS confirmed damage
             // — set the degraded flag (off the main thread; transition-logged
@@ -2084,8 +2089,10 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                     tv?.text = line
                     tv?.visibility = View.VISIBLE
                 }
+                textResultConversationIndex?.text = conversationIndexCheckLine(indexResult)
+                textResultConversationIndex?.visibility = View.VISIBLE
                 refreshStatusHistory()
-                showCheckReportDialog(results)
+                showCheckReportDialog(results, indexResult)
             }
         }
     }
@@ -2097,14 +2104,33 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
      * routes straight into the A1 repair flow (result buttons are the build
      * plan's suggested labels, pending owner confirmation).
      */
-    private fun showCheckReportDialog(results: List<DatabaseHealthChecker.Result>) {
+    /** The conversation index's result line (owner-approved wording, 2026-11-24). */
+    private fun conversationIndexCheckLine(result: org.teslasoft.assistant.conversation.index.IndexCheckResult): String {
+        val name = getString(R.string.health_db_conversation_index)
+        return when (result.status) {
+            org.teslasoft.assistant.conversation.index.IndexCheckResult.Status.OK ->
+                getString(R.string.health_check_index_ok, name)
+            org.teslasoft.assistant.conversation.index.IndexCheckResult.Status.UNCHECKED ->
+                getString(R.string.health_check_index_unchecked, name)
+            org.teslasoft.assistant.conversation.index.IndexCheckResult.Status.REBUILDING ->
+                getString(R.string.health_check_index_rebuilding, name)
+            org.teslasoft.assistant.conversation.index.IndexCheckResult.Status.REPAIR_FAILED ->
+                getString(R.string.health_check_index_failed, name)
+        }
+    }
+
+    private fun showCheckReportDialog(
+        results: List<DatabaseHealthChecker.Result>,
+        indexResult: org.teslasoft.assistant.conversation.index.IndexCheckResult
+    ) {
         if (isFinishing) return
         fun reportName(type: BackupType): String = when (type) {
             BackupType.MEMORY -> getString(R.string.health_db_memory)
             BackupType.LOREBOOK -> getString(R.string.health_db_lorebook)
             else -> getString(R.string.health_db_user_image)
         }
-        val incomplete = results.any { it.status == DatabaseHealthChecker.Status.UNAVAILABLE }
+        val incomplete = results.any { it.status == DatabaseHealthChecker.Status.UNAVAILABLE } ||
+            indexResult.status == org.teslasoft.assistant.conversation.index.IndexCheckResult.Status.UNCHECKED
         val damaged = results.filter { it.status == DatabaseHealthChecker.Status.DAMAGED }
         val lines = results.joinToString("\n") { r ->
             when (r.status) {
@@ -2112,7 +2138,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                 DatabaseHealthChecker.Status.DAMAGED -> getString(R.string.health_check_line_damaged, reportName(r.type))
                 DatabaseHealthChecker.Status.UNAVAILABLE -> getString(R.string.health_check_line_unchecked, reportName(r.type))
             }
-        }
+        } + "\n" + conversationIndexCheckLine(indexResult)
         val footer = when {
             damaged.isNotEmpty() ->
                 "\n\n" + getString(R.string.health_check_footer_damaged,
