@@ -329,6 +329,7 @@ class ConversationIndexSettingsInstrumentedTest {
             dialog.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)!!.performClick()
         }
         assertFalse(ConversationIndexSetting.isOn(context))
+        awaitDeletionFinished(scenario)
         // The status is read again after the deletion, from the index itself.
         val deadline = System.currentTimeMillis() + 10_000
         var shown: String? = null
@@ -421,20 +422,44 @@ class ConversationIndexSettingsInstrumentedTest {
         }
     }
 
+    private fun awaitDeletionFinished(scenario: ActivityScenario<MemoryControlsActivity>) {
+        val deadline = System.currentTimeMillis() + 10_000
+        var lastState = "not observed"
+        while (System.currentTimeMillis() < deadline) {
+            var finished = false
+            scenario.onActivity { activity ->
+                val delete = activity.findViewById<MaterialButton>(R.id.btn_delete_conversation_index)
+                val toggle = activity.findViewById<MaterialSwitch>(R.id.switch_index_conversations)
+                finished = delete.isEnabled && toggle.isEnabled
+                lastState = "deleteEnabled=${delete.isEnabled}, toggleEnabled=${toggle.isEnabled}"
+            }
+            if (finished) return
+            Thread.sleep(50)
+        }
+        error("index deletion did not finish before the test advanced. Last state: $lastState")
+    }
+
     private fun awaitText(
         scenario: ActivityScenario<MemoryControlsActivity>, id: Int, matches: (String) -> Boolean
     ): String {
         val deadline = System.currentTimeMillis() + 10_000
+        var lastObservation = "not observed"
         while (System.currentTimeMillis() < deadline) {
             var text: String? = null
             scenario.onActivity { activity ->
-                activity.findViewById<TextView>(id)?.takeIf { it.visibility == View.VISIBLE }
+                val view = activity.findViewById<TextView>(id)
+                lastObservation = if (view == null) "view not found"
+                    else "visibility=${view.visibility}, text=${view.text}"
+                view?.takeIf { it.visibility == View.VISIBLE }
                     ?.text?.toString()?.takeIf(matches)?.let { text = it }
             }
             text?.let { return it }
             Thread.sleep(50)
         }
-        error("expected status text was never shown")
+        error("expected status text was never shown. Last observation: $lastObservation; " +
+            "indexingOn=${ConversationIndexSetting.isOn(context)}, " +
+            "rebuilding=${ConversationIndexConditions.rebuilding}, " +
+            "recoveryFailed=${ConversationIndexConditions.recoveryFailed(context)}")
     }
 
     private companion object {
