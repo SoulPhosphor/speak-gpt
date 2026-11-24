@@ -18,7 +18,7 @@ package org.teslasoft.assistant.conversation.index
  * thrown away. A failure leaves every message either as it was or fully
  * replaced, and the chat marked as needing a refresh.
  *
- * Run off the main thread. Nothing in the app calls this yet (Step 10).
+ * Run off the main thread. [ConversationIndexCoordinator] calls it (Step 10).
  */
 class ConversationIndexUpdater(
     private val storage: ConversationIndexStorage,
@@ -46,6 +46,13 @@ class ConversationIndexUpdater(
     }
 
     private val searchSettings = SearchSettings(targetTokens, overlapWords, reader.key).encoded
+
+    /**
+     * Changes whenever this updater would cut or stamp a message differently:
+     * the cutting settings, the reader (model, limit, prefix) or the cutter
+     * version. Recorded with the chat version, so a change re-indexes every chat.
+     */
+    val settingsKey: String get() = "$searchSettings|c${PassageCutter.CUTTER_VERSION}"
 
     /**
      * @param messages every stored message of the chat, in stored order, as

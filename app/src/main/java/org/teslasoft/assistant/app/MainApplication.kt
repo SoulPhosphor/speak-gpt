@@ -277,6 +277,8 @@ class MainApplication : Application() {
             // Search is derived and disposable. This idempotent call resumes a
             // first-use or policy/locale rebuild after source restore/recovery.
             ChatSearchIndexManager.get(this).ensureReady()
+            // The conversation index catches up in the background (inert until Step 11).
+            org.teslasoft.assistant.conversation.index.ConversationIndexHooks.appStarted(this)
             try {
                 // Crash-triggered integrity checking (Build Phase 1 gate,
                 // Build Phase 3 response). The whole-database PRAGMA

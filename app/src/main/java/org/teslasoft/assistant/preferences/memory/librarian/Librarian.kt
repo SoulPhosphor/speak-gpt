@@ -626,6 +626,7 @@ class Librarian private constructor(private val appContext: Context) {
         modelLoadFailed = false
         synchronized(loreCacheLock) { loreVectorCache.clear() }
         synchronized(comparisonCacheLock) { comparisonVectorCache.clear() }
+        org.teslasoft.assistant.conversation.index.ConversationIndexHooks.embeddingModelChanged(appContext)
     }
 
     /** Stored scoring weights, bounded (counterplan §5.5): a non-finite,
