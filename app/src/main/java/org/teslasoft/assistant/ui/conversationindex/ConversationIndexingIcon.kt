@@ -121,7 +121,12 @@ class ConversationIndexingIcon(
      * is not read out again with every step.
      */
     private fun describe(display: IndexingDisplay, kindChanged: Boolean) {
-        val status = IndexingDialogText.status(activity, display) ?: return
+        // Running with a known total: the percentage; counting or paused: the status line's words.
+        val status = when (display) {
+            is IndexingDisplay.Running -> display.numbers?.let { IndexingDialogText.percent(activity, display) }
+                ?: IndexingDialogText.status(activity, display)
+            else -> IndexingDialogText.status(activity, display)
+        } ?: return
         val label = activity.getString(
             R.string.conversation_indexing_icon_description,
             activity.getString(R.string.conversation_indexing_title),
