@@ -165,6 +165,30 @@ class BackgroundIndexingTest {
         assertEquals(listOf("stop:APP_OPENED", "clear"), platform.calls)
     }
 
+    @Test fun aRunningCatchUpIsNotDroppedWhileTheLeaveDecisionIsMade() {
+        val hold = BackgroundIndexingHold()
+        var gateOpenWhileDeciding = true
+        val platform = object : BackgroundIndexingPlatform by Platform() {
+            override fun display(): IndexingDisplay {
+                // The index's thread asking at this moment must still be let through.
+                if (hold.catchUpMustWait()) gateOpenWhileDeciding = false
+                return IndexingDisplay.Running(numbers42)
+            }
+            override fun conditions() = on
+        }
+        val controller = controllerFor(platform, hold)
+        controller.appOpened()
+        controller.appLeft()
+        assertTrue(gateOpenWhileDeciding)
+        assertFalse("the service continues the catch-up", hold.catchUpMustWait())
+
+        // Without a service to continue it, the gate closes once the decision is made.
+        val idle = controllerFor(Platform(), BackgroundIndexingHold())
+        idle.appOpened()
+        idle.appLeft()
+        assertTrue(idle.hold.catchUpMustWait())
+    }
+
     @Test fun aPausedIndexIsNeverStartedInTheBackground() {
         val platform = Platform().apply { display = IndexingDisplay.Paused(null); paused = true }
         val hold = BackgroundIndexingHold()

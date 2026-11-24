@@ -241,20 +241,25 @@ class BackgroundIndexingController(
 
     /** The last screen of the app left (not a rotation). */
     fun appLeft() {
+        // The gate stays open until the decision is made, so a running catch-up is never dropped
+        // before the service that continues it is asked for.
         appVisible = false
-        gateCatchUps()
-        val decision = try {
-            BackgroundIndexingRule.startDecision(
-                platform.display(), platform.conditions(), platform.userPaused(), platform.userWorkRunning()
-            )
-        } catch (e: Exception) {
-            stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
-            return
-        }
-        when (decision) {
-            BackgroundStartDecision.NOT_NEEDED -> Unit
-            BackgroundStartDecision.YIELD -> hold.hold()
-            BackgroundStartDecision.START -> startService()
+        try {
+            val decision = try {
+                BackgroundIndexingRule.startDecision(
+                    platform.display(), platform.conditions(), platform.userPaused(), platform.userWorkRunning()
+                )
+            } catch (e: Exception) {
+                stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
+                return
+            }
+            when (decision) {
+                BackgroundStartDecision.NOT_NEEDED -> Unit
+                BackgroundStartDecision.YIELD -> hold.hold()
+                BackgroundStartDecision.START -> startService()
+            }
+        } finally {
+            gateCatchUps()
         }
     }
 
