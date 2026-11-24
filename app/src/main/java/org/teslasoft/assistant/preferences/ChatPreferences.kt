@@ -640,6 +640,7 @@ class ChatPreferences private constructor() {
                         } else ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision)
                     }
                     ChatListIndex.contentChanged(context, chatId)
+                    org.teslasoft.assistant.conversation.index.ConversationIndexHooks.chatSaved(context, chatId)
                     ChatStorageHealth.WriteOutcome.OK
                 }
             } catch (_: Exception) {
@@ -961,6 +962,7 @@ class ChatPreferences private constructor() {
             journal.edit().remove(chatId).commit()
             ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, searchRevision)
             ChatListIndex.chatCreated(context, chatId)
+            org.teslasoft.assistant.conversation.index.ConversationIndexHooks.chatSaved(context, chatId)
             return PendingConversationCommitResult.Ok
         }
     }
@@ -1100,6 +1102,8 @@ class ChatPreferences private constructor() {
                     "they will be reconciled on next open."
             )
         }
+
+        org.teslasoft.assistant.conversation.index.ConversationIndexHooks.chatRenamed(context, oldId, newId)
 
         // The rename is now authoritative (chat list names the new id). Complete
         // the cross-store re-point of the memory rows. repointChat is one atomic

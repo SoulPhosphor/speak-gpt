@@ -44,7 +44,7 @@ class ConversationIndexStore private constructor(
     CorruptionHandler,
     null,
     true
-), ConversationIndexStorage, PassageVectorStorage {
+), ConversationIndexStorage, PassageVectorStorage, ConversationIndexMaintenance {
 
     /** Test hook: called inside a message or restamp write after it has changed rows, before the commit check. */
     @Volatile internal var afterOldRowsRemoved: (() -> Unit)? = null
@@ -475,6 +475,56 @@ class ConversationIndexStore private constructor(
             "passage_vectors", "NOT (vector_model = ? AND vector_dimensions = ?)", arrayOf<Any>(currentModel, currentDimensions)
         )
     }
+
+    override fun indexedChatIds(): Set<String> =
+        readableDatabase.rawQuery(
+            "SELECT chat_id FROM passages UNION SELECT chat_id FROM index_state", emptyArray()
+        ).use { cursor -> buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) } }
+
+    override fun deleteChat(chatId: String) = transaction { db ->
+        val keys = chatVectorKeys(db, chatId)
+        db.delete("passages", "chat_id = ?", arrayOf(chatId))
+        db.delete("index_state", "chat_id = ?", arrayOf(chatId))
+        removeUnusedVectors(db, keys, null)
+    }
+
+    override fun moveChat(fromChatId: String, toChatId: String) = transaction { db ->
+        if (fromChatId == toChatId) return@transaction
+        val replaced = chatVectorKeys(db, toChatId)
+        db.delete("passages", "chat_id = ?", arrayOf(toChatId))
+        db.delete("index_state", "chat_id = ?", arrayOf(toChatId))
+        db.update("passages", ContentValues().apply { put("chat_id", toChatId) }, "chat_id = ?", arrayOf(fromChatId))
+        db.update("index_state", ContentValues().apply { put("chat_id", toChatId) }, "chat_id = ?", arrayOf(fromChatId))
+        removeUnusedVectors(db, replaced, null)
+        db.execSQL(
+            "INSERT INTO index_state(chat_id, described_version, needs_refresh, waiting_vectors, fully_indexed) " +
+                "VALUES(?, NULL, 1, 0, 0) ON CONFLICT(chat_id) DO UPDATE SET needs_refresh = 1, fully_indexed = 0",
+            arrayOf(toChatId)
+        )
+    }
+
+    override fun markAllForRefresh() = transaction { db ->
+        db.execSQL("UPDATE index_state SET needs_refresh = 1, fully_indexed = 0")
+        db.execSQL(
+            "INSERT OR IGNORE INTO index_state(chat_id, described_version, needs_refresh, waiting_vectors, fully_indexed) " +
+                "SELECT DISTINCT chat_id, NULL, 1, 0, 0 FROM passages"
+        )
+    }
+
+    override fun deleteEverything() = transaction { db ->
+        db.delete("passages", null, null)
+        db.delete("index_state", null, null)
+        db.delete("passage_vectors", null, null)
+        Unit
+    }
+
+    private fun chatVectorKeys(db: SQLiteDatabase, chatId: String): Set<VectorKey> =
+        db.rawQuery(
+            "SELECT DISTINCT search_fingerprint, vector_model, vector_dimensions FROM passages WHERE chat_id = ?",
+            arrayOf(chatId)
+        ).use { cursor ->
+            buildSet { while (cursor.moveToNext()) add(VectorKey(cursor.getString(0), cursor.getString(1), cursor.getInt(2))) }
+        }
 
     /** The stamp of each indexed message of [chatId] (or of [messageId] only), read from its first passage. */
     private fun readStamps(db: SQLiteDatabase, chatId: String, messageId: String?): Map<String, MessageStamp> {

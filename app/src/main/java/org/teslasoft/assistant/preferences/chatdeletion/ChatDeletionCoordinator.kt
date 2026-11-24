@@ -151,6 +151,7 @@ class ChatDeletionCoordinator internal constructor(
                     // Nor can a kept message-deletion save.
                     org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared.discard(it)
                     ChatSearchIndexManager.get(app).scheduleChatsDeleted(it)
+                    org.teslasoft.assistant.conversation.index.ConversationIndexHooks.chatsDeleted(app, it)
                 }
             )
         }

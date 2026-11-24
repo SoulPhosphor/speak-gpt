@@ -14,7 +14,7 @@ import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
 
 /**
  * Where the worker reads a message as it is stored now (supplied by the
- * caller; the saved-chat reader is Step 10). Called off the main thread.
+ * caller; the app uses [SavedChatIndexSource]). Called off the main thread.
  */
 fun interface IndexMessageSource {
     /** The message as stored now, or null when it is gone or cannot be read. */
@@ -67,7 +67,7 @@ class SavedEmbeddingPauseState(context: Context) : EmbeddingPauseState {
  * closing and reopening the app continues where it stopped without reading
  * anything twice. Running while the app is closed is Step 13.
  *
- * Nothing in the app starts this yet (Step 10).
+ * [IndexVectorPasses] runs its passes after index updates (Step 10).
  */
 class PassageEmbeddingWorker(
     private val storage: PassageVectorStorage,

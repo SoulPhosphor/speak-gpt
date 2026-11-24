@@ -234,6 +234,9 @@ object ChatSetReplacementCoordinator {
             ChatSearchIndexManager.get(appContext).onAuthoritativeChatSetReplaced()
         }
         val searchOk = true
+        // The conversation index is derived too: each chat is compared with it
+        // message by message in the background, after this returns.
+        org.teslasoft.assistant.conversation.index.ConversationIndexHooks.chatSetReplaced(appContext)
         // Chat-list details are what the chat list shows, so unlike Search they
         // are rebuilt here, from the restored chats, before the restore reports
         // that it is complete.

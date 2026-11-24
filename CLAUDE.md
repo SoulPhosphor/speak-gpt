@@ -101,6 +101,19 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 | Whether an old model's vectors may be removed | One transaction rechecks that no passage uses another model, nothing waits and no chat is being refreshed | `PassageEmbeddingInstrumentedTest.anUnfinishedModelChangeKeepsTheOldVectorsAndAFinishedOneRemovesThem` |
 | Whether to continue after a pause | The saved pause is checked before every vector; a read already running is finished and stored | `PassageEmbeddingInstrumentedTest.closingAndReopeningKeepsFinishedVectorsAndResumesWithoutReadingThemAgain`; `PassageEmbeddingWorkerTest.pauseIsKeptAcrossANewWorkerAndResumingReadsOnlyWhatIsLeft` |
 
+### Changes during waits — Stage 8, Step 10
+
+| Decision | Detect changes during the wait | Verification |
+| --- | --- | --- |
+| Whether an update may write the chat it read | The chat version (file size and time, restore generation, changes reported while the app runs) is taken before the messages are read; the updater rechecks it before every write and just before each commit; a changed chat is updated again a few times, then left marked for refresh | `ConversationIndexCoordinatorTest.aChatChangedDuringItsUpdateIsUpdatedAgainToTheNewVersion`; `aChatThatKeepsChangingIsLeftMarkedForRefreshAfterAFewTries`; `ConversationIndexUpkeepInstrumentedTest.everySaveChangesTheChatVersionAndReadingChangesNothing` |
+| When a changed chat is compared | Every reported change resets that chat's quiet time; it is compared only after 3 seconds without one | `ConversationIndexCoordinatorTest.aReplySavedEveryFewSecondsWhileStreamingIsComparedOnceAfterItFinishes`; `aBurstOfSavesIsOneUpdate` |
+| Whether catching up may skip a chat | The recorded version (chat version plus cutting settings, cutter and model) must equal the current one and the chat must not be marked for refresh; a restore marks every chat first | `ConversationIndexCoordinatorTest.alreadyIndexedChatsAreNotTouchedAgainWhenNothingChanged`; `aNewTargetSizeReCutsInTheBackgroundAndUnchangedSearchTextKeepsItsVector`; `aModelChangeReCutsInTheBackgroundAndKeepsTheOldVectorsUntilTheNewIndexIsComplete`; `aRestoreChecksEveryChatMessageByMessageAndNothingIsIndexedTwice` |
+| A chat deleted while its update waits | Deletion removes it from both queues before its delete runs, on the same thread as updates, in one transaction | `ConversationIndexCoordinatorTest.aChatDeletedWhileWaitingForItsUpdateIsNotIndexedAgain`; `ConversationIndexUpkeepInstrumentedTest.deletingAChatRemovesOnlyVectorsNoOtherChatUses` |
+| A chat renamed to a new ID while waiting | The old ID leaves the queues; its entries move in one transaction and the new ID is then compared with the chat as stored | `ConversationIndexCoordinatorTest.renamingAnOlderChatMovesItsEntriesToTheNewIdWithoutReadingAnythingAgain`; `ConversationIndexUpkeepInstrumentedTest.aRenameMovesTheEntriesToTheNewIdInOneStep` |
+| A confirmed message deletion whose save has not landed | The reader reports the chat unavailable while a save is kept; that save reports the change when it lands | `ConversationIndexUpkeepInstrumentedTest.aConfirmedDeletionWhoseSaveHasNotLandedIsNotReadUntilItIs` |
+| Which message text the vector worker rebuilds from | The reader's cached chat is used only while the chat version is unchanged; otherwise the chat is read again | `ConversationIndexUpkeepInstrumentedTest.theIndexFollowsEverySaveThroughTheRealChatStorage` |
+| Work queued while a vector pass runs | A request during a pass runs one more pass after it | `ConversationIndexCoordinatorTest.aVectorRequestDuringAPassRunsOneMorePassAfterIt` |
+
 ### External services and costs
 
 - Obtain model catalogs, capabilities, voice lists, prices, and other provider-controlled information from the provider or an authorized live source. Do not hard-code data that providers can change.

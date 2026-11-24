@@ -5,7 +5,7 @@ package org.teslasoft.assistant.conversation.index
  * transaction contract: every write checks its conditions inside the write
  * and rolls back completely when the chat or message changed before commit.
  */
-internal class MemoryIndex : ConversationIndexStorage, PassageVectorStorage {
+internal class MemoryIndex : ConversationIndexStorage, PassageVectorStorage, ConversationIndexMaintenance {
     data class Row(val chatId: String, val messageId: String, val order: Int, val stamp: MessageStamp, val key: VectorKey)
     data class Vector(val state: String, val blob: ByteArray?)
 
@@ -142,6 +142,35 @@ internal class MemoryIndex : ConversationIndexStorage, PassageVectorStorage {
     }
 
     fun state(key: VectorKey) = vectors[key]?.state
+
+    override fun indexedChatIds(): Set<String> = rows.map { it.chatId }.toSet() + states.keys
+
+    override fun deleteChat(chatId: String) {
+        val keys = rows.filter { it.chatId == chatId }.map { it.key }.toSet()
+        rows = ArrayList(rows.filter { it.chatId != chatId })
+        states.remove(chatId)
+        keys.filter { key -> rows.none { it.key == key } }.forEach { vectors.remove(it) }
+    }
+
+    override fun moveChat(fromChatId: String, toChatId: String) {
+        if (fromChatId == toChatId) return
+        val replaced = rows.filter { it.chatId == toChatId }.map { it.key }.toSet()
+        rows = ArrayList(rows.filter { it.chatId != toChatId }.map { if (it.chatId == fromChatId) it.copy(chatId = toChatId) else it })
+        val moved = states.remove(fromChatId)
+        states.remove(toChatId)
+        states[toChatId] = ChatIndexState(moved?.describedVersion, true, moved?.waitingVectors ?: 0, false)
+        replaced.filter { key -> rows.none { it.key == key } }.forEach { vectors.remove(it) }
+    }
+
+    override fun markAllForRefresh() {
+        for (chatId in indexedChatIds()) beginUpdate(chatId)
+    }
+
+    override fun deleteEverything() {
+        rows = ArrayList()
+        states = HashMap()
+        vectors = LinkedHashMap()
+    }
 }
 
 /** The chat store, in memory: what each message is now. */

@@ -6571,17 +6571,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** A message hidden from the AI keeps its slot (so indexes stay aligned
      *  with the fold-in bookmark) but contributes no words or attachments. */
-    private fun canonicalMessage(message: HashMap<String, Any>): CanonicalConversationMessage {
-        val isBot = message["isBot"] == true
-        if (MessageVisibility.isHidden(message)) {
-            return CanonicalConversationMessage(isBot = isBot, text = "")
-        }
-        return CanonicalConversationMessage(
-            isBot = isBot,
-            text = conversationTextWithoutIncludePayloads(message),
-            includes = if (isBot) emptyList() else includesOf(message)
-        )
-    }
+    private fun canonicalMessage(message: HashMap<String, Any>): CanonicalConversationMessage =
+        org.teslasoft.assistant.ui.chat.ModelFacingMessageText.canonicalMessage(this, message)
 
     /** One snapshot entry per stored message so indexes stay aligned with
      *  the fold-in bookmark; blank entries advance it without being sent. */
@@ -6596,23 +6587,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // A message that just received its permanent ID is saved at once, so
         // a section (or a backup) never refers to an ID that was never stored.
         if (org.teslasoft.assistant.preferences.MessageIdentity.ensure(messages)) saveSettings()
-        val storedMessages = messages
-            .filterNot {
-                it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
-                    it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
-            }
-        val storedCanonical = storedMessages.map(::canonicalMessage)
-        val entries = SummarizerSafeIncludeProjectionBuilder
-            .summarizerConversation(storedCanonical)
-            .mapIndexed { index, it ->
-            val stored = storedMessages.getOrNull(index)
-            org.teslasoft.assistant.util.summarizer.SummarizerController.Entry(
-                isBot = it.isBot,
-                text = it.text,
-                id = stored?.let { m -> org.teslasoft.assistant.preferences.MessageIdentity.idOf(m) }.orEmpty(),
-                timeMillis = stored?.get(ChatAdapter.KEY_MESSAGE_TIME)?.toString()?.toLongOrNull()
-            )
-        }
+        val entries = org.teslasoft.assistant.ui.chat.ModelFacingMessageText
+            .summarizerEntries(this, messages).map { it.second }
         return org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot(
             entries,
             preferences?.getChatSummarizerWindow() ?: 20
@@ -12595,45 +12571,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Canonical conversation text before either Include projection is added. */
     private fun conversationTextWithoutIncludePayloads(
         message: HashMap<String, Any>
-    ): String {
-        val content = message["message"].toString()
-        if (message["isBot"] == true) {
-            // A completed generated image is stored to the model as a file
-            // marker, which means nothing to the model. Replace it with a plain
-            // sentence saying an image exists here and who made it, using the
-            // token-saving summary when one exists (owner request, Aug 16 2026).
-            val groupImage = ParallelResponseSelection.canonicalImage(message)
-            val meta = GeneratedImageMetadata.fromJson(groupImage ?: message[GeneratedImageMetadata.KEY]?.toString())
-            if (groupImage != null && meta?.status == GeneratedImageMetadata.STATUS_COMPLETE)
-                return listOf(content, imageInjectionSentence(meta)).filter { it.isNotBlank() }.joinToString("\n\n")
-            if (meta != null && meta.status == GeneratedImageMetadata.STATUS_COMPLETE) {
-                return imageInjectionSentence(meta)
-            }
-            if (meta == null && content.trimStart().startsWith("~file:")) {
-                return getString(R.string.image_gen_injection_legacy)
-            }
-            if (content.isNotBlank() && MessageCompletionState.isIncomplete(
-                    message[MessageCompletionState.KEY_STATE]?.toString())) {
-                return content + "\n\n" + getString(R.string.message_incomplete_model_note)
-            }
-            return content
-        }
-        return content
-    }
-
-    /** The reminder a completed generated image contributes to the model each
-     *  turn: the token-saving summary (user edit, else summarizer version) or
-     *  the full prompt when no summary exists yet, prefixed by who made it. */
-    private fun imageInjectionSentence(meta: GeneratedImageMetadata): String {
-        val text = meta.effectiveSummary() ?: meta.prompt
-        if (text.isBlank()) return getString(R.string.image_gen_injection_legacy)
-        val res = if (meta.initiatedByUser()) {
-            R.string.image_gen_injection_user
-        } else {
-            R.string.image_gen_injection_model
-        }
-        return getString(res, text)
-    }
+    ): String = org.teslasoft.assistant.ui.chat.ModelFacingMessageText.conversationText(this, message)
 
     /**
      * Resolves every text/image/PDF payload immediately from one canonical
