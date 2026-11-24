@@ -13,6 +13,11 @@
     <integer name="save_icon_error_duration_ms">5000</integer>
     <!-- One step of the progress pop-up's looping dots (Widget.App.ProgressDialog.Dots). -->
     <integer name="progress_dialog_dots_step_ms">450</integer>
+    <!-- One full turn of the chat header's conversation-indexing icon while
+         indexing runs (Widget.App.Chat.HeaderAction.Activity, Step 12). -->
+    <integer name="chat_indexing_icon_turn_ms">1600</integer>
+    <!-- How often the open Indexing Conversations pop-up reads its numbers again. -->
+    <integer name="conversation_indexing_refresh_ms">2000</integer>
     <!-- Header search panel sliding down from / back up under the header. -->
     <integer name="header_search_panel_slide_duration">200</integer>
 </resources>

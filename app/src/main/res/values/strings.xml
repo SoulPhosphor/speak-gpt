@@ -4755,6 +4755,21 @@
     <string name="conversation_index_stopped_text">The conversation index could not be rebuilt, so Index Conversations was turned off. Open RAG Active Memory Settings to try rebuilding the index again.</string>
     <string name="conversation_index_open_rag_settings">Open RAG Active Memory Settings</string>
     <string name="conversation_index_rebuilding">The conversation index is being rebuilt.</string>
+    <!-- Indexing Conversations progress pop-up and header icon (G.16a;
+         Owner, 2026-11-24, Step 12). -->
+    <string name="conversation_indexing_title">Indexing Conversations</string>
+    <plurals name="conversation_indexing_status">
+        <item quantity="one">%1$,d of %2$,d conversation indexed</item>
+        <item quantity="other">%1$,d of %2$,d conversations indexed</item>
+    </plurals>
+    <string name="conversation_indexing_counting">Counting messages to index…</string>
+    <string name="conversation_indexing_paused">Paused</string>
+    <string name="conversation_indexing_explanation">This runs in the background. You can keep chatting.</string>
+    <string name="conversation_indexing_pause">Pause</string>
+    <string name="conversation_indexing_resume">Resume</string>
+    <string name="conversation_indexing_percent">%1$d%%</string>
+    <!-- The header icon's spoken label: the title, then the percentage or the status. -->
+    <string name="conversation_indexing_icon_description">%1$s, %2$s</string>
     <!-- Check Database Integrity: the conversation index's result line
          (owner-approved, 2026-11-24; sentence case after the label). -->
     <string name="health_db_conversation_index">Conversation Index Database</string>

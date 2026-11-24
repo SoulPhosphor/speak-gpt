@@ -377,14 +377,18 @@ with `Status` and `Dots` (the three looping dots). `Model` is an optional
 line under the status row naming the model doing the work ("Using Summarizer
 Model: <model>", model name only, no provider) at the smallest text size the
 app allows (`progress_dialog_model_size`, the message information size); it
-stays hidden when there is no model to name. The title is left-aligned
+stays hidden when there is no model to name. `Explanation` is an optional
+sentence under the status line explaining the work, left-aligned in the
+dialog's main text color (`progress_dialog_explanation_*`). The title is left-aligned
 beside the percentage by the owner's design (Nov 2 2026), an approved
 exception to centered dialog titles. The percentage must come from work
-actually done, never a guess. Spacing and sizes live in `progress_dialog_*`
+actually done, never a guess; before a total exists the percentage is left
+empty and the bar is indeterminate. Spacing and sizes live in `progress_dialog_*`
 dimensions, and the dots' step time in `progress_dialog_dots_step_ms`. Current
-users: the compaction pop-up (`dialog_compaction_progress.xml`) and the Chat
+users: the compaction pop-up (`dialog_compaction_progress.xml`), the Chat
 Outline screen, which shows the same layout with its own title and completion
-text.
+text, and Indexing Conversations (`dialog_conversation_indexing.xml`, Step 12),
+which adds `Explanation` and a `DialogActionRow` of Pause or Resume and Close.
 
 ### Title and explanatory text
 
@@ -1425,6 +1429,18 @@ the right. The gap between lines is `divider_chat_activity_popover`, so it
 appears only between lines that show. It closes on a tap elsewhere, follows
 progress while open, and closes with the icon when the work ends. Sizes live
 in `chat_activity_popover_*` dimensions. Owner: `ui.chat.ChatBackgroundActivity`.
+
+### Chat conversation-indexing icon
+
+The conversation-indexing icon (G.16a; Owner, Nov 24 2026, Step 12) is the
+Material Symbols `sync` icon (`ic_sync`) in the same
+`Widget.App.Chat.HeaderAction.Activity` style as the background-work icon,
+directly after it, or after the drawer icon when that one is hidden. It shows
+only while conversation indexing catches up or is paused by the user. While
+indexing runs it turns, one full turn every `chat_indexing_icon_turn_ms`;
+paused, or with the phone's animations off, it is still. Tapping it opens the
+Indexing Conversations progress pop-up (Progress pop-up, above). Owner:
+`ui.conversationindex.ConversationIndexingIcon`.
 
 ### Error log chat links
 

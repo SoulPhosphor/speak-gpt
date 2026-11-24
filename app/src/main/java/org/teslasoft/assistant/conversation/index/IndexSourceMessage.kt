@@ -112,4 +112,23 @@ object IndexEligibility {
             !message.hiddenFromAi &&
             (!message.isBot || MessageCompletionState.isComplete(message.completionState)) &&
             message.modelText.isNotBlank()
+
+    /**
+     * Messages that would be indexed if they had a permanent ID (G.5a rule 7):
+     * the chat has not been opened since IDs were introduced (G28).
+     */
+    fun unidentified(messages: List<IndexSourceMessage>): Int =
+        messages.count { it.messageId.isBlank() && isEligible(it.copy(messageId = ID_PROBE)) }
+
+    /**
+     * The messages the updater indexes: each eligible message, and a repeated
+     * permanent ID only once. Every one of them gets at least one passage.
+     */
+    fun indexedMessages(messages: List<IndexSourceMessage>): Int {
+        val seen = HashSet<String>()
+        return messages.count { isEligible(it) && seen.add(it.messageId) }
+    }
+
+    /** Stands in for a missing permanent ID when asking whether a message could otherwise be indexed. */
+    private const val ID_PROBE = "unidentified"
 }

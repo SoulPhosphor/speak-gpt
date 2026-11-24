@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Indexing Conversations progress pop-up (G.16a; Owner, 2026-11-24,
+     Step 12): the shared Progress pop-up (Widget.App.ProgressDialog.*) with
+     the explanation beneath the status line, then Pause or Resume and Close
+     on the shared right-aligned action row. All appearance comes from the
+     shared styles. Owner: ui.conversationindex.ConversationIndexingDialog. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout style="@style/Widget.App.ProgressDialog.Content">
+
+        <LinearLayout style="@style/Widget.App.ProgressDialog.HeaderRow">
+
+            <TextView
+                android:id="@+id/indexing_title"
+                style="@style/Widget.App.ProgressDialog.Title"
+                android:text="@string/conversation_indexing_title" />
+
+            <TextView
+                android:id="@+id/indexing_percent"
+                style="@style/Widget.App.ProgressDialog.Percent" />
+        </LinearLayout>
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/indexing_bar"
+            style="@style/Widget.App.ProgressDialog.Bar" />
+
+        <LinearLayout style="@style/Widget.App.ProgressDialog.StatusRow">
+
+            <TextView
+                android:id="@+id/indexing_status"
+                style="@style/Widget.App.ProgressDialog.Status" />
+
+            <TextView
+                android:id="@+id/indexing_dots"
+                style="@style/Widget.App.ProgressDialog.Dots" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/indexing_explanation"
+            style="@style/Widget.App.ProgressDialog.Explanation"
+            android:text="@string/conversation_indexing_explanation" />
+    </LinearLayout>
+
+    <LinearLayout style="@style/Widget.App.Dialog.Actions">
+
+        <org.teslasoft.assistant.ui.widgets.DialogActionRow
+            style="@style/Widget.App.Dialog.Actions.EndRow">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/indexing_pause_resume"
+                style="@style/AppButton.Primary.Inline" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/indexing_close"
+                style="@style/AppButton.Primary.Inline"
+                android:text="@string/btn_close" />
+
+            <androidx.constraintlayout.helper.widget.Flow
+                style="@style/Widget.App.Dialog.Actions.EndRowFlow"
+                app:constraint_referenced_ids="indexing_pause_resume,indexing_close" />
+
+        </org.teslasoft.assistant.ui.widgets.DialogActionRow>
+
+    </LinearLayout>
+
+</LinearLayout>

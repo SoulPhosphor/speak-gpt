@@ -497,6 +497,16 @@
         <item name="android:visibility">gone</item>
     </style>
 
+    <!-- A sentence explaining the work, under the status line (left-aligned
+         explanatory text, in the dialog's main text color). -->
+    <style name="Widget.App.ProgressDialog.Explanation" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/progress_dialog_explanation_gap</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
+        <item name="android:textSize">@dimen/progress_dialog_explanation_size</item>
+    </style>
+
     <style name="Widget.App.Dialog.Actions.EndRow" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

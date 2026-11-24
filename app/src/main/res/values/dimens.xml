@@ -259,6 +259,9 @@
     <dimen name="progress_dialog_model_gap">4dp</dimen>
     <!-- The smallest text the app allows (message information size). -->
     <dimen name="progress_dialog_model_size">@dimen/chat_message_metadata_text_size</dimen>
+    <!-- Widget.App.ProgressDialog.Explanation: a sentence under the status line. -->
+    <dimen name="progress_dialog_explanation_gap">16dp</dimen>
+    <dimen name="progress_dialog_explanation_size">15sp</dimen>
     <!-- Expandable text box (Widget.App.Field.ExpandableBox / ExpandedPanel).
          The expanded panel uses the chat message box's expanded measurements. -->
     <dimen name="field_label_page_top_gap">16dp</dimen>

@@ -126,6 +126,19 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 | Whether a paused or stopped condition is over | Cleared only when the model loaded and passed its check (a vector worker was made) or a recovery's new index passed its check; turning the setting on again is an attempt, not a recovery | `ConversationIndexConditionsTest.aConditionThatRecoveredAndReturnsGetsANewNotice`; `aFailedRecoveryOutlivesItsNoticeUntilARecoveryIsVerified` |
 | Whether a notice is still due when shown | Rechecked on the main thread just before it is shown and marked shown at once; the same ongoing condition is never shown again | `ConversationIndexConditionsTest.aModelProblemGetsOneNoticeAndClosingItKeepsTheCondition`; `aDifferentCauseIsANewConditionWithItsOwnNotice` |
 
+### Changes during waits — Stage 9, Step 12
+
+| Decision | Detect changes during the wait | Verification |
+| --- | --- | --- |
+| Whether a catch-up shows the icon, and which chats are counted | Read on the index's thread when the catch-up starts, from the index and each chat's stored version; a chat counted earlier is read again only when its version changed; nothing left to do never shows the icon | `ConversationIndexProgressTest.theIconNeverAppearsWhenEverythingIsAlreadyIndexedAtStart`; `pausingWhileCountingStopsAtTheNextChatAndResumingCountsOnlyTheRest` |
+| A chat's message count, made by reading it before it is compared | The count keeps the version it was read at and the chat's own update read replaces it; a chat the index describes as stored now is counted from the index, never from an older count; a chat that cannot be read is left out and the count still finishes | `theNumbersFollowTheIndexAndTheCountWithTheSameDefinitionAsTheSettingsStatus`; `aChatThatCannotBeReadWhileCountingIsLeftOutAndTheCountStillFinishes` |
+| Whether numbers read from the index may be shown | Read on the index's thread; a catch-up that started, or counting that resumed, meanwhile throws them away | `numbersReadForAnEarlierCatchUpAreThrownAway` |
+| Whether a finished vector pass ends the catch-up | Only a pass that started after every queued chat of the same catch-up was handled ends it | `aVectorPassThatStartedBeforeEveryChatWasHandledDoesNotEndTheCatchUp`; `turningIndexingOnShowsCountingThenTheRealPercentageAndEndsWhenEverythingIsDone` |
+| Whether work continues after Pause | The saved pause is read before every chat counted or compared, between messages of an update and before every vector; a write or read already running finishes and is kept | `pausingWhileCountingStopsAtTheNextChatAndResumingCountsOnlyTheRest`; `pausingWhileComparingKeepsTheMessagesWrittenAndResumingDoesNotDoThemAgain`; `pausingDuringVectorsKeepsTheFinishedOnesAndResumingNeverReadsOneTwice` |
+| What a paused pop-up shows after a restart | The numbers are saved with the pause only when the count had finished; Resume, turning indexing on and deleting the index clear them; nothing is read until Resume | `thePauseAndItsNumbersSurviveARestartAndNothingRunsUntilResume`; `pausedBeforeTheCountFinishedShowsNoNumbersAfterARestart` |
+| Deletions while paused | A deleted chat's entries are removed at once on the index's thread; a restore removes chats that are gone | `aChatDeletedOrRemovedByARestoreWhilePausedLeavesTheIndexAtOnce` |
+| Which state the icon shows when the setting or a condition changes | Worked out again on every change, one at a time so an older answer never replaces a newer one; the model coming back never clears the user's pause | `theModelBeingUnavailableOrIndexingOffHidesThePausedIconWithoutClearingThePause`; `ConversationIndexingIconInstrumentedTest` |
+
 ### External services and costs
 
 - Obtain model catalogs, capabilities, voice lists, prices, and other provider-controlled information from the provider or an authorized live source. Do not hard-code data that providers can change.

@@ -6,7 +6,7 @@ package org.teslasoft.assistant.conversation.index
  * and rolls back completely when the chat or message changed before commit.
  */
 internal class MemoryIndex : ConversationIndexStorage, PassageVectorStorage, ConversationIndexMaintenance,
-    ConversationIndexSummaries {
+    ConversationIndexSummaries, ConversationIndexMessageProgress {
     data class Row(val chatId: String, val messageId: String, val order: Int, val stamp: MessageStamp, val key: VectorKey)
     data class Vector(val state: String, val blob: ByteArray?)
 
@@ -182,6 +182,22 @@ internal class MemoryIndex : ConversationIndexStorage, PassageVectorStorage, Con
                 otherModelPassages = mine.count { it.key.vectorModel != vectorModel || it.key.vectorDimensions != vectorDimensions }
             )
         }
+
+    override fun messageProgress(vectorModel: String, vectorDimensions: Int): Map<String, MessageProgress> =
+        rows.filter { it.key.vectorModel == vectorModel && it.key.vectorDimensions == vectorDimensions }
+            .groupBy { it.chatId }
+            .mapValues { (_, chatRows) ->
+                val byMessage = chatRows.groupBy { it.messageId }
+                MessageProgress(
+                    messages = byMessage.size,
+                    finished = byMessage.values.count { passages ->
+                        passages.all {
+                            vectors[it.key]?.state == ConversationIndexStore.STATE_MADE ||
+                                vectors[it.key]?.state == ConversationIndexStore.STATE_FAILED
+                        }
+                    }
+                )
+            }
 
     override fun waitingPassages(vectorModel: String, vectorDimensions: Int): Int =
         rows.count {

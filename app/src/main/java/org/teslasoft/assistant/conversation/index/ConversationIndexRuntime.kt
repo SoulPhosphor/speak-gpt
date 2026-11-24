@@ -48,6 +48,40 @@ object ConversationIndexRuntime {
             instance ?: build(context.applicationContext).also { instance = it }
         }
 
+    @Volatile private var progressInstance: IndexProgressTracker? = null
+
+    /** The indexing progress the chat header shows (Step 12). Creating it starts no work. */
+    fun progress(context: Context): IndexProgressTracker =
+        progressInstance ?: synchronized(this) {
+            progressInstance ?: buildProgress(context.applicationContext).also { progressInstance = it }
+        }
+
+    private fun buildProgress(app: Context): IndexProgressTracker {
+        val tracker = IndexProgressTracker(
+            source = AppIndexProgressSource(app, SavedChatIndexSource(app)) { e ->
+                damageFound(app, ConversationIndexErrorLog.cause(e))
+            },
+            pause = SavedEmbeddingPauseState(app),
+            saved = SavedIndexingProgressPrefs(app),
+            runner = IndexTaskRunner.on(executor)
+        )
+        ConversationIndexConditions.addListener { tracker.publish() }
+        tracker.publish()
+        return tracker
+    }
+
+    /** Pause in the progress pop-up: counting, comparing and vectors stop at their next safe point; finished work is kept. */
+    fun pause(context: Context) {
+        progress(context).pause()
+    }
+
+    /** Resume in the progress pop-up: the catch-up continues; finished work is not done again. */
+    fun resume(context: Context) {
+        val app = context.applicationContext
+        progress(app).resume()
+        coordinator(app).resumed()
+    }
+
     /** Indexing runs: the setting is on and no failed recovery is waiting for the user. */
     private fun isOn(app: Context): Boolean =
         ConversationIndexSetting.isOn(app) && !ConversationIndexConditions.recoveryFailed(app)
@@ -59,7 +93,7 @@ object ConversationIndexRuntime {
         val vectors = IndexVectorPasses(
             runPass = { runVectorPass(app, source) },
             runner = IndexTaskRunner.on(vectorExecutor),
-            isOn = { isOn(app) }
+            isOn = { isOn(app) && !progress(app).isPaused }
         )
         return ConversationIndexCoordinator(
             source = source,
@@ -78,7 +112,9 @@ object ConversationIndexRuntime {
             runner = IndexTaskRunner.on(executor),
             isOn = { isOn(app) },
             events = Events(app),
-            recover = { requestedByUser -> recover(app, requestedByUser) }
+            recover = { requestedByUser -> recover(app, requestedByUser) },
+            isPaused = { progress(app).isPaused },
+            progress = progress(app)
         )
     }
 
@@ -91,6 +127,8 @@ object ConversationIndexRuntime {
      */
     fun turnOn(context: Context) {
         val app = context.applicationContext
+        // Turning indexing on deliberately clears the user's pause (Owner, 2026-11-24, Step 12).
+        progress(app).reset()
         ConversationIndexSetting.set(app, true)
         val failed = ConversationIndexConditions.recoveryFailed(app)
         if (failed || ConversationIndexConditions.recoveryPending(app)) {
@@ -123,6 +161,8 @@ object ConversationIndexRuntime {
     fun deleteIndex(context: Context, onDone: (Boolean) -> Unit) {
         val app = context.applicationContext
         ConversationIndexSetting.set(app, false)
+        // Deleting the index clears the user's pause and its progress (Owner, 2026-11-24, Step 12).
+        progress(app).reset()
         coordinator(app).deleteIndex(whenIndexExists = ConversationIndexStore.exists(app)) { failure ->
             val gone = (failure == null || (IndexFailures.isDamage(failure) && removeDamagedFiles(app))) &&
                 removeSetAside(app)
@@ -297,7 +337,9 @@ object ConversationIndexRuntime {
             }
             // The model loaded and passed its check: a paused condition is over.
             ConversationIndexConditions.clearModelProblem(app)
+            val catchUp = progress(app).vectorPassStarting()
             val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering }
+            if (outcome is PassageEmbeddingWorker.Outcome.Finished) progress(app).vectorPassFinished(catchUp)
             reporter(app).vectorPass(outcome, worker.tokenLimit) {
                 try {
                     ConversationIndexStore.get(app).waitingPassages(worker.vectorModel, worker.vectorDimensions)
