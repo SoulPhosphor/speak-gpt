@@ -34,6 +34,28 @@ jobs:
           sdkmanager --install "ndk;26.3.11579264" "cmake;3.22.1"
           chmod +x ./gradlew
 
+      # Robolectric downloads its Android framework jars from Maven Central
+      # while the unit tests run, outside the Gradle cache. Keeping them
+      # avoids repeat downloads that Maven Central has rate-limited (HTTP 429).
+      - name: Cache Robolectric framework jars
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('app/build.gradle') }}
+          restore-keys: |
+            robolectric-${{ runner.os }}-
+
+      - name: Download pinned EmbeddingGemma tokenizer for JVM tests
+        # Real-tokenizer unit tests (PassageSearchTextGemmaTest,
+        # PassageEmbeddingGemmaTest, ScannerQueryWindowsGemmaTest) read it
+        # through GEMMA_TOKENIZER_JSON and fail on CI when it is missing.
+        run: |
+          set -euo pipefail
+          base=https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/5090578d9565bb06545b4552f76e6bc2c93e4a66
+          curl --fail --location --retry 3 "$base/tokenizer.json" -o "$RUNNER_TEMP/tokenizer.json"
+          echo "4dda02faaf32bc91031dc8c88457ac272b00c1016cc679757d1c441b248b9c47  $RUNNER_TEMP/tokenizer.json" | sha256sum --check
+          echo "GEMMA_TOKENIZER_JSON=$RUNNER_TEMP/tokenizer.json" >> "$GITHUB_ENV"
+
       - name: Run unit tests
         # Keep variant compilation and test workers within runner memory.
         run: ./gradlew --no-daemon --max-workers=1 test
