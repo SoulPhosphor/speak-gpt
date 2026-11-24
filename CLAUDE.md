@@ -70,6 +70,8 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 - Add or update meaningful tests for changed behavior. Fix production code when a test legitimately fails. Never disable, weaken, or delete a test just to obtain a passing result. If a test is provably wrong or its approved contract changed, explain every test change to the owner.
 - Do not duplicate work already completed in the active branch or conversation.
 - **Changes during waits.** Before opening a PR for code that waits on a model request, a pause, or background work, list each decision made from stored data, how a change to that data during the wait is detected, and the test that proves it. Fix any gap before review.
+- **Collisions with existing states.** Before opening a PR that adds a state, pause, setting, background task or thread, list every existing state and task it can overlap with (for example a setting turned off, a missing model, a rebuild or recovery, a deletion, a restore, work on another thread) and check what happens when each occurs during the new one, and the new one during each. Fix any gap and add a test for each overlap that changes behavior.
+- **Display logic tested locally.** Put the choice of user-facing wording, status and labels for each state in plain functions with JVM unit tests, so a wrong choice is caught by the local tests, not only by device tests on GitHub.
 
 ### Changes during waits — Stage 6D
 
