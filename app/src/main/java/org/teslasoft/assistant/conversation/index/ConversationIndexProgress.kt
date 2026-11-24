@@ -318,6 +318,16 @@ class IndexProgressTracker(
         if (known) refresh()
     }
 
+    /**
+     * A vector pass stopped for the pause. A vector being read when Pause was
+     * pressed is stored only now, on the vector thread, so the numbers kept
+     * with the pause are read again to include it.
+     */
+    fun vectorPassPaused() {
+        val known = synchronized(lock) { catchingUp && pending.isEmpty() }
+        if (pause.paused && known) refresh()
+    }
+
     /** The user resumed; the caller starts a catch-up, which counts only what changed. */
     fun resume() {
         pause.paused = false

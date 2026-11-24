@@ -153,14 +153,22 @@ class ConversationIndexProgressTest {
     private lateinit var coordinator: ConversationIndexCoordinator
 
     /** Starts the app's indexing as the runtime builds it; called again for a restart. */
+    /**
+     * Where the progress reads its numbers. The app reads them on the index's
+     * thread while vectors are made on another; [readsAtOnce] reads them the
+     * moment they are asked for, as that thread may while a vector is in flight.
+     */
+    private var readsAtOnce = false
+
     private fun start() {
-        tracker = IndexProgressTracker(source, pause, saved, runner)
+        tracker = IndexProgressTracker(source, pause, saved, if (readsAtOnce) IndexTaskRunner { _, task -> task() } else runner)
         val passes = IndexVectorPasses(
             runPass = {
                 passesRun++
                 val catchUp = tracker.vectorPassStarting()
                 PassageEmbeddingWorker(index, chats, reader, vectors, pause).runPass { !settingOn }.also {
                     if (it is PassageEmbeddingWorker.Outcome.Finished) tracker.vectorPassFinished(catchUp)
+                    if (it is PassageEmbeddingWorker.Outcome.Paused) tracker.vectorPassPaused()
                 }
             },
             runner = runner,
@@ -429,6 +437,22 @@ class ConversationIndexProgressTest {
         assertEquals(6, vectors.inputs.size)
         assertEquals(6, vectors.inputs.toSet().size)
         assertEquals(IndexingDisplay.Hidden, tracker.display.value)
+    }
+
+    @Test fun thePausedNumbersIncludeTheVectorBeingReadWhenPauseWasPressed() {
+        readsAtOnce = true
+        start()
+        chats.put("a", shortChat("a"))
+        chats.put("b", shortChat("b"))
+        coordinator.turnedOn()
+        // Pause while the second vector is being read: it is stored after the press.
+        vectors.afterRead = { if (vectors.inputs.size == 2) tracker.pause() }
+        runner.runAll()
+        vectors.afterRead = {}
+        assertEquals(2, index.vectors.count { it.value.state == ConversationIndexStore.STATE_MADE })
+        val kept = IndexingNumbers(percent = 33, indexedChats = 0, totalChats = 2)
+        assertEquals("the saved numbers include the vector stored after the press", kept, saved.value)
+        assertEquals(IndexingDisplay.Paused(kept), tracker.display.value)
     }
 
     @Test fun thePauseAndItsNumbersSurviveARestartAndNothingRunsUntilResume() {

@@ -340,7 +340,11 @@ object ConversationIndexRuntime {
             ConversationIndexConditions.clearModelProblem(app)
             val catchUp = progress(app).vectorPassStarting()
             val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering }
-            if (outcome is PassageEmbeddingWorker.Outcome.Finished) progress(app).vectorPassFinished(catchUp)
+            when (outcome) {
+                is PassageEmbeddingWorker.Outcome.Finished -> progress(app).vectorPassFinished(catchUp)
+                is PassageEmbeddingWorker.Outcome.Paused -> progress(app).vectorPassPaused()
+                else -> Unit
+            }
             reporter(app).vectorPass(outcome, worker.tokenLimit) {
                 try {
                     ConversationIndexStore.get(app).waitingPassages(worker.vectorModel, worker.vectorDimensions)
