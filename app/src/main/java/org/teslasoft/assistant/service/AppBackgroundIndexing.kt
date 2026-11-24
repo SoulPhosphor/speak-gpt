@@ -79,6 +79,8 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
 
         override fun userPaused(): Boolean = ConversationIndexRuntime.progressIfCreated()?.isPaused ?: false
 
+        override fun stalled(): Boolean = ConversationIndexRuntime.progressIfCreated()?.isStalled ?: false
+
         override fun userWorkRunning(): Boolean = try {
             val manager = app.getSystemService(ActivityManager::class.java)
             // Lists only this app's own services.

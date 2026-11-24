@@ -433,8 +433,9 @@ class ConversationIndexCoordinator(
                     }
                     ConversationIndexUpdater.Outcome.Cancelled -> {
                         // Stopped by the closing, not by the user or the setting: the chat is compared
-                        // again first when indexing may run, from where its update stopped.
-                        if (isOn() && !isPaused() && !mayRun()) requeue(chatId, catchingUp)
+                        // again first when indexing may run, from where its update stopped. The permit is
+                        // not read again here, so an opening in between never drops the chat.
+                        if (isOn() && !isPaused()) requeue(chatId, catchingUp)
                         ChatResult.COMPARED
                     }
                     is ConversationIndexUpdater.Outcome.Failed -> {

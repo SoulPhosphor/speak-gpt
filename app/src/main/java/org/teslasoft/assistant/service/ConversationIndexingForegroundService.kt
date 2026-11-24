@@ -66,10 +66,11 @@ class ConversationIndexingForegroundService : Service() {
 
         /** Asks Android to start the service; throws what Android throws. Main thread. */
         fun start(context: Context) {
-            stopWanted = null
             val intent = Intent(context, ConversationIndexingForegroundService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
             else context.startService(intent)
+            // Only a start Android accepted replaces an earlier start's stop request.
+            stopWanted = null
         }
 
         /**
@@ -204,7 +205,7 @@ class ConversationIndexingForegroundService : Service() {
                 val step = try {
                     stepForTest?.invoke() ?: BackgroundIndexingRule.next(
                         progress.display.value, progress.conditions(), progress.isPaused, controller.appVisible,
-                        progress.isStalled
+                        progress.isStalled, controller.continuedByService
                     )
                 } catch (e: Exception) {
                     handler.post { fail(e) }
@@ -265,7 +266,8 @@ class ConversationIndexingForegroundService : Service() {
         stepForTest?.let { (it() as? BackgroundIndexingStep.Show)?.content } ?: ConversationIndexRuntime.progressIfCreated()?.let { progress ->
             (BackgroundIndexingRule.next(
                 progress.display.value, progress.conditions(), progress.isPaused, appVisible = false,
-                stalled = progress.isStalled
+                stalled = progress.isStalled,
+                continued = AppBackgroundIndexing.controller(this).continuedByService
             ) as? BackgroundIndexingStep.Show)?.content
         }
     } catch (_: Exception) {

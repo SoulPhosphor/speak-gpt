@@ -240,8 +240,12 @@ class IndexProgressTracker(
 
     val isPaused: Boolean get() = pause.paused
 
-    /** Whether the catch-up cannot go on by itself: its last vector pass stopped on a failure (Step 13). */
-    val isStalled: Boolean get() = synchronized(lock) { catchingUp && stalled }
+    /**
+     * Whether the catch-up cannot go on by itself (Step 13): every queued chat
+     * was handled, so nothing will ask for another vector pass, and the last
+     * pass stopped on a failure.
+     */
+    val isStalled: Boolean get() = synchronized(lock) { catchingUp && drained && stalled }
 
     /** The Step 11 conditions the display is worked out from. */
     fun conditions(): IndexingConditions = source.conditions()

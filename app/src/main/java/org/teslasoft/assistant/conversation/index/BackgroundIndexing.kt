@@ -16,6 +16,7 @@ enum class BackgroundStopReason(val text: String) {
     MODEL_UNAVAILABLE("the on-device search model is unavailable"),
     REBUILD_FAILED("the conversation index could not be rebuilt"),
     APP_OPENED("the app was opened"),
+    NOT_CONTINUED("indexing is not being continued after the app was closed"),
     INDEXING_FAILED("indexing could not go on after a failure; it continues when the app is opened"),
     USER_WORK_RUNNING("work the user started is running; indexing continues when the app is opened"),
     TIME_LIMIT("Android's time limit for background data work was reached"),
@@ -74,9 +75,11 @@ object BackgroundIndexingRule {
         display: IndexingDisplay,
         conditions: IndexingConditions,
         paused: Boolean,
-        userWorkRunning: Boolean
+        userWorkRunning: Boolean,
+        /** A catch-up that cannot go on by itself is not continued: the service would stop at once. */
+        stalled: Boolean = false
     ): BackgroundStartDecision {
-        if (paused || !conditions.settingOn || conditions.recoveryFailed || conditions.modelUnavailable) {
+        if (paused || stalled || !conditions.settingOn || conditions.recoveryFailed || conditions.modelUnavailable) {
             return BackgroundStartDecision.NOT_NEEDED
         }
         val work = conditions.rebuilding || display is IndexingDisplay.Running
@@ -94,9 +97,13 @@ object BackgroundIndexingRule {
         paused: Boolean,
         appVisible: Boolean,
         /** The catch-up's last vector pass failed and nothing will start another by itself. */
-        stalled: Boolean = false
+        stalled: Boolean = false,
+        /** Whether indexing is being continued by the service; false when a later leave decided against it. */
+        continued: Boolean = true
     ): BackgroundIndexingStep = when {
         appVisible -> BackgroundIndexingStep.Stop(BackgroundStopReason.APP_OPENED)
+        // A service whose start arrived after indexing was closed never runs with nothing to show for it.
+        !continued -> BackgroundIndexingStep.Stop(BackgroundStopReason.NOT_CONTINUED)
         paused -> BackgroundIndexingStep.Stop(BackgroundStopReason.USER_PAUSED)
         conditions.recoveryFailed -> BackgroundIndexingStep.Stop(BackgroundStopReason.REBUILD_FAILED)
         !conditions.settingOn -> BackgroundIndexingStep.Stop(BackgroundStopReason.SETTING_OFF)
@@ -203,6 +210,8 @@ interface BackgroundIndexingPlatform {
     fun display(): IndexingDisplay
     fun conditions(): IndexingConditions
     fun userPaused(): Boolean
+    /** Whether the catch-up cannot go on by itself ([IndexProgressTracker.isStalled]). */
+    fun stalled(): Boolean = false
     /** Whether a data-sync service the user started is running. */
     fun userWorkRunning(): Boolean
     /** Asks Android to start the service; throws what Android throws. */
@@ -235,6 +244,9 @@ class BackgroundIndexingController(
     /** Whether a screen of the app is visible (read by the service on the index's thread). */
     val appVisible: Boolean get() = permit.current == BackgroundIndexingPermit.State.FOREGROUND
 
+    /** Whether the background service is what lets indexing run now (read by the service). */
+    val continuedByService: Boolean get() = permit.current == BackgroundIndexingPermit.State.SERVICE
+
     /** Whether a service start was asked for and has not stopped yet. Main thread. */
     var serviceActive: Boolean = false
         private set
@@ -247,7 +259,8 @@ class BackgroundIndexingController(
     fun appLeft() {
         val decision = try {
             BackgroundIndexingRule.startDecision(
-                platform.display(), platform.conditions(), platform.userPaused(), platform.userWorkRunning()
+                platform.display(), platform.conditions(), platform.userPaused(), platform.userWorkRunning(),
+                platform.stalled()
             )
         } catch (e: Exception) {
             permit.closed()
@@ -270,8 +283,9 @@ class BackgroundIndexingController(
 
     private fun notStartedReason(decision: BackgroundStartDecision): BackgroundStopReason =
         if (decision == BackgroundStartDecision.YIELD) BackgroundStopReason.USER_WORK_RUNNING
-        else (BackgroundIndexingRule.next(platform.display(), platform.conditions(), platform.userPaused(), appVisible = false)
-            as? BackgroundIndexingStep.Stop)?.reason ?: BackgroundStopReason.CATCH_UP_ENDED
+        else (BackgroundIndexingRule.next(
+            platform.display(), platform.conditions(), platform.userPaused(), appVisible = false, stalled = platform.stalled()
+        ) as? BackgroundIndexingStep.Stop)?.reason ?: BackgroundStopReason.CATCH_UP_ENDED
 
     /** Asks Android for the service; a refusal is handled at once. */
     fun startService() {
