@@ -118,6 +118,9 @@ class ConversationIndexProgressTest {
     private val vectors = Vectors()
     private var settingOn = true
     private var modelUnavailable = false
+    private var modelInstalled = true
+    private var modelReports = 0
+    private var passesRun = 0
     private val reader = SearchTextReader(
         vectorModel = MODEL, vectorDimensions = DIMENSIONS, hardLimit = 400,
         prefixFor = { "title: $it | text: " }, countModelInput = ::words
@@ -154,22 +157,27 @@ class ConversationIndexProgressTest {
         tracker = IndexProgressTracker(source, pause, saved, runner)
         val passes = IndexVectorPasses(
             runPass = {
+                passesRun++
                 val catchUp = tracker.vectorPassStarting()
                 PassageEmbeddingWorker(index, chats, reader, vectors, pause).runPass { !settingOn }.also {
                     if (it is PassageEmbeddingWorker.Outcome.Finished) tracker.vectorPassFinished(catchUp)
                 }
             },
             runner = runner,
-            isOn = { settingOn && !tracker.isPaused }
+            // As in the runtime: a pass while paused loads the model and stops at once.
+            isOn = { settingOn }
         )
         coordinator = ConversationIndexCoordinator(
             source = chats,
             storage = { index },
             maintenance = { index },
-            updaterFor = { updater },
+            updaterFor = { updater.takeIf { modelInstalled } },
             requestVectors = passes::request,
             runner = runner,
             isOn = { settingOn },
+            events = object : IndexEvents {
+                override fun modelUnavailable(cause: Exception?) { modelReports++ }
+            },
             isPaused = { tracker.isPaused },
             progress = tracker,
             clock = { runner.now }
@@ -491,6 +499,32 @@ class ConversationIndexProgressTest {
         coordinator.chatSetReplaced()
         runner.runAll()
         assertTrue(index.rows.isEmpty())
+        assertTrue(pause.paused)
+    }
+
+    @Test fun aModelRemovedOrReturningWhilePausedIsStillNoticedWithoutIndexingAnything() {
+        chats.put("a", shortChat("a"))
+        coordinator.turnedOn()
+        runner.runAll()
+        chats.put("a", shortChat("a") + user("a-u3", "Later"))
+        tracker.pause()
+        val reads = chats.reads.size
+        val read = vectors.inputs.size
+
+        modelInstalled = false
+        coordinator.embeddingModelChanged()
+        runner.runAll()
+        assertEquals("the removed model is reported while paused", 1, modelReports)
+
+        modelInstalled = true
+        val passes = passesRun
+        coordinator.embeddingModelChanged()
+        runner.runAll()
+        assertTrue("a pass loads the returning model", passesRun > passes)
+        assertEquals(1, modelReports)
+        assertEquals("nothing is counted or compared while paused", reads, chats.reads.size)
+        assertEquals("nothing is embedded while paused", read, vectors.inputs.size)
+        assertFalse(index.indexedMessages("a").containsKey("a-u3"))
         assertTrue(pause.paused)
     }
 

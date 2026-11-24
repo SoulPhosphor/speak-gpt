@@ -219,26 +219,29 @@ class ConversationIndexCoordinator(
             emptySet()
         }
         gone.forEach { id -> guarded(id) { maintenance().deleteChat(id) } }
+        val updater = if (chats.isEmpty()) null else try {
+            updaterFor().also { if (it == null) report { events.modelUnavailable(null) } }
+        } catch (e: Exception) {
+            report { events.modelUnavailable(e) }
+            null
+        }
         if (isPaused()) {
-            // Resuming starts the catch-up again; nothing waits in the queues meanwhile.
+            // Resuming starts the catch-up again; nothing waits in the queues meanwhile. The model
+            // is still checked, so a removed or returning model is noticed while paused: a vector
+            // pass loads it and stops at once, reading nothing.
             synchronized(lock) {
                 catchUp.clear()
                 toCount.clear()
             }
+            if (updater != null) requestVectorsSafely()
             return
         }
-        val counting = if (chats.isEmpty()) emptyList() else {
-            val updater = try {
-                updaterFor().also { if (it == null) report { events.modelUnavailable(null) } }
-            } catch (e: Exception) {
-                report { events.modelUnavailable(e) }
-                null
-            }
-            if (updater == null) {
-                // Nothing can be counted or cut without the model: indexing waits, as in [drain].
-                stopCatchUp()
-                return
-            }
+        if (chats.isNotEmpty() && updater == null) {
+            // Nothing can be counted or cut without the model: indexing waits, as in [drain].
+            stopCatchUp()
+            return
+        }
+        val counting = if (updater == null) emptyList() else {
             try { progress.catchUpStarted(chats, updater.settingsKey) } catch (_: Exception) { emptyList() }
         }
         synchronized(lock) {

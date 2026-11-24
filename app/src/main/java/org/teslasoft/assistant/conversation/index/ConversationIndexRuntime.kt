@@ -93,7 +93,8 @@ object ConversationIndexRuntime {
         val vectors = IndexVectorPasses(
             runPass = { runVectorPass(app, source) },
             runner = IndexTaskRunner.on(vectorExecutor),
-            isOn = { isOn(app) && !progress(app).isPaused }
+            // A pass while paused only loads the model, so its availability is known, and stops at once.
+            isOn = { isOn(app) }
         )
         return ConversationIndexCoordinator(
             source = source,

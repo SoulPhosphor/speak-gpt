@@ -3732,7 +3732,9 @@ reading them in the background, with no percentage, a moving bar and
 "Counting messages to index…"; chats already described are counted from the
 index. Pause (the vector worker's saved pause) stops counting, comparing,
 cutting and vectors at their next safe point and keeps finished work; while
-paused, new messages wait, deleted chats still leave the index at once, and
+paused, new messages wait, deleted chats still leave the index at once, a
+removed or returning model is still noticed (a vector pass loads the model
+and stops at once), and
 edited or deleted messages are kept from recall by recall's own check of the
 current message (Steps 14 to 16). The paused pop-up keeps the percentage and
 bar, still, also after a restart; paused before the count finished, it shows
