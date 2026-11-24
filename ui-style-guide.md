@@ -275,6 +275,13 @@ right-aligned Cancel-then-Save row uses `layout/dialog_two_actions_end.xml`
 only where that arrangement is explicitly approved by the feature spec; it is
 not the general default.
 
+`AppButton.Destructive.Inline.Centered` is the label-sized destructive button
+centered on its own line, for vertical (LinearLayout) hosts.
+`AppButton.Destructive.Inline.Centered.BelowStatus` places it beneath a
+section's status line (`Widget.App.Section.Status`), adding only the gap above
+it (`section_status_action_gap`). First user: **Delete Conversation Index** in
+RAG Active Memory Settings.
+
 A future inline secondary button should inherit `AppButton.Secondary` and change only its geometry.
 
 ## Dialogs
@@ -964,6 +971,16 @@ The required order is:
 3. the section's controls.
 
 The user must receive the explanation before reaching the control that depends on it. Do not place explanatory text beneath the button, switch, field, or other control it explains.
+
+### Section status line
+
+`Widget.App.Section.Status`
+
+Use for a live status line that reports a section's current state beneath its
+controls, such as the Conversation Index counts and its ongoing condition
+(rebuilding, paused, stopped). It has the section explanation's typography and
+is a separate name so status lines can be restyled on their own. It is not
+explanatory text and does not replace `Widget.App.Section.Hint` above a control.
 
 ## Summary sections
 

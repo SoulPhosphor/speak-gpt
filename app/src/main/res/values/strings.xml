@@ -2419,7 +2419,7 @@
          Status now leads; see MemoryBackupRestoreActivity's class doc) -->
     <string name="backup_db_health_section">Database Health</string>
     <string name="backup_check_integrity">Check Database Integrity</string>
-    <string name="backup_check_integrity_hint">Checks the memory, lorebook, and user image databases for problems. Chats are not included.</string>
+    <string name="backup_check_integrity_hint">Checks the memory, lorebook, user image, and conversation index databases for problems. Saved chats are not checked.</string>
     <string name="backup_db_name_memory">Memory Database</string>
     <string name="backup_db_name_lorebook">Lorebook Database</string>
     <string name="backup_db_name_user_image">User Image Database</string>
@@ -4729,4 +4729,37 @@
     <string name="mem_pair_edited">Changes saved. This suggestion is still pending.</string>
     <string name="mem_pair_discarded">Suggestion discarded. The other suggestion is still pending.</string>
     <string name="mem_pair_kept">Both suggestions are still pending.</string>
+    <!-- Conversation Index (memory development plan G.16a, G.13a and Step 11;
+         wording approved by the owner on 2026-11-11 and 2026-11-24). -->
+    <string name="conversation_index_section">Conversation Index</string>
+    <string name="conversation_index_toggle">Index Conversations</string>
+    <string name="conversation_index_toggle_hint">Builds a searchable index of your conversations on this device. Indexing is entirely local.</string>
+    <plurals name="conversation_index_status_indexed">
+        <item quantity="one">%1$,d conversation indexed</item>
+        <item quantity="other">%1$,d conversations indexed</item>
+    </plurals>
+    <plurals name="conversation_index_status_need_opening">
+        <item quantity="one">%1$,d conversation needs to be opened before it can be indexed.</item>
+        <item quantity="other">%1$,d conversations need to be opened before they can be indexed.</item>
+    </plurals>
+    <string name="conversation_index_delete">Delete Conversation Index</string>
+    <string name="conversation_index_delete_title">Delete Conversation Index?</string>
+    <string name="conversation_index_delete_text">This deletes the searchable index stored on this device. You can rebuild it by turning Index Conversations on again.</string>
+    <string name="conversation_index_model_needed_title">On-Device Search Model Needed</string>
+    <string name="conversation_index_model_needed_text">Indexing conversations requires an on-device search model. Install one in AI Settings &gt; Embedding Model, then turn Index Conversations on.</string>
+    <string name="conversation_index_open_model_settings">Open Model Settings</string>
+    <string name="conversation_index_paused_title">Indexing Paused</string>
+    <string name="conversation_index_paused_model_removed">Indexing has paused because the on-device search model is no longer installed. Reinstall it in AI Settings &gt; Embedding Model. Indexing will resume automatically when the model is available.</string>
+    <string name="conversation_index_paused_model_cannot_load">Indexing has paused because the installed on-device search model could not be loaded. Reinstall it in AI Settings &gt; Embedding Model. Indexing will resume when the model can be loaded.</string>
+    <string name="conversation_index_stopped_title">Indexing Stopped</string>
+    <string name="conversation_index_stopped_text">The conversation index could not be rebuilt, so Index Conversations was turned off. Open RAG Active Memory Settings to try rebuilding the index again.</string>
+    <string name="conversation_index_open_rag_settings">Open RAG Active Memory Settings</string>
+    <string name="conversation_index_rebuilding">The conversation index is being rebuilt.</string>
+    <!-- Check Database Integrity: the conversation index's result line
+         (owner-approved, 2026-11-24; sentence case after the label). -->
+    <string name="health_db_conversation_index">Conversation Index Database</string>
+    <string name="health_check_index_ok">%1$s: No problems found.</string>
+    <string name="health_check_index_unchecked">%1$s: Could not be checked.</string>
+    <string name="health_check_index_rebuilding">%1$s: The conversation index is being rebuilt.</string>
+    <string name="health_check_index_failed">%1$s: The conversation index could not be rebuilt. Index Conversations is off. Open RAG Active Memory Settings to try again.</string>
 </resources>

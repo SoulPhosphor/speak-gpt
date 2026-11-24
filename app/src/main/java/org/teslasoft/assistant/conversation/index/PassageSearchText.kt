@@ -41,16 +41,29 @@ class SearchTextReader(
     fun count(title: String, searchText: String): Int = countModelInput(modelInput(title, searchText))
 
     /** Changes whenever the model, its limit or the prefix form change, so passages are cut again. */
-    val key: String = listOf(
-        vectorModel,
-        vectorDimensions.toString(),
-        hardLimit.toString(),
-        IndexFingerprint.of(prefixFor(KEY_PROBE))
-    ).joinToString("|")
+    val key: String = keyOf(vectorModel, vectorDimensions, hardLimit, prefixFor)
 
     companion object {
         private const val EMPTY_TITLE = "title: none"
         private const val KEY_PROBE = "\u0000"
+
+        private fun keyOf(vectorModel: String, vectorDimensions: Int, hardLimit: Int, prefixFor: (String) -> String) =
+            listOf(
+                vectorModel,
+                vectorDimensions.toString(),
+                hardLimit.toString(),
+                IndexFingerprint.of(prefixFor(KEY_PROBE))
+            ).joinToString("|")
+
+        private fun prefixOf(model: EmbeddingModels.Model): (String) -> String =
+            { title -> model.documentPrefix.replaceFirst(EMPTY_TITLE, "title: $title") }
+
+        /**
+         * The [key] of [forEmbeddingModel]'s reader for [model], worked out
+         * without loading its tokenizer (the settings status, Step 11).
+         */
+        fun keyFor(model: EmbeddingModels.Model): String =
+            keyOf(model.embeddingTag, model.dimensions, model.storedTextMaxTokens, prefixOf(model))
 
         /** A title is one plain line without the slot separator. */
         fun checkedTitle(title: String): String {
@@ -73,7 +86,7 @@ class SearchTextReader(
                 vectorModel = model.embeddingTag,
                 vectorDimensions = model.dimensions,
                 hardLimit = model.storedTextMaxTokens,
-                prefixFor = { title -> model.documentPrefix.replaceFirst(EMPTY_TITLE, "title: $title") },
+                prefixFor = prefixOf(model),
                 countModelInput = tokenizer::countTokens
             )
         }

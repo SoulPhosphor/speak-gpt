@@ -5,19 +5,6 @@
 package org.teslasoft.assistant.conversation.index
 
 import android.content.Context
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
-
-/**
- * Whether conversation indexing runs. **Owner (2026-11-24):** the Step 10
- * hookups stay inert until Step 11's Index Conversations setting turns them
- * on, so nothing changes in normal use before that setting exists. This is
- * not a setting and is not saved: it is off whenever the app starts, and
- * only tests turn it on.
- */
-object ConversationIndexActivation {
-    @Volatile var isOn: Boolean = false
-}
 
 /** The cutting settings indexing uses (memory development plan G.5b). */
 object ConversationIndexSettings {
@@ -34,10 +21,14 @@ object ConversationIndexSettings {
 
 /**
  * The one-line hookups the chat flows call (G.12). Each returns at once:
- * when indexing is off it does nothing, and otherwise it only records the
- * change and hands the work to the index's background thread. Nothing here
- * can throw into, slow down or change the calling chat operation
- * (G.5a rule 10).
+ * when Index Conversations is off it does nothing, and otherwise it only
+ * records the change and hands the work to the index's background thread.
+ * Nothing here can throw into, slow down or change the calling chat
+ * operation (G.5a rule 10).
+ *
+ * A deleted or renamed chat is also followed while the setting is off but an
+ * index exists, because turning indexing off keeps the index (Owner,
+ * 2026-11-24) and nothing derived from a deleted chat may stay in it.
  */
 object ConversationIndexHooks {
 
@@ -47,13 +38,13 @@ object ConversationIndexHooks {
         it.chatChanged(chatId)
     }
 
-    fun chatsDeleted(context: Context, chatIds: Collection<String>) = hand(context) {
+    fun chatsDeleted(context: Context, chatIds: Collection<String>) = hand(context, whileIndexExists = true) {
         chatIds.forEach(ConversationIndexChatChanges::changed)
         it.chatsDeleted(chatIds.toList())
     }
 
     /** A rename moved the chat to a new ID (the older-chat rename path). */
-    fun chatRenamed(context: Context, oldChatId: String, newChatId: String) = hand(context) {
+    fun chatRenamed(context: Context, oldChatId: String, newChatId: String) = hand(context, whileIndexExists = true) {
         ConversationIndexChatChanges.changed(oldChatId)
         ConversationIndexChatChanges.changed(newChatId)
         it.chatMoved(oldChatId, newChatId)
@@ -64,64 +55,27 @@ object ConversationIndexHooks {
 
     fun embeddingModelChanged(context: Context) = hand(context) { it.embeddingModelChanged() }
 
-    fun appStarted(context: Context) = hand(context) { it.appStarted() }
-
-    private inline fun hand(context: Context, block: (ConversationIndexCoordinator) -> Unit) {
-        if (!ConversationIndexActivation.isOn) return
+    fun appStarted(context: Context) {
+        if (!ConversationIndexSetting.isOn(context)) return
         try {
-            block(coordinator(context))
+            ConversationIndexRuntime.appStarted(context)
         } catch (_: Exception) {
             // The index is derived; a failure here never reaches the chat.
         }
     }
 
-    @Volatile private var instance: ConversationIndexCoordinator? = null
-
-    /** Created on first use, so nothing is started while indexing is off. */
-    private val executor: ScheduledExecutorService by lazy {
-        Executors.newSingleThreadScheduledExecutor { r ->
-            Thread(r, "conversation-index-upkeep").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
-        }
-    }
-
-    private fun coordinator(context: Context): ConversationIndexCoordinator =
-        instance ?: synchronized(this) {
-            instance ?: build(context.applicationContext).also { instance = it }
-        }
-
-    /** Creating it opens nothing; the store and the model are opened on the background threads. */
-    private fun build(app: Context): ConversationIndexCoordinator {
-        val source = SavedChatIndexSource(app)
-        val runner = IndexTaskRunner.on(executor)
-        val isOn = { ConversationIndexActivation.isOn }
-        val vectors = IndexVectorPasses(
-            runPass = { PassageEmbeddingWorker.forInstalledModel(app, source)?.runPass { !isOn() } },
-            runner = IndexTaskRunner.on(vectorExecutor),
-            isOn = isOn
-        )
-        return ConversationIndexCoordinator(
-            source = source,
-            storage = { ConversationIndexStore.get(app) },
-            maintenance = { ConversationIndexStore.get(app) },
-            updaterFor = {
-                SearchTextReader.forInstalledModel(app)?.let { reader ->
-                    ConversationIndexUpdater(
-                        ConversationIndexStore.get(app), reader,
-                        ConversationIndexSettings.TARGET_TOKENS.coerceAtMost(reader.hardLimit),
-                        ConversationIndexSettings.OVERLAP_WORDS
-                    )
-                }
-            },
-            requestVectors = vectors::request,
-            runner = runner,
-            isOn = isOn
-        )
-    }
-
-    /** Vector passes run on their own thread, so a long pass never holds up the upkeep of the chats. */
-    private val vectorExecutor: ScheduledExecutorService by lazy {
-        Executors.newSingleThreadScheduledExecutor { r ->
-            Thread(r, "conversation-index-vectors").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
+    private inline fun hand(
+        context: Context,
+        whileIndexExists: Boolean = false,
+        block: (ConversationIndexCoordinator) -> Unit
+    ) {
+        try {
+            if (!ConversationIndexSetting.isOn(context) &&
+                !(whileIndexExists && ConversationIndexStore.exists(context))
+            ) return
+            block(ConversationIndexRuntime.coordinator(context))
+        } catch (_: Exception) {
+            // The index is derived; a failure here never reaches the chat.
         }
     }
 }

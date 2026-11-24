@@ -20,6 +20,29 @@ fun interface IndexTaskRunner {
 }
 
 /**
+ * What the coordinator reports while it works (Step 11): the settings,
+ * notices and Error Log follow from these. Each is called on the index's
+ * background thread and must not throw.
+ */
+interface IndexEvents {
+    /** No updater could be made: the model is missing or its tokenizer cannot load. Indexing waits. */
+    fun modelUnavailable(cause: Exception?) {}
+
+    /** A chat's update or upkeep failed; it stays marked for a refresh. */
+    fun chatFailed(chatId: String, cause: Exception) {}
+
+    /** A chat was compared and the index describes it as stored. */
+    fun chatIndexed(chatId: String) {}
+
+    /** An operation not tied to one chat failed. */
+    fun indexFailed(cause: Exception) {}
+
+    companion object {
+        val NONE = object : IndexEvents {}
+    }
+}
+
+/**
  * Keeps the conversation index in step with the chats (memory development
  * plan G.12, Step 10). The hookups only report what happened; everything
  * here runs on one background thread, a chat at a time, so no chat operation
@@ -49,6 +72,13 @@ class ConversationIndexCoordinator(
     private val requestVectors: () -> Unit,
     private val runner: IndexTaskRunner,
     private val isOn: () -> Boolean = { true },
+    private val events: IndexEvents = IndexEvents.NONE,
+    /**
+     * Recovers a damaged index (G.13a, Step 11); true when the index can be
+     * used again and should be caught up. [requestedByUser]: the user turned
+     * the setting on after a failed recovery.
+     */
+    private val recover: (requestedByUser: Boolean) -> Boolean = { false },
     private val changeWaitMillis: Long = CHANGE_WAIT_MILLIS,
     private val catchUpPauseMillis: Long = CATCH_UP_PAUSE_MILLIS,
     /** Milliseconds on a clock that only moves forward. */
@@ -79,7 +109,7 @@ class ConversationIndexCoordinator(
             ids.forEach { changed.remove(it) }
             catchUp.removeAll(ids)
         }
-        runner.run(0) { guarded { ids.forEach { maintenance().deleteChat(it) } } }
+        runner.run(0) { ids.forEach { id -> guarded(id) { maintenance().deleteChat(id) } } }
     }
 
     /** A rename changed the chat's ID: its entries move to the new ID and are checked again (G.5a rule 9). */
@@ -90,8 +120,8 @@ class ConversationIndexCoordinator(
             catchUp.remove(fromChatId)
         }
         runner.run(0) {
-            val moved = guarded { maintenance().moveChat(fromChatId, toChatId) }
-            if (!moved) guarded { maintenance().deleteChat(fromChatId) }
+            val moved = guarded(fromChatId) { maintenance().moveChat(fromChatId, toChatId) }
+            if (!moved) guarded(fromChatId) { maintenance().deleteChat(fromChatId) }
             chatChanged(toChatId)
         }
     }
@@ -103,7 +133,7 @@ class ConversationIndexCoordinator(
      */
     fun chatSetReplaced() {
         runner.run(0) {
-            guarded { maintenance().markAllForRefresh() }
+            guarded(null) { maintenance().markAllForRefresh() }
             catchUpAll()
         }
     }
@@ -118,22 +148,55 @@ class ConversationIndexCoordinator(
         runner.run(0) { catchUpAll() }
     }
 
-    /** The user deletes the index (G.12): everything derived is removed; the chats are untouched. */
-    fun deleteIndex() {
+    /**
+     * The user deletes the index (G.12): everything derived is removed; the
+     * chats are untouched. [onDone] runs on the index's thread with null
+     * when the deletion committed, or what made it fail.
+     */
+    fun deleteIndex(onDone: (Exception?) -> Unit = {}) {
         synchronized(lock) {
             changed.clear()
             catchUp.clear()
             staleRetries.clear()
         }
-        runner.run(0) { guarded { maintenance().deleteEverything() } }
+        runner.run(0) {
+            val failure = try {
+                maintenance().deleteEverything()
+                null
+            } catch (e: Exception) {
+                e
+            }
+            try { onDone(failure) } catch (_: Exception) { }
+        }
+    }
+
+    /**
+     * Recovers a damaged index on the index's thread, then catches up every
+     * chat when the index can be used again (G.13a, Step 11).
+     */
+    fun recoverIndex(requestedByUser: Boolean = false) {
+        runner.run(0) {
+            val usable = try { recover(requestedByUser) } catch (_: Exception) { false }
+            if (usable) catchUpAll()
+        }
+    }
+
+    /** The setting was turned on: existing chats are caught up, newest first. */
+    fun turnedOn() {
+        runner.run(0) { catchUpAll() }
     }
 
     private fun catchUpAll() {
         if (!isOn()) return
         val chats = try { source.chatIdsNewestFirst() } catch (_: Exception) { null } ?: return
         val live = chats.toSet()
-        val gone = try { maintenance().indexedChatIds() - live } catch (_: Exception) { emptySet() }
-        gone.forEach { guarded { maintenance().deleteChat(it) } }
+        val gone = try {
+            maintenance().indexedChatIds() - live
+        } catch (e: Exception) {
+            report { events.indexFailed(e) }
+            emptySet()
+        }
+        gone.forEach { id -> guarded(id) { maintenance().deleteChat(id) } }
         synchronized(lock) {
             catchUp.clear()
             catchUp.addAll(chats)
@@ -176,6 +239,15 @@ class ConversationIndexCoordinator(
         }
         val (chatId, catchingUp) = next
         val result = updateChat(chatId, catchingUp)
+        if (result == ChatResult.NO_MODEL) {
+            // Nothing can be cut without the model: indexing waits. The chats are
+            // compared again by their stored version once the model works.
+            synchronized(lock) {
+                changed.clear()
+                catchUp.clear()
+            }
+            return
+        }
         if (result == ChatResult.WROTE && !catchingUp) requestVectorsSafely()
         val more = synchronized(lock) { changed.isNotEmpty() || catchUp.isNotEmpty() }
         // Only a chat that was actually compared is followed by a pause.
@@ -183,10 +255,18 @@ class ConversationIndexCoordinator(
         if (more) scheduleDrain(pause) else requestVectorsSafely()
     }
 
-    private enum class ChatResult { SKIPPED, COMPARED, WROTE }
+    private enum class ChatResult { SKIPPED, COMPARED, WROTE, NO_MODEL }
 
     private fun updateChat(chatId: String, catchingUp: Boolean): ChatResult = try {
-        val updater = updaterFor() ?: return ChatResult.SKIPPED
+        val updater = try {
+            updaterFor()
+        } catch (e: Exception) {
+            report { events.modelUnavailable(e) }
+            return ChatResult.NO_MODEL
+        } ?: run {
+            report { events.modelUnavailable(null) }
+            return ChatResult.NO_MODEL
+        }
         val settings = updater.settingsKey
         // Catching up, a chat whose index already describes it as stored now is
         // left alone without reading its history: the version check is cheap.
@@ -208,6 +288,7 @@ class ConversationIndexCoordinator(
                 )) {
                     is ConversationIndexUpdater.Outcome.Updated -> {
                         synchronized(lock) { staleRetries.remove(chatId) }
+                        report { events.chatIndexed(chatId) }
                         if (outcome.written + outcome.restamped + outcome.removed > 0) ChatResult.WROTE
                         else ChatResult.COMPARED
                     }
@@ -215,12 +296,16 @@ class ConversationIndexCoordinator(
                         retryAfterChange(chatId)
                         ChatResult.COMPARED
                     }
-                    ConversationIndexUpdater.Outcome.Cancelled, is ConversationIndexUpdater.Outcome.Failed ->
+                    ConversationIndexUpdater.Outcome.Cancelled -> ChatResult.COMPARED
+                    is ConversationIndexUpdater.Outcome.Failed -> {
+                        report { events.chatFailed(chatId, outcome.cause) }
                         ChatResult.COMPARED
+                    }
                 }
             }
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        report { events.chatFailed(chatId, e) }
         ChatResult.COMPARED
     }
 
@@ -243,11 +328,17 @@ class ConversationIndexCoordinator(
         try { requestVectors() } catch (_: Exception) { }
     }
 
-    private inline fun guarded(block: () -> Unit): Boolean = try {
+    /** Runs [block]; a failure is reported for [chatId], or for the index when null. */
+    private inline fun guarded(chatId: String?, block: () -> Unit): Boolean = try {
         block()
         true
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        report { if (chatId != null) events.chatFailed(chatId, e) else events.indexFailed(e) }
         false
+    }
+
+    private inline fun report(block: () -> Unit) {
+        try { block() } catch (_: Exception) { }
     }
 
     companion object {

@@ -71,6 +71,9 @@ class MemoryControlsActivity : SettingsPageActivity() {
 
     private var textMemoryEngineValue: TextView? = null
 
+    /** Conversation Index (G.16a, Step 11); its behaviour is in its own file. */
+    private var conversationIndexSection: org.teslasoft.assistant.ui.conversationindex.ConversationIndexSection? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
@@ -82,11 +85,25 @@ class MemoryControlsActivity : SettingsPageActivity() {
         bindViews()
         applyTheme()
         initLogic()
+        conversationIndexSection = org.teslasoft.assistant.ui.conversationindex.ConversationIndexSection(
+            this, findViewById(R.id.section_conversation_index)
+        )
     }
 
     override fun onResume() {
         super.onResume()
         refreshEngineRow()
+        conversationIndexSection?.onResume()
+    }
+
+    override fun onPause() {
+        conversationIndexSection?.onPause()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        conversationIndexSection?.onDestroy()
+        super.onDestroy()
     }
 
     private fun bindViews() {

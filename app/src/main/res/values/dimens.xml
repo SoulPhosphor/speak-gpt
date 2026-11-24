@@ -31,6 +31,9 @@
     <dimen name="card_section_gap">12dp</dimen>
     <!-- Space between a screen's intro text and the action centered below it. -->
     <dimen name="screen_intro_action_gap">12dp</dimen>
+    <!-- Above a label-sized action that follows a section's status line
+         (AppButton.Destructive.Inline.Centered.BelowStatus). -->
+    <dimen name="section_status_action_gap">16dp</dimen>
     <!-- Space between the header and a Screen.Intro that opens a Page.Content body. -->
     <dimen name="screen_intro_page_top_gap">16dp</dimen>
 

@@ -53,7 +53,18 @@ data class ChatIndexState(
     val describedVersion: String?,
     val needsRefresh: Boolean,
     val waitingVectors: Int,
-    val fullyIndexed: Boolean
+    /**
+     * Every passage has its vector: none is waiting and none failed. A failed
+     * vector is never retried for the same text, so it is not indexed (Owner,
+     * 2026-11-24).
+     */
+    val fullyIndexed: Boolean,
+    /**
+     * Messages of the described version that could be indexed but have no
+     * permanent ID yet (G.5a rule 7): the chat has not been opened since IDs
+     * were introduced.
+     */
+    val unidentifiedMessages: Int = 0
 )
 
 enum class IndexWrite {
@@ -104,12 +115,14 @@ interface ConversationIndexStorage {
     /**
      * Records that the index describes [chatVersion], when the indexed
      * messages are exactly [expected] and the chat is unchanged; otherwise
-     * leaves the chat marked as needing a refresh.
+     * leaves the chat marked as needing a refresh. [unidentifiedMessages] is
+     * recorded with it ([ChatIndexState.unidentifiedMessages]).
      */
     fun finishUpdate(
         chatId: String,
         chatVersion: String,
         expected: Map<String, MessageStamp>,
+        unidentifiedMessages: Int,
         chatUnchanged: () -> Boolean
     ): IndexWrite
 }

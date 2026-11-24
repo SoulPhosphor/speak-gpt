@@ -180,6 +180,18 @@
         <item name="android:layout_height">wrap_content</item>
     </style>
 
+    <!-- The label-sized destructive button centered on its own line, for
+         vertical (LinearLayout) hosts. BelowStatus places it beneath a
+         section's status line (Widget.App.Section.Status), e.g. Delete
+         Conversation Index. -->
+    <style name="AppButton.Destructive.Inline.Centered" parent="AppButton.Destructive.Inline">
+        <item name="android:layout_gravity">center_horizontal</item>
+    </style>
+
+    <style name="AppButton.Destructive.Inline.Centered.BelowStatus">
+        <item name="android:layout_marginTop">@dimen/section_status_action_gap</item>
+    </style>
+
     <!-- Shared removable token used when a form turns a selected value into
          an individually removable chip. Model Rule targets and tags use the
          same geometry; the target chip may additionally show ic_report when
@@ -1985,6 +1997,11 @@
         <item name="android:textColor">?attr/appSubtleTextColor</item>
         <item name="android:textSize">13sp</item>
     </style>
+
+    <!-- A section's live status line beneath its controls, such as the
+         Conversation Index count. Same typography as the section explanation;
+         a separate name so status lines can be restyled on their own. -->
+    <style name="Widget.App.Section.Status" parent="Widget.App.Section.Hint" />
 
     <!-- Plain standalone paragraph at the top of a screen, with no title of
          its own above it (owner ruling, July 26 2026). Distinct from both

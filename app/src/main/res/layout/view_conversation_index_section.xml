@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Conversation Index section of RAG Active Memory Settings (memory development
+  plan G.16a, Step 11): heading, the Index Conversations toggle with its
+  explanation, the status lines and Delete Conversation Index. Behaviour lives
+  in ConversationIndexSection; appearance comes from the shared styles only.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/section_conversation_index"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        style="@style/Widget.App.Section.Title"
+        android:text="@string/conversation_index_section" />
+
+    <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+        <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+            <TextView
+                style="@style/Widget.App.Row.Title"
+                android:text="@string/conversation_index_toggle" />
+
+            <TextView
+                style="@style/Widget.App.Row.Subtitle"
+                android:text="@string/conversation_index_toggle_hint" />
+        </LinearLayout>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switch_index_conversations"
+            style="@style/Widget.App.Row.Switch" />
+    </LinearLayout>
+
+    <!-- The real counts; hidden until they have been read. -->
+    <TextView
+        android:id="@+id/text_conversation_index_status"
+        style="@style/Widget.App.Section.Status"
+        android:visibility="gone" />
+
+    <!-- An ongoing condition: rebuilding, paused for the model, or stopped. -->
+    <TextView
+        android:id="@+id/text_conversation_index_condition"
+        style="@style/Widget.App.Section.Status"
+        android:visibility="gone" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_delete_conversation_index"
+        style="@style/AppButton.Destructive.Inline.Centered.BelowStatus"
+        android:text="@string/conversation_index_delete" />
+</LinearLayout>

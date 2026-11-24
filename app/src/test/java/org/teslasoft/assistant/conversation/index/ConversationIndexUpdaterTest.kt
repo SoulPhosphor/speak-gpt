@@ -75,13 +75,17 @@ class ConversationIndexUpdaterTest {
         }
 
         override fun finishUpdate(
-            chatId: String, chatVersion: String, expected: Map<String, MessageStamp>, chatUnchanged: () -> Boolean
+            chatId: String, chatVersion: String, expected: Map<String, MessageStamp>, unidentifiedMessages: Int,
+            chatUnchanged: () -> Boolean
         ): IndexWrite {
             if (!chatUnchanged() || indexedMessages(chatId) != expected) return IndexWrite.STALE
             val waiting = messages[chatId].orEmpty().values.sumOf { entries ->
                 entries.passages.count { vectors[Triple(it.searchFingerprint, entries.stamp.vectorModel, entries.stamp.vectorDimensions)] == "waiting" }
             }
-            states[chatId] = ChatIndexState(chatVersion, false, waiting, waiting == 0)
+            val unfinished = messages[chatId].orEmpty().values.sumOf { entries ->
+                entries.passages.count { vectors[Triple(it.searchFingerprint, entries.stamp.vectorModel, entries.stamp.vectorDimensions)] != "made" }
+            }
+            states[chatId] = ChatIndexState(chatVersion, false, waiting, unfinished == 0, unidentifiedMessages)
             return IndexWrite.WRITTEN
         }
     }

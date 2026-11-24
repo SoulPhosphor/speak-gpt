@@ -44,7 +44,7 @@ class ConversationIndexStore private constructor(
     CorruptionHandler,
     null,
     true
-), ConversationIndexStorage, PassageVectorStorage, ConversationIndexMaintenance {
+), ConversationIndexStorage, PassageVectorStorage, ConversationIndexMaintenance, ConversationIndexSummaries {
 
     /** Test hook: called inside a message or restamp write after it has changed rows, before the commit check. */
     @Volatile internal var afterOldRowsRemoved: (() -> Unit)? = null
@@ -124,7 +124,8 @@ class ConversationIndexStore private constructor(
                 "described_version TEXT," +
                 "needs_refresh INTEGER NOT NULL CHECK(needs_refresh IN (0,1))," +
                 "waiting_vectors INTEGER NOT NULL," +
-                "fully_indexed INTEGER NOT NULL CHECK(fully_indexed IN (0,1)))"
+                "fully_indexed INTEGER NOT NULL CHECK(fully_indexed IN (0,1))," +
+                "unidentified_messages INTEGER NOT NULL DEFAULT 0)"
         )
     }
 
@@ -140,14 +141,16 @@ class ConversationIndexStore private constructor(
 
     override fun indexState(chatId: String): ChatIndexState? =
         readableDatabase.rawQuery(
-            "SELECT described_version, needs_refresh, waiting_vectors, fully_indexed FROM index_state WHERE chat_id = ?",
+            "SELECT described_version, needs_refresh, waiting_vectors, fully_indexed, unidentified_messages " +
+                "FROM index_state WHERE chat_id = ?",
             arrayOf(chatId)
         ).use { cursor ->
             if (!cursor.moveToFirst()) null else ChatIndexState(
                 describedVersion = cursor.getStringOrNull(0),
                 needsRefresh = cursor.getInt(1) == 1,
                 waitingVectors = cursor.getInt(2),
-                fullyIndexed = cursor.getInt(3) == 1
+                fullyIndexed = cursor.getInt(3) == 1,
+                unidentifiedMessages = cursor.getInt(4)
             )
         }
 
@@ -195,20 +198,26 @@ class ConversationIndexStore private constructor(
         chatId: String,
         chatVersion: String,
         expected: Map<String, MessageStamp>,
+        unidentifiedMessages: Int,
         chatUnchanged: () -> Boolean
     ): IndexWrite = writeTransaction { db ->
         if (!chatUnchanged() || readStamps(db, chatId, null) != expected) return@writeTransaction IndexWrite.STALE
-        val waiting = db.rawQuery(
-            "SELECT COUNT(*) FROM passages p JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
+        val (waiting, unfinished) = db.rawQuery(
+            "SELECT COALESCE(SUM(CASE WHEN v.state = '$STATE_WAITING' THEN 1 ELSE 0 END), 0), " +
+                "COALESCE(SUM(CASE WHEN v.state IS NULL OR v.state != '$STATE_MADE' THEN 1 ELSE 0 END), 0) " +
+                "FROM passages p LEFT JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
                 "AND v.vector_model = p.vector_model AND v.vector_dimensions = p.vector_dimensions " +
-                "WHERE p.chat_id = ? AND v.state = '$STATE_WAITING'",
+                "WHERE p.chat_id = ?",
             arrayOf(chatId)
-        ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        ).use { if (it.moveToFirst()) it.getInt(0) to it.getInt(1) else 0 to 0 }
+        // A failed vector is never retried for the same text, so its passage is not indexed.
         db.execSQL(
-            "INSERT INTO index_state(chat_id, described_version, needs_refresh, waiting_vectors, fully_indexed) " +
-                "VALUES(?, ?, 0, ?, ?) ON CONFLICT(chat_id) DO UPDATE SET described_version = excluded.described_version, " +
-                "needs_refresh = 0, waiting_vectors = excluded.waiting_vectors, fully_indexed = excluded.fully_indexed",
-            arrayOf<Any>(chatId, chatVersion, waiting, if (waiting == 0) 1 else 0)
+            "INSERT INTO index_state(chat_id, described_version, needs_refresh, waiting_vectors, fully_indexed, " +
+                "unidentified_messages) VALUES(?, ?, 0, ?, ?, ?) ON CONFLICT(chat_id) DO UPDATE SET " +
+                "described_version = excluded.described_version, needs_refresh = 0, " +
+                "waiting_vectors = excluded.waiting_vectors, fully_indexed = excluded.fully_indexed, " +
+                "unidentified_messages = excluded.unidentified_messages",
+            arrayOf<Any>(chatId, chatVersion, waiting, if (unfinished == 0) 1 else 0, unidentifiedMessages)
         )
         publishIfUnchanged(chatUnchanged)
     }
@@ -423,14 +432,21 @@ class ConversationIndexStore private constructor(
         VectorWrite.STALE
     }
 
-    /** Recounts waiting passages, and whether the chat is fully indexed, for every chat using [key]. */
+    /**
+     * Recounts waiting passages, and whether the chat is fully indexed, for
+     * every chat using [key]. Fully indexed means every passage's vector is
+     * made: a failed vector is never retried for the same text, so a chat
+     * with one is not indexed (Owner, 2026-11-24).
+     */
     private fun recountChatsUsing(db: SQLiteDatabase, key: VectorKey) {
-        val waiting = "(SELECT COUNT(*) FROM passages p JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
+        val join = "FROM passages p LEFT JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
             "AND v.vector_model = p.vector_model AND v.vector_dimensions = p.vector_dimensions " +
-            "WHERE p.chat_id = index_state.chat_id AND v.state = '$STATE_WAITING')"
+            "WHERE p.chat_id = index_state.chat_id"
+        val waiting = "(SELECT COUNT(*) $join AND v.state = '$STATE_WAITING')"
+        val unfinished = "(SELECT COUNT(*) $join AND (v.state IS NULL OR v.state != '$STATE_MADE'))"
         db.execSQL(
             "UPDATE index_state SET waiting_vectors = $waiting, fully_indexed = CASE WHEN needs_refresh = 0 " +
-                "AND described_version IS NOT NULL AND $waiting = 0 THEN 1 ELSE 0 END WHERE chat_id IN " +
+                "AND described_version IS NOT NULL AND $unfinished = 0 THEN 1 ELSE 0 END WHERE chat_id IN " +
                 "(SELECT DISTINCT chat_id FROM passages WHERE search_fingerprint = ? AND vector_model = ? AND vector_dimensions = ?)",
             arrayOf<Any>(key.searchFingerprint, key.vectorModel, key.vectorDimensions)
         )
@@ -518,6 +534,76 @@ class ConversationIndexStore private constructor(
         Unit
     }
 
+    override fun chatSummaries(vectorModel: String, vectorDimensions: Int): Map<String, ChatIndexSummary> =
+        readableDatabase.rawQuery(
+            "SELECT s.chat_id, s.described_version, s.needs_refresh, s.unidentified_messages, " +
+                "(SELECT COUNT(*) FROM passages p WHERE p.chat_id = s.chat_id), " +
+                "(SELECT COUNT(*) FROM passages p JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
+                "AND v.vector_model = p.vector_model AND v.vector_dimensions = p.vector_dimensions " +
+                "WHERE p.chat_id = s.chat_id AND v.state = '$STATE_MADE'), " +
+                "(SELECT COUNT(*) FROM passages p WHERE p.chat_id = s.chat_id AND " +
+                "NOT (p.vector_model = ? AND p.vector_dimensions = ?)) " +
+                "FROM index_state s",
+            arrayOf(vectorModel, vectorDimensions.toString())
+        ).use { cursor ->
+            buildMap {
+                while (cursor.moveToNext()) put(cursor.getString(0), ChatIndexSummary(
+                    describedVersion = cursor.getStringOrNull(1),
+                    needsRefresh = cursor.getInt(2) == 1,
+                    unidentifiedMessages = cursor.getInt(3),
+                    passages = cursor.getInt(4),
+                    madePassages = cursor.getInt(5),
+                    otherModelPassages = cursor.getInt(6)
+                ))
+            }
+        }
+
+    override fun waitingPassages(vectorModel: String, vectorDimensions: Int): Int =
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM passages p JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
+                "AND v.vector_model = p.vector_model AND v.vector_dimensions = p.vector_dimensions " +
+                "WHERE v.state = '$STATE_WAITING' AND p.vector_model = ? AND p.vector_dimensions = ?",
+            arrayOf(vectorModel, vectorDimensions.toString())
+        ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    /**
+     * `PRAGMA integrity_check` on the whole database: null when it reports
+     * "ok", otherwise what it reported. Throws when the database cannot be
+     * opened or read at all; the caller tells damage from an access failure.
+     */
+    fun integrityProblem(): String? =
+        readableDatabase.rawQuery("PRAGMA integrity_check", emptyArray()).use { cursor ->
+            if (!cursor.moveToFirst()) return@use "integrity_check returned no rows"
+            val first = cursor.getString(0)
+            if (first.equals("ok", ignoreCase = true)) return@use null
+            buildString {
+                append(first)
+                var more = 0
+                while (cursor.moveToNext() && more < 4) { append("; ").append(cursor.getString(0)); more++ }
+            }
+        }
+
+    /** Every made vector in the index, of any model. */
+    fun madeVectorCount(): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM passage_vectors WHERE state = '$STATE_MADE'", emptyArray())
+            .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    /** Adds made vectors kept from a damaged index (Step 11 recovery), in one transaction. Returns how many were added. */
+    fun restoreVectors(vectors: List<KeptVector>): Int = transaction { db ->
+        var added = 0
+        for (v in vectors) {
+            val values = ContentValues().apply {
+                put("search_fingerprint", v.key.searchFingerprint)
+                put("vector_model", v.key.vectorModel)
+                put("vector_dimensions", v.key.vectorDimensions)
+                put("state", STATE_MADE)
+                put("vector", v.vector)
+            }
+            if (db.insertWithOnConflict("passage_vectors", null, values, SQLiteDatabase.CONFLICT_IGNORE) != -1L) added++
+        }
+        added
+    }
+
     private fun chatVectorKeys(db: SQLiteDatabase, chatId: String): Set<VectorKey> =
         db.rawQuery(
             "SELECT DISTINCT search_fingerprint, vector_model, vector_dimensions FROM passages WHERE chat_id = ?",
@@ -586,7 +672,8 @@ class ConversationIndexStore private constructor(
 
     companion object {
         const val DATABASE_NAME = "conversation_index.db"
-        private const val DATABASE_VERSION = 1
+        /** 2 (Step 11): `index_state.unidentified_messages`; derived stores are rebuilt, vectors kept. */
+        private const val DATABASE_VERSION = 2
         private const val SOURCE_CHAT_MESSAGE = "chat_message"
         const val STATE_WAITING = "waiting"
         const val STATE_MADE = "made"
@@ -602,18 +689,82 @@ class ConversationIndexStore private constructor(
             }
         }
 
-        /** The app's index. Throws when the database key cannot be read; the chat is never affected. */
+        /**
+         * The app's index. Throws [IndexKeyUnavailableException] when the
+         * database key cannot be read; the chat is never affected.
+         */
         fun get(context: Context): ConversationIndexStore {
             val app = context.applicationContext
             return instance ?: synchronized(this) {
                 instance ?: run {
                     loadLibrary()
                     val exists = app.getDatabasePath(DATABASE_NAME).exists()
-                    val key = DatabaseKeys.getOrCreate(app, DatabaseKeys.KEY_CONVERSATION_INDEX, exists)
-                        ?: throw IllegalStateException("Conversation index key unavailable")
+                    val key = when (val state = DatabaseKeys.readState(app, DatabaseKeys.KEY_CONVERSATION_INDEX)) {
+                        is DatabaseKeys.StoredKeyState.Present -> state.value
+                        DatabaseKeys.StoredKeyState.Unavailable -> throw IndexKeyUnavailableException(missing = false)
+                        // A database without its key can never be read again: that is damage, not a passing failure.
+                        DatabaseKeys.StoredKeyState.Absent ->
+                            if (exists) throw IndexKeyUnavailableException(missing = true)
+                            else DatabaseKeys.getOrCreate(app, DatabaseKeys.KEY_CONVERSATION_INDEX, false)
+                                ?: throw IndexKeyUnavailableException(missing = false)
+                    }
                     ConversationIndexStore(app, key, DATABASE_NAME).also { instance = it }
                 }
             }
+        }
+
+        /** Whether the app's index database file exists; opens nothing. */
+        fun exists(context: Context): Boolean =
+            context.applicationContext.getDatabasePath(DATABASE_NAME).exists()
+
+        /** Closes the app's index so recovery can replace its file; the next [get] opens it again. */
+        internal fun closeShared() {
+            synchronized(this) {
+                try { instance?.close() } catch (_: Exception) { }
+                instance = null
+            }
+        }
+
+        /**
+         * The made vectors that can still be read from a damaged index file,
+         * read one row at a time; reading stops at the first row that cannot
+         * be read, keeping what came before. A vector whose size does not match
+         * its recorded dimensions is left out.
+         */
+        internal fun readableVectors(path: String, key: ByteArray): KeptVectors {
+            synchronized(this) { loadLibrary() }
+            val kept = ArrayList<KeptVector>()
+            var stoppedBy: Exception? = null
+            try {
+                // The library's default handler would delete the damaged file; this one only closes it.
+                val db = SQLiteDatabase.openDatabase(path, key, null, SQLiteDatabase.OPEN_READONLY, QuietCorruptionHandler, null)
+                try {
+                    db.rawQuery(
+                        "SELECT search_fingerprint, vector_model, vector_dimensions, vector FROM passage_vectors " +
+                            "WHERE state = '$STATE_MADE'",
+                        emptyArray()
+                    ).use { cursor ->
+                        while (true) {
+                            val row = try {
+                                if (!cursor.moveToNext()) break
+                                KeptVector(
+                                    VectorKey(cursor.getString(0), cursor.getString(1), cursor.getInt(2)),
+                                    cursor.getBlob(3)
+                                )
+                            } catch (e: Exception) {
+                                stoppedBy = e
+                                break
+                            }
+                            if (row.vector != null && row.vector.size == row.key.vectorDimensions * Float.SIZE_BYTES) kept.add(row)
+                        }
+                    }
+                } finally {
+                    try { db.close() } catch (_: Exception) { }
+                }
+            } catch (e: Exception) {
+                stoppedBy = e
+            }
+            return KeptVectors(kept, stoppedBy)
         }
 
         fun openForTest(context: Context, databaseName: String, password: ByteArray): ConversationIndexStore {
@@ -622,9 +773,51 @@ class ConversationIndexStore private constructor(
         }
     }
 
+    /**
+     * Never deletes the file (the library's default does): damage is reported
+     * so the index is recovered, keeping the vectors that can still be read
+     * (G.13a, Step 11).
+     */
     private object CorruptionHandler : DatabaseErrorHandler {
         override fun onCorruption(dbObj: SQLiteDatabase, exception: android.database.sqlite.SQLiteException?) {
+            ConversationIndexDamage.report(exception ?: android.database.sqlite.SQLiteDatabaseCorruptException("corruption reported"))
             try { dbObj.close() } catch (_: Exception) { }
         }
     }
+}
+
+/** Closes a damaged database read during recovery, without reporting it again or deleting it. */
+private object QuietCorruptionHandler : DatabaseErrorHandler {
+    override fun onCorruption(dbObj: SQLiteDatabase, exception: android.database.sqlite.SQLiteException?) {
+        try { dbObj.close() } catch (_: Exception) { }
+    }
+}
+
+/** A made vector kept through recovery. */
+class KeptVector(val key: VectorKey, val vector: ByteArray?)
+
+/** The vectors read from a damaged index, and what stopped the reading, if anything. */
+class KeptVectors(val vectors: List<KeptVector>, val stoppedBy: Exception?)
+
+/**
+ * The index database's key cannot be read. [missing]: the database exists
+ * but its key is gone, so it can never be read again; otherwise the key store
+ * is unavailable for now and nothing is damaged.
+ */
+class IndexKeyUnavailableException(val missing: Boolean) : IllegalStateException(
+    if (missing) "Conversation index key is missing for an existing database"
+    else "Conversation index key is unavailable (key store could not be read)"
+)
+
+/** Damage the database reported while the app used it; read and cleared by recovery. */
+object ConversationIndexDamage {
+    @Volatile private var reported: Exception? = null
+    @Volatile var listener: ((Exception) -> Unit)? = null
+
+    fun report(cause: Exception) {
+        reported = cause
+        try { listener?.invoke(cause) } catch (_: Exception) { }
+    }
+
+    fun take(): Exception? = reported.also { reported = null }
 }
