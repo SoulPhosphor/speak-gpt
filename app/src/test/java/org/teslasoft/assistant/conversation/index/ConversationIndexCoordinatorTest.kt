@@ -539,11 +539,20 @@ class ConversationIndexCoordinatorTest {
         makeVectors()
         val rows = index.rows.toList()
         val states = index.states.toMap()
+        val readsBefore = chats.reads.size
 
         coordinator.appStarted()
         runner.runAll()
         assertEquals(rows, index.rows.toList())
         assertEquals(states, index.states.toMap())
+        assertEquals("an up-to-date chat's history is not read", readsBefore, chats.reads.size)
+
+        // A chat saved while the app was closed is read and updated.
+        chats.put("two", listOf(user("t1", "Another chat."), user("t2", "Added later.")))
+        coordinator.appStarted()
+        runner.runAll()
+        assertEquals(listOf("two"), chats.reads.drop(readsBefore))
+        assertEquals(setOf("t1", "t2"), stamps("two").keys)
     }
 
     @Test fun aChatThatCannotBeReadIsLeftAsItWasAndTriedAgainLater() {

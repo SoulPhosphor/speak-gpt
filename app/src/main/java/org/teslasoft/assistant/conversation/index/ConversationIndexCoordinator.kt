@@ -185,14 +185,16 @@ class ConversationIndexCoordinator(
     private fun updateChat(chatId: String, catchingUp: Boolean): ChatResult = try {
         val updater = updaterFor() ?: return ChatResult.SKIPPED
         val settings = updater.settingsKey
-        when (val read = source.read(chatId)) {
+        // Catching up, a chat whose index already describes it as stored now is
+        // left alone without reading its history: the version check is cheap.
+        val upToDate = catchingUp && storage().indexState(chatId)?.let { state ->
+            !state.needsRefresh && state.describedVersion == describedVersion(source.chatVersion(chatId), settings)
+        } == true
+        if (upToDate) ChatResult.SKIPPED else when (val read = source.read(chatId)) {
             IndexChatSource.Read.Unavailable, IndexChatSource.Read.WithoutPermanentIds -> ChatResult.SKIPPED
             is IndexChatSource.Read.Messages -> {
                 val described = describedVersion(read.version, settings)
-                val state = storage().indexState(chatId)
-                if (catchingUp && state != null && !state.needsRefresh && state.describedVersion == described) {
-                    ChatResult.SKIPPED
-                } else when (val outcome = updater.update(
+                when (val outcome = updater.update(
                     chatId, described, read.messages,
                     { describedVersion(source.chatVersion(chatId), settings) },
                     { !isOn() }
