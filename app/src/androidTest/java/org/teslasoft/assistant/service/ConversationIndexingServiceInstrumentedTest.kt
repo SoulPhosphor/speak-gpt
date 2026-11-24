@@ -92,7 +92,6 @@ class ConversationIndexingServiceInstrumentedTest {
         waitFor("the service stops when the catch-up ends") { !onMain { ConversationIndexingForegroundService.isRunning } }
         waitFor("its notification goes") { find(INDEXING_ID) == null }
         assertEquals(BackgroundStopReason.CATCH_UP_ENDED, controller.lastStop)
-        assertFalse(ConversationIndexRuntime.backgroundHold.held)
         assertNull("no paused notice for a finished catch-up", find(PAUSED_ID))
     }
 
@@ -106,7 +105,7 @@ class ConversationIndexingServiceInstrumentedTest {
             !onMain { ConversationIndexingForegroundService.isRunning }
         }
         assertEquals(BackgroundStopReason.TIME_LIMIT, controller.lastStop)
-        assertTrue("indexing waits for the app", ConversationIndexRuntime.backgroundHold.held)
+        assertFalse("indexing waits for the app", ConversationIndexRuntime.backgroundPermit.mayRun())
         waitFor("the progress notification goes") { find(INDEXING_ID) == null }
         val paused = waitForValue("the approved notice is shown") { find(PAUSED_ID) }
         assertEquals("Indexing Conversations", paused.notification.extras.getString(Notification.EXTRA_TITLE))
@@ -128,7 +127,7 @@ class ConversationIndexingServiceInstrumentedTest {
         // Opening the app removes the notice and releases the hold.
         ActivityScenario.launch(MemoryControlsActivity::class.java).use {
             waitFor("the notice goes when the app opens") { find(PAUSED_ID) == null }
-            assertFalse(ConversationIndexRuntime.backgroundHold.held)
+            assertTrue("indexing runs again in the app", ConversationIndexRuntime.backgroundPermit.mayRun())
         }
     }
 
@@ -144,7 +143,7 @@ class ConversationIndexingServiceInstrumentedTest {
             waitFor("opening the app stops it") { !onMain { ConversationIndexingForegroundService.isRunning } }
             waitFor("its notification goes") { find(INDEXING_ID) == null }
             assertEquals(BackgroundStopReason.APP_OPENED, controller.lastStop)
-            assertFalse(ConversationIndexRuntime.backgroundHold.held)
+            assertTrue("indexing runs again in the app", ConversationIndexRuntime.backgroundPermit.mayRun())
             assertNull(find(PAUSED_ID))
         }
     }

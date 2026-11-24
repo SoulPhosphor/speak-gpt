@@ -12,7 +12,9 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
  * and wording choices as plain functions; the controller against a recorded
  * platform; and the whole path through the real coordinator, updater, vector
  * worker, vector passes and Step 12 progress against the in-memory index,
- * with the background hold wired in as the runtime wires it. The Android
+ * with the permit wired in as the runtime wires it. Every interleaving of
+ * the main thread and the index's threads that changes behaviour is played
+ * out deterministically, one task at a time. The Android
  * service itself is covered by `ConversationIndexingServiceInstrumentedTest`.
  */
 class BackgroundIndexingTest {
@@ -105,6 +107,29 @@ class BackgroundIndexingTest {
         }
     }
 
+    // --- The permit: the one owner of whether indexing may run --------------------
+
+    @Test fun aProcessStartsClosedAndOnlyBecomingAbleToRunAgainContinuesWaitingWork() {
+        val permit = BackgroundIndexingPermit()
+        var continued = 0
+        permit.setOnMayRunAgain { continued++ }
+        assertFalse("a process starts with no screen", permit.mayRun())
+
+        permit.foreground()
+        assertEquals(1, continued)
+        permit.service()
+        assertEquals("foreground to service: it never stopped", 1, continued)
+        assertTrue("the app is closed", permit.closedUnlessForeground())
+        permit.foreground()
+        assertEquals(2, continued)
+        assertFalse("a stop arriving after the app opened changes nothing", permit.closedUnlessForeground())
+        assertTrue(permit.mayRun())
+        permit.closed()
+        permit.closed()
+        permit.service()
+        assertEquals(3, continued)
+    }
+
     // --- The controller against a recorded platform --------------------------------
 
     private class Platform : BackgroundIndexingPlatform {
@@ -116,7 +141,6 @@ class BackgroundIndexingTest {
         val calls = ArrayList<String>()
         val logcat = ArrayList<String>()
         val errors = ArrayList<String>()
-        var onResume: () -> Unit = {}
         override fun display() = display
         override fun conditions() = conditions
         override fun userPaused() = paused
@@ -128,7 +152,6 @@ class BackgroundIndexingTest {
         override fun stopService(reason: BackgroundStopReason) { calls.add("stop:$reason") }
         override fun showStoppedNotice() { calls.add("notice") }
         override fun clearStoppedNotice() { calls.add("clear") }
-        override fun resumeIndexing() { calls.add("resume"); onResume() }
         override fun logcat(message: String) { logcat.add(message) }
         override fun errorLog(message: String) { errors.add(message) }
     }
@@ -140,122 +163,92 @@ class BackgroundIndexingTest {
         if (e is AndroidRefusal) BackgroundIndexingRule.START_NOT_ALLOWED else e.javaClass.name, e.message
     )
 
-    private fun controllerFor(platform: BackgroundIndexingPlatform, hold: BackgroundIndexingHold) =
-        BackgroundIndexingController(platform, hold, ::classify)
+    private fun controllerFor(platform: BackgroundIndexingPlatform, permit: BackgroundIndexingPermit) =
+        BackgroundIndexingController(platform, permit, ::classify)
 
     @Test fun leavingTheAppDuringACatchUpStartsTheServiceAndOnlyThen() {
         val platform = Platform()
-        val controller = controllerFor(platform, BackgroundIndexingHold())
+        val permit = BackgroundIndexingPermit()
+        val controller = controllerFor(platform, permit)
         controller.appOpened()
         platform.calls.clear()
 
         controller.appLeft()
         assertTrue("nothing to continue", platform.calls.isEmpty())
+        assertFalse(permit.mayRun())
 
         platform.display = IndexingDisplay.Running(null)
         controller.appOpened()
         controller.appLeft()
         assertEquals(listOf("clear", "start"), platform.calls)
         assertTrue(controller.serviceActive)
+        assertEquals(BackgroundIndexingPermit.State.SERVICE, permit.current)
         controller.serviceStarted()
         assertEquals(listOf(BackgroundIndexingLog.STARTED), platform.logcat)
 
         platform.calls.clear()
         controller.appOpened()
         assertEquals(listOf("stop:APP_OPENED", "clear"), platform.calls)
-    }
-
-    @Test fun aRunningCatchUpIsNotDroppedWhileTheLeaveDecisionIsMade() {
-        val hold = BackgroundIndexingHold()
-        var gateOpenWhileDeciding = true
-        val platform = object : BackgroundIndexingPlatform by Platform() {
-            override fun display(): IndexingDisplay {
-                // The index's thread asking at this moment must still be let through.
-                if (hold.catchUpMustWait()) gateOpenWhileDeciding = false
-                return IndexingDisplay.Running(numbers42)
-            }
-            override fun conditions() = on
-        }
-        val controller = controllerFor(platform, hold)
-        controller.appOpened()
-        controller.appLeft()
-        assertTrue(gateOpenWhileDeciding)
-        assertFalse("the service continues the catch-up", hold.catchUpMustWait())
-
-        // Without a service to continue it, the gate closes once the decision is made.
-        val idle = controllerFor(Platform(), BackgroundIndexingHold())
-        idle.appOpened()
-        idle.appLeft()
-        assertTrue(idle.hold.catchUpMustWait())
+        assertEquals(BackgroundIndexingPermit.State.FOREGROUND, permit.current)
     }
 
     @Test fun aPausedIndexIsNeverStartedInTheBackground() {
         val platform = Platform().apply { display = IndexingDisplay.Paused(null); paused = true }
-        val hold = BackgroundIndexingHold()
-        val controller = controllerFor(platform, hold)
+        val permit = BackgroundIndexingPermit()
+        val controller = controllerFor(platform, permit)
+        controller.appOpened()
         controller.appLeft()
-        assertTrue(platform.calls.isEmpty())
-        assertFalse(hold.held)
+        assertEquals(listOf("clear"), platform.calls)
+        assertFalse(permit.mayRun())
     }
 
     @Test fun workTheUserStartedComesFirstAndIndexingWaitsForTheAppWithoutANotice() {
         val platform = Platform().apply { display = IndexingDisplay.Running(numbers42); userWork = true }
-        val hold = BackgroundIndexingHold()
-        val controller = controllerFor(platform, hold)
-        controller.appLeft()
-        assertTrue(hold.held)
-        assertTrue(platform.calls.isEmpty())
-        assertTrue(platform.errors.isEmpty())
-
+        val permit = BackgroundIndexingPermit()
+        val controller = controllerFor(platform, permit)
         controller.appOpened()
-        assertFalse(hold.held)
-        assertEquals(listOf("clear", "resume"), platform.calls)
+        controller.appLeft()
+        assertFalse(permit.mayRun())
+        assertEquals(listOf("clear"), platform.calls)
+        assertTrue(platform.errors.isEmpty())
     }
 
-    @Test fun aRefusedStartHoldsIndexingShowsTheApprovedNoticeAndIsNotAnError() {
+    @Test fun aRefusedStartClosesIndexingShowsTheApprovedNoticeAndIsNotAnError() {
         for ((message, reason) in listOf(
             "Time limit already exhausted for foreground service type dataSync" to BackgroundStopReason.TIME_USED_UP_AT_START,
             "startForegroundService() not allowed" to BackgroundStopReason.BACKGROUND_START_NOT_ALLOWED
         )) {
-            val platform = Platform().apply { display = IndexingDisplay.Running(numbers42) }
-            val hold = BackgroundIndexingHold()
-            val controller = controllerFor(platform, hold)
-            controller.appLeft()
-            controller.startFailed(AndroidRefusal(message))
-            assertTrue(hold.held)
-            assertFalse(controller.serviceActive)
-            assertEquals(listOf("start", "notice"), platform.calls)
-            assertEquals(listOf(BackgroundIndexingLog.stopped(reason)), platform.logcat)
-            assertTrue("an Android limit is not an error", platform.errors.isEmpty())
+            // Refused when asked, and refused in the service's own startForeground.
+            for (whenAsked in listOf(true, false)) {
+                val platform = Platform().apply { display = IndexingDisplay.Running(numbers42) }
+                if (whenAsked) platform.refuseWith = AndroidRefusal(message)
+                val permit = BackgroundIndexingPermit()
+                val controller = controllerFor(platform, permit)
+                controller.appOpened()
+                controller.appLeft()
+                if (!whenAsked) controller.startFailed(AndroidRefusal(message))
+                assertFalse(permit.mayRun())
+                assertFalse(controller.serviceActive)
+                assertEquals(reason, controller.lastStop)
+                assertTrue("notice" in platform.calls)
+                assertEquals(listOf(BackgroundIndexingLog.stopped(reason)), platform.logcat)
+                assertTrue("an Android limit is not an error", platform.errors.isEmpty())
+            }
         }
     }
 
-    @Test fun aRefusalWhenAskedToStartIsHandledTheSameWay() {
-        val platform = Platform().apply {
-            display = IndexingDisplay.Running(numbers42)
-            refuseWith = AndroidRefusal("Time limit already exhausted for foreground service type dataSync")
-        }
-        val hold = BackgroundIndexingHold()
-        val controller = controllerFor(platform, hold)
-        controller.appLeft()
-        assertTrue(hold.held)
-        assertEquals(listOf("notice"), platform.calls)
-        assertEquals(listOf(BackgroundIndexingLog.stopped(BackgroundStopReason.TIME_USED_UP_AT_START)), platform.logcat)
-        assertTrue(platform.errors.isEmpty())
-    }
-
-    @Test fun anUnexpectedFailureIsWrittenOnceWhileItGoesOnAndHoldsWithoutTheNotice() {
+    @Test fun anUnexpectedFailureIsWrittenOnceWhileItGoesOnAndClosesWithoutTheNotice() {
         val platform = Platform().apply {
             display = IndexingDisplay.Running(numbers42)
             refuseWith = SecurityException("Starting FGS with type dataSync requires permissions")
         }
-        val hold = BackgroundIndexingHold()
-        val controller = controllerFor(platform, hold)
+        val permit = BackgroundIndexingPermit()
+        val controller = controllerFor(platform, permit)
         repeat(3) {
             controller.appOpened()
             controller.appLeft()
         }
-        assertTrue(hold.held)
+        assertFalse(permit.mayRun())
         assertEquals(1, platform.errors.size)
         assertEquals(
             BackgroundIndexingLog.failed(
@@ -275,42 +268,53 @@ class BackgroundIndexingTest {
         controller.serviceFailed(SecurityException("Starting FGS with type dataSync requires permissions"))
         assertEquals(2, platform.errors.size)
         assertTrue(platform.errors.last().contains(BackgroundIndexingLog.EFFECT_STOPPED))
+        assertFalse(permit.mayRun())
     }
 
-    @Test fun androidsTimeLimitHoldsIndexingAndShowsTheNoticeWhileOtherStopsDoNot() {
+    @Test fun androidsTimeLimitClosesIndexingAndShowsTheNoticeWhileOtherStopsDoNot() {
         val platform = Platform().apply { display = IndexingDisplay.Running(numbers42) }
-        val hold = BackgroundIndexingHold()
-        val controller = controllerFor(platform, hold)
+        val permit = BackgroundIndexingPermit()
+        val controller = controllerFor(platform, permit)
+        controller.appOpened()
         controller.appLeft()
         controller.serviceStarted()
         controller.serviceStopped(BackgroundStopReason.CATCH_UP_ENDED)
-        assertFalse(hold.held)
+        assertFalse(permit.mayRun())
         assertFalse("notice" in platform.calls)
 
         controller.appOpened()
         controller.appLeft()
         controller.serviceStarted()
         controller.serviceStopped(BackgroundStopReason.TIME_LIMIT)
-        assertTrue(hold.held)
+        assertFalse(permit.mayRun())
         assertTrue("notice" in platform.calls)
         assertEquals(BackgroundIndexingLog.stopped(BackgroundStopReason.TIME_LIMIT), platform.logcat.last())
         assertTrue(platform.errors.isEmpty())
 
         platform.calls.clear()
         controller.appOpened()
-        assertEquals("the notice goes and indexing continues", listOf("clear", "resume"), platform.calls)
+        assertEquals("the notice goes", listOf("clear"), platform.calls)
+        assertTrue(permit.mayRun())
     }
 
-    @Test fun aRefusalArrivingAfterTheAppOpenedAgainChangesNothing() {
-        val platform = Platform().apply { display = IndexingDisplay.Running(numbers42) }
-        val hold = BackgroundIndexingHold()
-        val controller = controllerFor(platform, hold)
-        controller.appLeft()
-        controller.appOpened()
-        platform.calls.clear()
-        controller.startFailed(AndroidRefusal("Time limit already exhausted"))
-        assertFalse(hold.held)
-        assertTrue(platform.calls.isEmpty())
+    @Test fun stopsAndRefusalsThatArriveAfterTheAppOpenedAgainChangeNothing() {
+        for (late in listOf<(BackgroundIndexingController) -> Unit>(
+            { it.startFailed(AndroidRefusal("Time limit already exhausted")) },
+            { it.serviceStopped(BackgroundStopReason.TIME_LIMIT) },
+            { it.serviceStopped(BackgroundStopReason.APP_OPENED) },
+            { it.serviceFailed(IllegalStateException("late")) }
+        )) {
+            val platform = Platform().apply { display = IndexingDisplay.Running(numbers42) }
+            val permit = BackgroundIndexingPermit()
+            val controller = controllerFor(platform, permit)
+            controller.appOpened()
+            controller.appLeft()
+            controller.appOpened()
+            platform.calls.clear()
+            late(controller)
+            assertTrue("indexing keeps running in the app", permit.mayRun())
+            assertFalse("no notice while the app is open", "notice" in platform.calls)
+        }
     }
 
     // --- The whole path: real indexing, the service's steps, Android's stops ----------
@@ -332,24 +336,20 @@ class BackgroundIndexingTest {
             var guard = 0
             while (runOne()) check(++guard < 10_000) { "tasks never settle" }
         }
-        fun runUntil(condition: () -> Boolean) {
-            var guard = 0
-            while (!condition()) {
-                check(runOne()) { "nothing left to run, and the condition never held" }
-                check(++guard < 10_000) { "tasks never settle" }
-            }
-        }
     }
 
     private class StoredChats : IndexChatSource {
         val chats = LinkedHashMap<String, List<IndexSourceMessage>>()
         val versions = HashMap<String, Int>()
+        /** Every chat read to count, compare or cut it, in order. */
+        val reads = ArrayList<String>()
         fun put(chatId: String, messages: List<IndexSourceMessage>) {
             chats.remove(chatId)
             chats[chatId] = messages
             versions[chatId] = (versions[chatId] ?: 0) + 1
         }
         override fun read(chatId: String): IndexChatSource.Read {
+            reads.add(chatId)
             val stored = chats[chatId] ?: return IndexChatSource.Read.Unavailable
             return IndexChatSource.Read.Messages(chatVersion(chatId), 0L, stored)
         }
@@ -397,19 +397,26 @@ class BackgroundIndexingTest {
     private var modelProblem = false
     private var rebuilding = false
     private var recoveryFailed = false
-
     private var readsAtOnce = false
+    /** How often the model (its updater) was asked for. */
+    private var modelLoads = 0
+
+    /** Runs while a catch-up reads its work, before it is shown. */
+    private var whileFindingWork: () -> Unit = {}
+
+    /**
+     * Runs each time an indexing thread checks whether it may run, with the
+     * answer it got, so a test makes the main thread act at exactly that moment.
+     */
+    private var onMayRunChecked: (Boolean) -> Unit = {}
 
     // What one run of the app's process has.
     private lateinit var tasks: Tasks
     private lateinit var tracker: IndexProgressTracker
     private lateinit var coordinator: ConversationIndexCoordinator
-    private lateinit var hold: BackgroundIndexingHold
+    private lateinit var permit: BackgroundIndexingPermit
     private lateinit var platform: Platform
     private lateinit var controller: BackgroundIndexingController
-
-    /** Runs while a catch-up reads its work, before it is shown. */
-    private var whileFindingWork: () -> Unit = {}
 
     private val source = object : IndexProgressSource {
         var settingsKey: String? = null
@@ -431,10 +438,12 @@ class BackgroundIndexingTest {
         override fun conditions() = IndexingConditions(settingOn, rebuilding, recoveryFailed, modelProblem)
     }
 
-    /** Starts the app's process: indexing as the runtime builds it, with the background hold wired in the same way. */
+    private fun mayRun(): Boolean = permit.mayRun().also { onMayRunChecked(it) }
+
+    /** Starts the app's process: indexing as the runtime builds it, with the permit wired in the same way. */
     private fun startProcess() {
         tasks = Tasks()
-        hold = BackgroundIndexingHold()
+        permit = BackgroundIndexingPermit()
         // The app reads the numbers on the index's thread while vectors are made on another; [readsAtOnce]
         // reads them the moment they are asked for, as that thread may while a vector pass runs.
         tracker = IndexProgressTracker(source, pause, saved) { delay, task -> if (readsAtOnce) task() else tasks.run(delay, task) }
@@ -442,37 +451,38 @@ class BackgroundIndexingTest {
         val passes = IndexVectorPasses(
             runPass = {
                 val catchUp = tracker.vectorPassStarting()
-                PassageEmbeddingWorker(index, chats, reader, model, pause).runPass { !settingOn || hold.held }.also {
+                PassageEmbeddingWorker(index, chats, reader, model, pause).runPass { !settingOn || !mayRun() }.also {
                     if (it is PassageEmbeddingWorker.Outcome.Finished) tracker.vectorPassFinished(catchUp)
                     if (it is PassageEmbeddingWorker.Outcome.Paused) tracker.vectorPassPaused()
                 }
             },
             runner = tasks,
-            isOn = { settingOn }
+            isOn = { settingOn && mayRun() }
         )
         coordinator = ConversationIndexCoordinator(
             source = chats,
             storage = { index },
             maintenance = { index },
-            updaterFor = { updater.takeIf { modelInstalled } },
+            updaterFor = { modelLoads++; updater.takeIf { modelInstalled } },
             requestVectors = passes::request,
             runner = tasks,
             isOn = { settingOn },
             events = object : IndexEvents {
                 override fun modelUnavailable(cause: Exception?) { modelProblem = true; tracker.publish() }
             },
-            isPaused = { tracker.isPaused || hold.held },
+            isPaused = { tracker.isPaused },
             progress = tracker,
-            catchUpWaits = hold::catchUpMustWait,
+            mayRun = ::mayRun,
             clock = { tasks.now }
         )
+        permit.setOnMayRunAgain { coordinator.mayRunAgain() }
         tracker.publish()
-        platform = Platform().apply { onResume = { if (settingOn) coordinator.resumed() } }
+        platform = Platform()
         controller = controllerFor(object : BackgroundIndexingPlatform by platform {
             override fun display() = tracker.display.value
             override fun conditions() = tracker.conditions()
             override fun userPaused() = tracker.isPaused
-        }, hold)
+        }, permit)
     }
 
     init {
@@ -495,17 +505,41 @@ class BackgroundIndexingTest {
 
     private fun putChats(count: Int) = (1..count).forEach { chats.put("c$it", chat("c$it")) }
 
-    private fun allMade() = index.vectors.values.all { it.state == ConversationIndexStore.STATE_MADE } && index.vectors.isNotEmpty()
+    private fun allMade() = index.vectors.isNotEmpty() && index.vectors.values.all { it.state == ConversationIndexStore.STATE_MADE }
+
+    /** Runs [block] with the app closed and no service, and checks that no chat was read and no vector made. */
+    private fun assertNothingIndexedWhile(block: () -> Unit) {
+        val reads = chats.reads.size
+        val inputs = model.inputs.size
+        val rows = index.rows.size
+        val loads = modelLoads
+        block()
+        assertEquals("the model is not loaded without the notification", loads, modelLoads)
+        assertEquals("no chat counted, compared or cut without the notification", reads, chats.reads.size)
+        assertEquals("no vector read without the notification", inputs, model.inputs.size)
+        assertEquals("nothing written without the notification", rows, index.rows.size)
+    }
 
     private fun assertNothingReadTwice() =
         assertEquals("no vector is read twice", model.inputs.toSet().size, model.inputs.size)
 
-    /** Turns indexing on with the app open, then leaves the app while the catch-up runs. */
-    private fun leaveDuringTheCatchUp() {
+    /** Every vector of [count] three-message chats is made, each read once. */
+    private fun assertFinished(count: Int) {
+        assertTrue("every vector is made", allMade())
+        assertEquals(count * 3, model.inputs.size)
+        assertNothingReadTwice()
+    }
+
+    /** Opens the app, turns indexing on and runs until the catch-up shows. */
+    private fun startCatchUpWithTheAppOpen() {
         controller.appOpened()
         coordinator.turnedOn()
-        tasks.runOne()
-        assertTrue(tracker.display.value is IndexingDisplay.Running)
+        while (tracker.display.value !is IndexingDisplay.Running) check(tasks.runOne()) { "the catch-up never showed" }
+    }
+
+    /** Opens the app, turns indexing on, then leaves the app while the catch-up runs; the service starts. */
+    private fun leaveDuringTheCatchUp() {
+        startCatchUpWithTheAppOpen()
         controller.appLeft()
         assertEquals(listOf("clear", "start"), platform.calls)
         controller.serviceStarted()
@@ -516,11 +550,10 @@ class BackgroundIndexingTest {
         leaveDuringTheCatchUp()
         assertEquals("counting: no percentage yet", BackgroundIndexingContent.Counting, shownContent())
 
-        tasks.runUntil { (tracker.display.value as? IndexingDisplay.Running)?.numbers != null }
+        while ((tracker.display.value as? IndexingDisplay.Running)?.numbers == null) check(tasks.runOne())
         val numbers = (tracker.display.value as IndexingDisplay.Running).numbers!!
         assertEquals("the header icon's own numbers", BackgroundIndexingContent.Percent(numbers.percent), shownContent())
 
-        // Part way through, the notification follows the vectors actually made.
         // Part way through the vector pass, the notification follows the vectors actually made.
         readsAtOnce = true
         var partWay: Pair<IndexingDisplay, BackgroundIndexingContent?>? = null
@@ -532,14 +565,11 @@ class BackgroundIndexingTest {
         }
         tasks.runAll()
         val (display, content) = partWay!!
-        val percent = (display as IndexingDisplay.Running).numbers!!.percent
-        assertEquals("three of nine messages have their vector", 33, percent)
+        assertEquals("three of nine messages have their vector", 33, (display as IndexingDisplay.Running).numbers!!.percent)
         assertEquals(BackgroundIndexingContent.Percent(33), content)
 
-        assertTrue(allMade())
-        assertEquals(9, model.inputs.size)
+        assertFinished(3)
         assertEquals(BackgroundIndexingStep.Stop(BackgroundStopReason.CATCH_UP_ENDED), serviceStep())
-        assertNothingReadTwice()
     }
 
     @Test fun androidsTimeLimitLosesNoFinishedWorkAndOpeningTheAppContinuesWithoutReadingAnythingTwice() {
@@ -548,23 +578,14 @@ class BackgroundIndexingTest {
         // The time limit is reached while the third vector is being read.
         model.afterRead = { if (model.inputs.size == 3) controller.serviceStopped(BackgroundStopReason.TIME_LIMIT) }
         tasks.runAll()
-        assertTrue(hold.held)
+        assertFalse(permit.mayRun())
         assertEquals("the read in progress was finished and nothing more was read", 3, model.inputs.size)
-        assertEquals("finished vectors are kept", 3,
-            index.vectors.values.count { it.state == ConversationIndexStore.STATE_MADE })
+        assertEquals("finished vectors are kept", 3, index.vectors.values.count { it.state == ConversationIndexStore.STATE_MADE })
         assertTrue("notice" in platform.calls)
-
-        // A change saved while held waits too.
-        chats.put("c4", chat("c4"))
-        coordinator.chatChanged("c4")
-        tasks.runAll()
-        assertEquals(3, model.inputs.size)
 
         controller.appOpened()
         tasks.runAll()
-        assertTrue(allMade())
-        assertEquals(12, model.inputs.size)
-        assertNothingReadTwice()
+        assertFinished(3)
         assertEquals(IndexingDisplay.Hidden, tracker.display.value)
     }
 
@@ -573,66 +594,282 @@ class BackgroundIndexingTest {
         leaveDuringTheCatchUp()
         model.afterRead = { if (model.inputs.size == 4) controller.serviceStopped(BackgroundStopReason.TIME_LIMIT) }
         tasks.runAll()
-        val before = model.inputs.size
+        assertEquals(4, model.inputs.size)
 
         // Android ends the process; the next opening starts a new one.
         model.afterRead = {}
         startProcess()
-        assertFalse("nothing held in a new process", hold.held)
-        controller.appOpened()
         coordinator.appStarted()
+        controller.appOpened()
         tasks.runAll()
-        assertTrue(allMade())
-        assertEquals(9, model.inputs.size)
-        assertTrue(before < 9)
-        assertNothingReadTwice()
+        assertFinished(3)
     }
 
     @Test fun itNeverStartsWhenTheDaysTimeIsUsedUpAndIndexingWaitsForTheApp() {
         putChats(2)
-        controller.appOpened()
-        coordinator.turnedOn()
-        tasks.runOne()
+        startCatchUpWithTheAppOpen()
         platform.refuseWith = AndroidRefusal("Time limit already exhausted for foreground service type dataSync")
         controller.appLeft()
         assertFalse(controller.serviceActive)
-        assertTrue(hold.held)
-        tasks.runAll()
-        assertTrue("nothing runs without the service", model.inputs.isEmpty())
+        assertFalse(permit.mayRun())
+        assertNothingIndexedWhile { tasks.runAll() }
         assertEquals(listOf("clear", "notice"), platform.calls)
 
         platform.refuseWith = null
         controller.appOpened()
         tasks.runAll()
-        assertTrue(allMade())
-        assertNothingReadTwice()
+        assertFinished(2)
     }
 
-    @Test fun theUserPausingBeforeClosingStartsNothingAndAHeldPausedIndexNeverRestartsByItself() {
+    // --- Restores ---------------------------------------------------------------------
+
+    @Test fun aRestoreFinishingWhileTheAppIsClosedRunsNothingUntilItOpens() {
         putChats(2)
         controller.appOpened()
         coordinator.turnedOn()
+        tasks.runAll()
+        controller.appLeft()
+        assertEquals("nothing was left to continue", listOf("clear"), platform.calls)
+
+        chats.put("c3", chat("c3"))
+        assertNothingIndexedWhile {
+            coordinator.chatSetReplaced()
+            tasks.runAll()
+        }
+        assertEquals("no start after the app has left", listOf("clear"), platform.calls)
+
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(3)
+    }
+
+    @Test fun aRestoreFinishingWhileTheAppIsClosedIsContinuedByTheNextProcess() {
+        putChats(2)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        controller.appLeft()
+        chats.put("c3", chat("c3"))
+        assertNothingIndexedWhile {
+            coordinator.chatSetReplaced()
+            tasks.runAll()
+        }
+
+        startProcess()
+        assertNothingIndexedWhile {
+            coordinator.appStarted()
+            tasks.runAll()
+        }
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(3)
+    }
+
+    @Test fun aRestoreWhileTheServiceRunsCountsAgainThenShowsTheRealPercentage() {
+        putChats(2)
+        leaveDuringTheCatchUp()
+        tasks.runAll()
+        assertFinished(2)
+        chats.put("c3", chat("c3"))
+        // The service is still running (its next update has not seen the end yet).
+        coordinator.chatSetReplaced()
         tasks.runOne()
+        tasks.runOne()
+        assertEquals(BackgroundIndexingContent.Counting, shownContent())
+        while ((tracker.display.value as? IndexingDisplay.Running)?.numbers == null) check(tasks.runOne())
+        assertTrue(shownContent() is BackgroundIndexingContent.Percent)
+        tasks.runAll()
+        assertFinished(3)
+    }
+
+    @Test fun aCatchUpThatEndedInTheBackgroundLeavesALaterRestoreWaitingForTheApp() {
+        putChats(2)
+        leaveDuringTheCatchUp()
+        tasks.runAll()
+        controller.serviceStopped(BackgroundStopReason.CATCH_UP_ENDED)
+        assertFalse(permit.mayRun())
+
+        chats.put("c3", chat("c3"))
+        assertNothingIndexedWhile {
+            coordinator.chatSetReplaced()
+            tasks.runAll()
+        }
+
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(3)
+    }
+
+    // --- The app opening or closing at the same moment as indexing work -------------------
+
+    @Test fun theAppOpeningAtTheMomentIndexingFindsItMayNotRunIsNeverMissed() {
+        putChats(2)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        controller.appLeft()
+        chats.put("c3", chat("c3"))
+        coordinator.chatSetReplaced()
+        // The index's thread finds it may not run, and the app opens before it acts on that.
+        var opened = false
+        onMayRunChecked = { allowed ->
+            if (!allowed && !opened) {
+                opened = true
+                controller.appOpened()
+            }
+        }
+        tasks.runAll()
+        assertTrue(opened)
+        assertFinished(3)
+    }
+
+    @Test fun theAppOpeningWhileAVectorPassStopsForTheClosingIsNeverMissed() {
+        putChats(2)
+        leaveDuringTheCatchUp()
+        model.afterRead = { if (model.inputs.size == 2) controller.serviceStopped(BackgroundStopReason.TIME_LIMIT) }
+        var opened = false
+        onMayRunChecked = { allowed ->
+            if (!allowed && !opened && model.inputs.size == 2) {
+                opened = true
+                controller.appOpened()
+            }
+        }
+        tasks.runAll()
+        assertTrue(opened)
+        assertFinished(2)
+    }
+
+    @Test fun leavingWhileIndexingWorksDuringTheDecisionDropsNothingAndTheServiceContinuesIt() {
+        putChats(3)
+        startCatchUpWithTheAppOpen()
+        // While the main thread decides, the index's thread keeps working.
+        val deciding = object : BackgroundIndexingPlatform by platform {
+            override fun display(): IndexingDisplay {
+                repeat(3) { tasks.runOne() }
+                return tracker.display.value
+            }
+            override fun conditions() = tracker.conditions()
+            override fun userPaused() = tracker.isPaused
+        }
+        val leaving = controllerFor(deciding, permit)
+        leaving.appLeft()
+        assertEquals("start" , platform.calls.last())
+        assertTrue(permit.mayRun())
+        tasks.runAll()
+        assertFinished(3)
+    }
+
+    @Test fun leavingWhileACatchUpIsStillBeingAdmittedKeepsItsWorkForTheApp() {
+        putChats(2)
+        controller.appOpened()
+        // The app is left after the catch-up was admitted but before it is shown: no service.
+        whileFindingWork = { whileFindingWork = {}; controller.appLeft() }
+        coordinator.turnedOn()
+        tasks.runAll()
+        assertEquals(listOf("clear"), platform.calls)
+        assertTrue("nothing compared without the notification", index.rows.isEmpty())
+        assertTrue("nothing indexed without the notification", model.inputs.isEmpty())
+
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(2)
+    }
+
+    @Test fun reopeningBeforeTheServiceStartsAndItsLateStopKeepIndexingRunningInTheApp() {
+        putChats(3)
+        leaveDuringTheCatchUp()
+        tasks.runOne()
+        // Reopened before the service reached startForeground: it is asked to stop when it gets there.
+        controller.appOpened()
+        assertEquals("stop:APP_OPENED", platform.calls[platform.calls.size - 2])
+        controller.serviceStarted()
+        controller.serviceStopped(BackgroundStopReason.APP_OPENED)
+        assertTrue(permit.mayRun())
+        tasks.runAll()
+        assertFinished(3)
+        assertFalse("notice" in platform.calls)
+    }
+
+    @Test fun aChangedChatSavedJustBeforeClosingWaitsForTheApp() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        chats.put("c2", chat("c2"))
+        coordinator.chatChanged("c2")
+        controller.appLeft()
+        assertNothingIndexedWhile { tasks.runAll() }
+
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(2)
+    }
+
+    @Test fun aProcessStartedForBackgroundWorkIndexesNothingUntilAScreenOpens() {
+        putChats(2)
+        assertNothingIndexedWhile {
+            coordinator.appStarted()
+            tasks.runAll()
+        }
+        assertTrue(platform.calls.isEmpty())
+
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(2)
+    }
+
+    @Test fun waitingVectorsAreNotReadWhileTheAppIsClosedWithoutTheService() {
+        putChats(2)
+        controller.appOpened()
+        // An earlier run compared the chats but was stopped before any vector was read.
+        model.afterRead = { throw IllegalStateException("not now") }
+        coordinator.turnedOn()
+        tasks.runAll()
+        model.inputs.clear()
+        model.afterRead = {}
+        assertTrue(index.vectors.values.all { it.state == ConversationIndexStore.STATE_WAITING })
+
+        startProcess()
+        controller.appOpened()
+        whileFindingWork = { whileFindingWork = {}; controller.appLeft() }
+        coordinator.appStarted()
+        tasks.runAll()
+        assertEquals(listOf("clear"), platform.calls)
+        assertTrue("no vector read without the notification", model.inputs.isEmpty())
+
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(2)
+    }
+
+    // --- The user's pause and the other conditions ------------------------------------------
+
+    @Test fun theUserPausingBeforeClosingStartsNothingAndAPausedIndexNeverRestartsByItself() {
+        putChats(2)
+        startCatchUpWithTheAppOpen()
         tracker.pause()
         tasks.runAll()
         controller.appLeft()
         assertEquals(listOf("clear"), platform.calls)
         assertTrue(model.inputs.isEmpty())
 
-        // Paused and held (another visit left during a catch-up that the time limit stopped).
-        tracker.resume()
-        coordinator.resumed()
-        tasks.runOne()
-        controller.appLeft()
-        controller.serviceStarted()
-        controller.serviceStopped(BackgroundStopReason.TIME_LIMIT)
-        tracker.pause()
-        tasks.runAll()
-        val read = model.inputs.size
+        // Reopening, a restore while closed, and reopening again: the pause is kept throughout.
         controller.appOpened()
         tasks.runAll()
-        assertEquals("the user's pause is kept", read, model.inputs.size)
+        controller.appLeft()
+        assertNothingIndexedWhile {
+            coordinator.chatSetReplaced()
+            tasks.runAll()
+        }
+        controller.appOpened()
+        tasks.runAll()
+        assertTrue("the user's pause is kept", model.inputs.isEmpty())
         assertTrue(tracker.display.value is IndexingDisplay.Paused)
+
+        tracker.resume()
+        coordinator.resumed()
+        tasks.runAll()
+        assertFinished(2)
     }
 
     @Test fun turningIndexingOffOrDeletingTheIndexStopsTheService() {
@@ -656,12 +893,9 @@ class BackgroundIndexingTest {
         putChats(2)
         leaveDuringTheCatchUp()
         modelInstalled = false
-        chats.put("c3", chat("c3"))
-        coordinator.chatChanged("c3")
         coordinator.resumed()
         tasks.runAll()
         assertEquals(BackgroundIndexingStep.Stop(BackgroundStopReason.MODEL_UNAVAILABLE), serviceStep())
-        assertFalse("not an Android limit: no hold", hold.held)
     }
 
     @Test fun aRebuildShowsRebuildingAndAFailedOneStopsTheService() {
@@ -678,177 +912,16 @@ class BackgroundIndexingTest {
         assertEquals(BackgroundIndexingStep.Stop(BackgroundStopReason.REBUILD_FAILED), serviceStep())
     }
 
-    @Test fun aRestoreWhileTheServiceRunsCountsAgainThenShowsTheRealPercentage() {
-        putChats(2)
-        leaveDuringTheCatchUp()
-        tasks.runAll()
-        chats.put("c3", chat("c3"))
-        coordinator.chatSetReplaced()
-        tasks.runOne()
-        tasks.runOne()
-        assertEquals(BackgroundIndexingContent.Counting, shownContent())
-        tasks.runUntil { (tracker.display.value as? IndexingDisplay.Running)?.numbers != null }
-        assertTrue(shownContent() is BackgroundIndexingContent.Percent)
-        tasks.runAll()
-        assertTrue(allMade())
-        assertNothingReadTwice()
-    }
-
-    @Test fun aRestoreFinishingWithTheAppAlreadyInTheBackgroundStartsNoServiceAndKeepsItsWork() {
-        putChats(2)
-        controller.appOpened()
-        coordinator.turnedOn()
-        tasks.runAll()
-        assertTrue(allMade())
-        controller.appLeft()
-        assertEquals("nothing was left to continue", listOf("clear"), platform.calls)
-
-        chats.put("c3", chat("c3"))
-        coordinator.chatSetReplaced()
-        tasks.runAll()
-        assertEquals("no start after the app has left", listOf("clear"), platform.calls)
-        assertEquals("the catch-up waits for the app: nothing read without the notification", 6, model.inputs.size)
-        assertEquals(IndexingDisplay.Hidden, tracker.display.value)
-
-        // A changed chat's own update is not held back.
-        chats.put("c1", chat("c1") + user("c1-u3", "Again c1"))
-        coordinator.chatChanged("c1")
-        tasks.runAll()
-        assertEquals(7, model.inputs.size)
-
-        controller.appOpened()
-        tasks.runAll()
-        assertTrue(allMade())
-        assertEquals(10, model.inputs.size)
-        assertNothingReadTwice()
-
-        // The same after the process ends instead: the next opening continues it.
-        controller.appLeft()
-        chats.put("c4", chat("c4"))
-        coordinator.chatSetReplaced()
-        tasks.runAll()
-        assertEquals(10, model.inputs.size)
-        startProcess()
-        controller.appOpened()
-        coordinator.appStarted()
-        tasks.runAll()
-        assertTrue(allMade())
-        assertEquals(13, model.inputs.size)
-        assertNothingReadTwice()
-    }
-
-    @Test fun aProcessStartedForBackgroundWorkIndexesNothingUntilAScreenOpens() {
-        putChats(2)
-        // Android starts the process for other background work: the startup catch-up runs before any screen.
-        coordinator.appStarted()
-        tasks.runAll()
-        assertTrue("nothing indexed without a screen or the notification", model.inputs.isEmpty())
-        assertTrue(platform.calls.isEmpty())
-
-        controller.appOpened()
-        tasks.runAll()
-        assertTrue(allMade())
-        assertEquals(6, model.inputs.size)
-        assertNothingReadTwice()
-    }
-
-    @Test fun leavingWhileACatchUpIsStillBeingAdmittedLeavesItWaitingForTheApp() {
-        putChats(2)
-        controller.appOpened()
-        // The app is left after the catch-up passed its check but before it is shown.
-        whileFindingWork = { whileFindingWork = {}; controller.appLeft() }
-        coordinator.turnedOn()
-        tasks.runAll()
-        assertEquals("not shown yet, so no service", listOf("clear"), platform.calls)
-        assertTrue("nothing indexed without the notification", model.inputs.isEmpty())
-        assertEquals(IndexingDisplay.Hidden, tracker.display.value)
-
-        controller.appOpened()
-        tasks.runAll()
-        assertTrue(allMade())
-        assertEquals(6, model.inputs.size)
-        assertNothingReadTwice()
-    }
-
-    @Test fun aCatchUpThatWaitsAtTheMomentTheAppOpensIsNeverMissed() {
-        val hold = BackgroundIndexingHold()
-        val start = java.util.concurrent.CyclicBarrier(2)
-        repeat(2_000) {
-            hold.gateCatchUps(true)
-            var waited = false
-            val coordinatorThread = Thread {
-                start.await()
-                waited = hold.catchUpMustWait()
-            }
-            coordinatorThread.start()
-            start.await()
-            val resumed = hold.release()
-            coordinatorThread.join()
-            // Either the catch-up went ahead, or the opening saw it wait and continues it.
-            assertTrue("a waiting catch-up was missed", !waited || resumed)
-        }
-    }
-
-    @Test fun aCatchUpDeferredWithVectorsAlreadyWaitingReadsNoneOfThemUntilTheAppOpens() {
-        putChats(2)
-        controller.appOpened()
-        // An earlier run compared the chats but was stopped before any vector was read.
-        model.afterRead = { throw IllegalStateException("not now") }
-        coordinator.turnedOn()
-        tasks.runAll()
-        model.inputs.clear()
-        model.afterRead = {}
-        assertTrue(index.vectors.values.all { it.state == ConversationIndexStore.STATE_WAITING })
-        chats.put("c3", chat("c3"))
-
-        // The next start: the app is opened and left while the startup catch-up is being admitted.
-        startProcess()
-        controller.appOpened()
-        whileFindingWork = { whileFindingWork = {}; controller.appLeft() }
-        coordinator.appStarted()
-        tasks.runAll()
-        assertEquals("not shown yet, so no service", listOf("clear"), platform.calls)
-        assertTrue("no vector read without the notification", model.inputs.isEmpty())
-
-        controller.appOpened()
-        tasks.runAll()
-        assertTrue(allMade())
-        assertEquals(9, model.inputs.size)
-        assertNothingReadTwice()
-    }
-
-    @Test fun aCatchUpThatStopsInTheBackgroundLeavesLaterCatchUpsWaitingForTheApp() {
-        putChats(2)
-        leaveDuringTheCatchUp()
-        tasks.runAll()
-        controller.serviceStopped(BackgroundStopReason.CATCH_UP_ENDED)
-        assertFalse(hold.held)
-
-        chats.put("c3", chat("c3"))
-        coordinator.chatSetReplaced()
-        tasks.runAll()
-        assertEquals(6, model.inputs.size)
-
-        controller.appOpened()
-        tasks.runAll()
-        assertEquals(9, model.inputs.size)
-        assertNothingReadTwice()
-    }
-
     @Test fun openingTheAppStopsTheServiceAndForegroundIndexingCarriesOnAlone() {
         putChats(3)
         leaveDuringTheCatchUp()
-        tasks.runUntil { model.inputs.size >= 2 }
+        while (model.inputs.size < 2) check(tasks.runOne())
         platform.calls.clear()
         controller.appOpened()
         assertEquals(listOf("stop:APP_OPENED", "clear"), platform.calls)
         assertEquals(BackgroundIndexingStep.Stop(BackgroundStopReason.APP_OPENED), serviceStep())
-        assertFalse(hold.held)
         tasks.runAll()
-        assertTrue(allMade())
-        assertEquals(9, model.inputs.size)
-        assertNothingReadTwice()
-        assertNull(tracker.display.value as? IndexingDisplay.Running)
+        assertFinished(3)
     }
 
     companion object {

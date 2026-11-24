@@ -44,7 +44,7 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
 
     fun controller(context: Context): BackgroundIndexingController =
         instance ?: synchronized(this) {
-            instance ?: BackgroundIndexingController(Platform(context.applicationContext), ConversationIndexRuntime.backgroundHold)
+            instance ?: BackgroundIndexingController(Platform(context.applicationContext), ConversationIndexRuntime.backgroundPermit)
                 .also { instance = it }
         }
 
@@ -97,8 +97,6 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
         override fun showStoppedNotice() = ConversationIndexingForegroundService.showPausedNotice(app)
 
         override fun clearStoppedNotice() = ConversationIndexingForegroundService.clearPausedNotice(app)
-
-        override fun resumeIndexing() = ConversationIndexRuntime.resumeAfterHold(app)
 
         override fun logcat(message: String) {
             try { Log.i(ConversationIndexErrorLog.TAG, message) } catch (_: Throwable) { }

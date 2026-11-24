@@ -50,8 +50,13 @@ object ConversationIndexRuntime {
 
     @Volatile private var progressInstance: IndexProgressTracker? = null
 
-    /** Holds indexing while the app is closed without its background service (Step 13). */
-    val backgroundHold = BackgroundIndexingHold()
+    /**
+     * Whether indexing may run now (Step 13): while a screen is visible or the
+     * background service runs. When it may run again, waiting work continues.
+     */
+    val backgroundPermit = BackgroundIndexingPermit().apply {
+        setOnMayRunAgain { instance?.mayRunAgain() }
+    }
 
     /** The progress when something already created it; null otherwise, so asking creates nothing. */
     fun progressIfCreated(): IndexProgressTracker? = progressInstance
@@ -59,15 +64,6 @@ object ConversationIndexRuntime {
     /** Runs [task] on the index's thread, after the work handed to it before (Step 13). */
     fun onIndexThread(task: () -> Unit) {
         IndexTaskRunner.on(executor).run(0, task)
-    }
-
-    /**
-     * The app opened after indexing was held while it was closed (Step 13):
-     * the catch-up continues from where it stopped. A user's pause is kept.
-     */
-    fun resumeAfterHold(context: Context) {
-        val app = context.applicationContext
-        if (isOn(app)) coordinator(app).resumed()
     }
 
     /** The indexing progress the chat header shows (Step 12). Creating it starts no work. */
@@ -114,7 +110,8 @@ object ConversationIndexRuntime {
             runPass = { runVectorPass(app, source) },
             runner = IndexTaskRunner.on(vectorExecutor),
             // A pass while paused only loads the model, so its availability is known, and stops at once.
-            isOn = { isOn(app) }
+            // While the app is closed without the background service nothing is loaded or read.
+            isOn = { isOn(app) && backgroundPermit.mayRun() }
         )
         return ConversationIndexCoordinator(
             source = source,
@@ -134,10 +131,9 @@ object ConversationIndexRuntime {
             isOn = { isOn(app) },
             events = Events(app),
             recover = { requestedByUser -> recover(app, requestedByUser) },
-            // The background hold stops work at the same safe points as the user's pause, without saving it.
-            isPaused = { progress(app).isPaused || backgroundHold.held },
+            isPaused = { progress(app).isPaused },
             progress = progress(app),
-            catchUpWaits = backgroundHold::catchUpMustWait
+            mayRun = backgroundPermit::mayRun
         )
     }
 
@@ -361,7 +357,7 @@ object ConversationIndexRuntime {
             // The model loaded and passed its check: a paused condition is over.
             ConversationIndexConditions.clearModelProblem(app)
             val catchUp = progress(app).vectorPassStarting()
-            val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering || backgroundHold.held }
+            val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering || !backgroundPermit.mayRun() }
             when (outcome) {
                 is PassageEmbeddingWorker.Outcome.Finished -> progress(app).vectorPassFinished(catchUp)
                 is PassageEmbeddingWorker.Outcome.Paused -> progress(app).vectorPassPaused()

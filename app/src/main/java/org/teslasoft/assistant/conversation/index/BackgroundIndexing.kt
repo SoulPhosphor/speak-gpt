@@ -138,44 +138,57 @@ object BackgroundIndexingLog {
 }
 
 /**
- * Holds indexing while the app is closed without its background service
- * (Step 13): after Android's time limit, a refused start, an unexpected
- * failure, or while work the user started runs. The coordinator and the
- * vector worker treat it like a pause at their next safe point, so finished
- * work is kept and nothing runs without the notification. It is not the
- * user's pause: it is never saved, and opening the app releases it.
- *
- * Apart from that, a catch-up that would start while the app is closed and
- * no service runs (a restore finishing in the background) waits for the
- * next opening; the ordinary update of a changed chat does not.
+ * Whether conversation indexing may run now (Step 13): the one owner of that
+ * state. Indexing runs while a screen of the app is visible ([State.FOREGROUND])
+ * or while its background service continues it ([State.SERVICE]). While the app
+ * is closed without the service ([State.CLOSED]; also how a process starts,
+ * before any screen) nothing is counted, compared, cut or read: the coordinator
+ * and the vector worker stop at their next safe point and keep every queue, so
+ * no work is ever dropped. Whenever the state becomes one that may run again,
+ * [onMayRunAgain] is called once, outside the lock, and continues whatever
+ * waited. This is not the user's pause, which stays separate and saved.
  */
-class BackgroundIndexingHold {
-    @Volatile var held: Boolean = false
-        private set
+class BackgroundIndexingPermit {
+    enum class State { FOREGROUND, SERVICE, CLOSED }
 
-    /** Guards the catch-up gate, so a catch-up that waits is never missed by the opening that releases it. */
     private val lock = Any()
-    private var catchUpsWait = false
-    private var catchUpWaiting = false
+    @Volatile private var state = State.CLOSED
+    @Volatile private var onMayRunAgain: () -> Unit = {}
 
-    fun hold() { held = true }
+    val current: State get() = state
 
-    /** Set by the controller: true while the app is closed and no indexing service runs. */
-    internal fun gateCatchUps(wait: Boolean) = synchronized(lock) { catchUpsWait = wait }
+    /** Checked by the indexing threads at every safe point. */
+    fun mayRun(): Boolean = state != State.CLOSED
 
-    /** Asked by the coordinator before catch-up work; true when it must wait for the app, which is then remembered. */
-    fun catchUpMustWait(): Boolean = synchronized(lock) {
-        if (catchUpsWait) catchUpWaiting = true
-        catchUpsWait
+    fun setOnMayRunAgain(listener: () -> Unit) { onMayRunAgain = listener }
+
+    /** The app's screen became visible. */
+    fun foreground() = moveTo(State.FOREGROUND)
+
+    /** The app is closed and its background service continues indexing. */
+    fun service() = moveTo(State.SERVICE)
+
+    /** The app is closed and nothing continues indexing. */
+    fun closed() = moveTo(State.CLOSED)
+
+    /**
+     * The background service stopped or could not start: indexing waits, unless
+     * a screen opened meanwhile. True when the app is closed.
+     */
+    fun closedUnlessForeground(): Boolean {
+        val wasClosedOrClosing = synchronized(lock) {
+            if (state == State.FOREGROUND) false else { state = State.CLOSED; true }
+        }
+        return wasClosedOrClosing
     }
 
-    /** The app opened: true when indexing was held or a catch-up waited, so the app continues it. */
-    fun release(): Boolean = synchronized(lock) {
-        val was = held || catchUpWaiting
-        held = false
-        catchUpWaiting = false
-        catchUpsWait = false
-        was
+    private fun moveTo(next: State) {
+        val mayRunAgain = synchronized(lock) {
+            val was = state
+            state = next
+            was == State.CLOSED && next != State.CLOSED
+        }
+        if (mayRunAgain) onMayRunAgain()
     }
 }
 
@@ -192,94 +205,74 @@ interface BackgroundIndexingPlatform {
     fun stopService(reason: BackgroundStopReason)
     fun showStoppedNotice()
     fun clearStoppedNotice()
-    /** The app opened after a hold: indexing continues from where it stopped. */
-    fun resumeIndexing()
     fun logcat(message: String)
     fun errorLog(message: String)
 }
 
 /**
- * After-close indexing (Owner, 2026-11-24, Step 13). The service is started
- * only while the app leaves the screen, which Android allows, never later; a
- * catch-up that starts with the app already in the background (a restore
- * finishing) keeps its work for the next opening. Every stop that is not the
- * work being done or the user's own choice holds indexing until the app
- * opens. All calls come from the main thread.
+ * After-close indexing (Owner, 2026-11-24, Step 13). Turns the app's
+ * visibility and the service's life into [BackgroundIndexingPermit] states,
+ * and shows the notice and writes the logs. The service is asked for only
+ * while the app leaves the screen, which Android allows, never later; the
+ * decision is made while indexing may still run, so a running catch-up is
+ * never stopped before its service is asked for. All calls come from the
+ * main thread.
  */
 class BackgroundIndexingController(
     private val platform: BackgroundIndexingPlatform,
-    val hold: BackgroundIndexingHold,
+    val permit: BackgroundIndexingPermit,
     private val classify: (Throwable) -> BackgroundStopReason = BackgroundIndexingRule::startFailure
 ) {
     /** The cause of the last unexpected failure written to the Error Log, so an ongoing failure is written once. */
     private var lastFailure: String? = null
 
-    @Volatile var appVisible: Boolean = false
+    /** Whether a screen of the app is visible (read by the service on the index's thread). */
+    val appVisible: Boolean get() = permit.current == BackgroundIndexingPermit.State.FOREGROUND
+
+    /** Whether a service start was asked for and has not stopped yet. Main thread. */
+    var serviceActive: Boolean = false
         private set
-
-    /** Whether a service start was asked for and has not stopped yet. */
-    @Volatile var serviceActive: Boolean = false
-        private set(value) {
-            field = value
-            gateCatchUps()
-        }
-
-    /** A catch-up may start without the service only while a screen of the app is visible. */
-    private fun gateCatchUps() {
-        hold.gateCatchUps(!appVisible && !serviceActive)
-    }
 
     /** Why the service last stopped or did not start; null before the first time. */
     @Volatile var lastStop: BackgroundStopReason? = null
         private set
 
-    init {
-        // A process starts with no screen visible (Android may start it for background work):
-        // catch-ups wait until a screen opens.
-        gateCatchUps()
-    }
-
     /** The last screen of the app left (not a rotation). */
     fun appLeft() {
-        // The gate stays open until the decision is made, so a running catch-up is never dropped
-        // before the service that continues it is asked for.
-        appVisible = false
-        try {
-            val decision = try {
-                BackgroundIndexingRule.startDecision(
-                    platform.display(), platform.conditions(), platform.userPaused(), platform.userWorkRunning()
-                )
-            } catch (e: Exception) {
-                stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
-                return
+        val decision = try {
+            BackgroundIndexingRule.startDecision(
+                platform.display(), platform.conditions(), platform.userPaused(), platform.userWorkRunning()
+            )
+        } catch (e: Exception) {
+            permit.closed()
+            stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
+            return
+        }
+        when (decision) {
+            BackgroundStartDecision.START -> {
+                permit.service()
+                startService()
             }
-            when (decision) {
-                BackgroundStartDecision.NOT_NEEDED -> Unit
-                BackgroundStartDecision.YIELD -> hold.hold()
-                BackgroundStartDecision.START -> startService()
-            }
-        } finally {
-            gateCatchUps()
+            // Work the user started comes first; nothing else to continue: indexing waits for the app.
+            BackgroundStartDecision.YIELD, BackgroundStartDecision.NOT_NEEDED -> permit.closed()
         }
     }
 
     /** Asks Android for the service; a refusal is handled at once. */
     fun startService() {
+        serviceActive = true
         try {
-            serviceActive = true
             platform.startService()
         } catch (e: Exception) {
             startFailed(e)
         }
     }
 
-    /** A screen of the app started after none was visible. */
+    /** A screen of the app started after none was visible: indexing continues in the app. */
     fun appOpened() {
-        appVisible = true
-        gateCatchUps()
+        permit.foreground()
         if (serviceActive) platform.stopService(BackgroundStopReason.APP_OPENED)
         platform.clearStoppedNotice()
-        if (hold.release()) platform.resumeIndexing()
     }
 
     /** The service called startForeground successfully. */
@@ -293,37 +286,35 @@ class BackgroundIndexingController(
         serviceActive = false
         val reason = classify(e)
         lastStop = reason
+        val closed = permit.closedUnlessForeground()
         if (reason == BackgroundStopReason.UNEXPECTED_FAILURE) {
             stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
             return
         }
         // Opened again meanwhile: indexing simply continues in the app.
-        if (appVisible) return
-        hold.hold()
+        if (!closed) return
         platform.logcat(BackgroundIndexingLog.stopped(reason))
         platform.showStoppedNotice()
     }
 
-    /** The service stopped for [reason]; an Android limit holds indexing and explains it. */
+    /** The service stopped for [reason]; an Android limit while the app is closed is explained. */
     fun serviceStopped(reason: BackgroundStopReason) {
         serviceActive = false
         lastStop = reason
+        val closed = permit.closedUnlessForeground()
         platform.logcat(BackgroundIndexingLog.stopped(reason))
-        if (reason.isAndroidLimit && !appVisible) {
-            hold.hold()
-            platform.showStoppedNotice()
-        }
+        if (reason.isAndroidLimit && closed) platform.showStoppedNotice()
     }
 
     /** The running service failed unexpectedly: indexing waits for the app to open. */
     fun serviceFailed(e: Throwable) {
         serviceActive = false
+        permit.closedUnlessForeground()
         stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_STOPPED)
     }
 
     private fun stoppedUnexpectedly(e: Throwable, effect: String) {
         lastStop = BackgroundStopReason.UNEXPECTED_FAILURE
-        if (!appVisible) hold.hold()
         platform.logcat(BackgroundIndexingLog.stopped(BackgroundStopReason.UNEXPECTED_FAILURE))
         val cause = ConversationIndexErrorLog.cause(e)
         if (cause != lastFailure) {

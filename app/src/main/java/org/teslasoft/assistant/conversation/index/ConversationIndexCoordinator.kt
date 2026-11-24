@@ -83,10 +83,12 @@ class ConversationIndexCoordinator(
     private val isPaused: () -> Boolean = { false },
     private val progress: IndexProgressEvents = IndexProgressEvents.NONE,
     /**
-     * Step 13: a catch-up that would start while the app is closed and no
-     * background service runs waits for the next opening, which starts it again.
+     * Step 13: whether indexing may run now ([BackgroundIndexingPermit]). While
+     * it may not (the app closed without its background service), nothing is
+     * counted, compared, cut or asked of the vector worker; every queue is kept,
+     * and [mayRunAgain] continues it.
      */
-    private val catchUpWaits: () -> Boolean = { false },
+    private val mayRun: () -> Boolean = { true },
     private val changeWaitMillis: Long = CHANGE_WAIT_MILLIS,
     private val catchUpPauseMillis: Long = CATCH_UP_PAUSE_MILLIS,
     /** Milliseconds on a clock that only moves forward. */
@@ -100,6 +102,8 @@ class ConversationIndexCoordinator(
     private val toCount = ArrayDeque<String>()
     private val staleRetries = HashMap<String, Int>()
     private val drainScheduled = AtomicBoolean(false)
+    /** A catch-up asked for while indexing could not run (Step 13). Read and written on the index's thread only. */
+    private var catchUpWaiting = false
 
     /** The chat was saved: a new message, a finished reply, an edit, a deletion, hiding or showing, another version, or IDs given on opening. */
     fun chatChanged(chatId: String) {
@@ -173,6 +177,7 @@ class ConversationIndexCoordinator(
         }
         report { progress.catchUpStopped() }
         runner.run(0) {
+            catchUpWaiting = false
             val failure = try {
                 if (whenIndexExists) maintenance().deleteEverything()
                 null
@@ -209,6 +214,22 @@ class ConversationIndexCoordinator(
     }
 
     /**
+     * Indexing may run again (Step 13): a catch-up that waited starts now;
+     * otherwise the queued work and the waiting vectors continue. Handed to the
+     * index's thread, after any task that found it could not run, so none is missed.
+     */
+    fun mayRunAgain() {
+        runner.run(0) {
+            if (catchUpWaiting) {
+                catchUpAll()
+            } else {
+                scheduleDrain(0)
+                if (isOn() && !isPaused()) requestVectorsSafely()
+            }
+        }
+    }
+
+    /**
      * Removes the entries of chats that are gone, even while paused, then
      * queues every chat; the chats the index does not describe are counted
      * first (Step 12).
@@ -224,6 +245,12 @@ class ConversationIndexCoordinator(
             emptySet()
         }
         gone.forEach { id -> guarded(id) { maintenance().deleteChat(id) } }
+        if (!mayRun()) {
+            // Nothing is read, queued or changed; [mayRunAgain] starts this catch-up.
+            catchUpWaiting = true
+            return
+        }
+        catchUpWaiting = false
         val updater = if (chats.isEmpty()) null else try {
             updaterFor().also { if (it == null) report { events.modelUnavailable(null) } }
         } catch (e: Exception) {
@@ -239,14 +266,6 @@ class ConversationIndexCoordinator(
                 toCount.clear()
             }
             if (updater != null) requestVectorsSafely()
-            return
-        }
-        if (catchUpWaits()) {
-            // Nothing is queued; opening the app starts the catch-up again from the index as it stands.
-            synchronized(lock) {
-                catchUp.clear()
-                toCount.clear()
-            }
             return
         }
         if (chats.isNotEmpty() && updater == null) {
@@ -289,18 +308,8 @@ class ConversationIndexCoordinator(
         drainScheduled.set(false)
         // While paused nothing is counted, compared or cut; resuming starts a catch-up.
         if (!isOn() || isPaused()) return
-        // Step 13: the app may have closed, with no background service, after the catch-up was
-        // admitted. Its queued chats then wait for the next opening, which starts it again;
-        // a changed chat's own update below is not held.
-        val catchUpQueued = synchronized(lock) { catchUp.isNotEmpty() || toCount.isNotEmpty() }
-        val deferred = catchUpQueued && catchUpWaits()
-        if (deferred) {
-            synchronized(lock) {
-                catchUp.clear()
-                toCount.clear()
-            }
-            report { progress.catchUpStopped() }
-        }
+        // Step 13: while indexing may not run, every queue is kept for [mayRunAgain].
+        if (!mayRun()) return
         val now = clock()
         var wait: Long? = null
         val next = synchronized(lock) {
@@ -320,8 +329,7 @@ class ConversationIndexCoordinator(
         }
         if (next == null) {
             val remaining = wait
-            // A deferred catch-up does not ask for its vectors either; the opening asks again.
-            if (remaining != null) scheduleDrain(remaining.coerceAtLeast(1)) else if (!deferred) drained()
+            if (remaining != null) scheduleDrain(remaining.coerceAtLeast(1)) else drained()
             return
         }
         val (chatId, work) = next
