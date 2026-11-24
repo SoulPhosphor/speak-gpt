@@ -114,7 +114,8 @@ object ConversationIndexRuntime {
             isOn = { isOn(app) && backgroundPermit.mayRun() }
         )
         // A catch-up whose passes stopped on a failure, with none asked for, cannot end by itself (Step 13).
-        progress(app).vectorsStoppedOnFailure = { vectors.isStoppedOnFailure }
+        progress(app).vectorRequests = { vectors.requestCount }
+        progress(app).vectorsStoppedOnFailureAt = { vectors.stoppedOnFailureAt }
         return ConversationIndexCoordinator(
             source = source,
             storage = { ConversationIndexStore.get(app) },

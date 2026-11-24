@@ -206,7 +206,9 @@ class ConversationIndexCoordinator(
         }
         recoveryWaiting = null
         val usable = try { recover(requestedByUser) } catch (_: Exception) { false }
-        if (usable) catchUpAll()
+        // A recovery that could not run now (postponed) asks for vectors, so a catch-up stopped for it
+        // either goes on or is seen to stall rather than waiting with nothing asked for.
+        if (usable) catchUpAll() else if (isOn()) requestVectorsSafely()
     }
 
     /** The setting was turned on: existing chats are caught up, newest first. */
@@ -523,24 +525,29 @@ class IndexVectorPasses(
     private val runner: IndexTaskRunner,
     private val isOn: () -> Boolean = { true }
 ) {
-    /** Guards [wanted], [scheduled] and [stoppedOnFailure] together. */
+    /** Guards [wanted], [scheduled], [requests] and [stopAt] together. */
     private val lock = Any()
     private var wanted = false
     private var scheduled = false
-    private var stoppedOnFailure = false
+    private var requests = 0L
+    private var stopAt = NOT_STOPPED
+
+    /** Step 13: how many passes have been asked for so far. */
+    val requestCount: Long get() = synchronized(lock) { requests }
 
     /**
-     * Step 13: the passes stopped because the last one failed (or could not
-     * start), and no further pass has been asked for since. Set and cleared
-     * under the same lock as the requests, so it is never true while a pass
-     * is asked for.
+     * Step 13: when the passes stopped because the last one failed (or could
+     * not start) with none asked for since, the [requestCount] at that moment;
+     * otherwise [NOT_STOPPED]. Set and cleared under the same lock as the
+     * requests, so it never shows a stop while a pass is asked for.
      */
-    val isStoppedOnFailure: Boolean get() = synchronized(lock) { stoppedOnFailure }
+    val stoppedOnFailureAt: Long get() = synchronized(lock) { stopAt }
 
     fun request() {
         val start = synchronized(lock) {
             wanted = true
-            stoppedOnFailure = false
+            requests++
+            stopAt = NOT_STOPPED
             if (scheduled) false else { scheduled = true; true }
         }
         if (start) schedule()
@@ -573,11 +580,15 @@ class IndexVectorPasses(
             val again = synchronized(lock) {
                 if (wanted) true else {
                     scheduled = false
-                    stoppedOnFailure = failed
+                    stopAt = if (failed) requests else NOT_STOPPED
                     false
                 }
             }
             if (again) schedule()
         }
+    }
+
+    companion object {
+        const val NOT_STOPPED = -1L
     }
 }

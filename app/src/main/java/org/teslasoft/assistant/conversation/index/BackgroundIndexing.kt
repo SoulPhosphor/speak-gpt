@@ -334,7 +334,6 @@ class BackgroundIndexingController(
 
     /** The service called startForeground successfully. */
     fun serviceStarted() {
-        lastFailure = null
         platform.logcat(BackgroundIndexingLog.STARTED)
     }
 
@@ -358,6 +357,8 @@ class BackgroundIndexingController(
     fun serviceStopped(reason: BackgroundStopReason) {
         serviceActive = false
         lastStop = reason
+        // A run that ended normally: a failure seen again later is a new one.
+        lastFailure = null
         val closed = permit.closedUnlessForeground(waiting = catchUpGoing())
         platform.logcat(BackgroundIndexingLog.stopped(reason))
         if (reason.isAndroidLimit && closed) platform.showStoppedNotice()

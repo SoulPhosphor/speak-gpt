@@ -229,10 +229,14 @@ class IndexProgressTracker(
     private var drained = false
 
     /**
-     * Step 13: whether the vector passes stopped on a failure with none asked
-     * for since ([IndexVectorPasses.isStoppedOnFailure]). Set once by the runtime.
+     * Step 13: the vector passes' request count, and the count at which they
+     * stopped on a failure with none asked for since, or
+     * [IndexVectorPasses.NOT_STOPPED] ([IndexVectorPasses]). Set once by the runtime.
      */
-    @Volatile var vectorsStoppedOnFailure: () -> Boolean = { false }
+    @Volatile var vectorRequests: () -> Long = { 0L }
+    @Volatile var vectorsStoppedOnFailureAt: () -> Long = { IndexVectorPasses.NOT_STOPPED }
+    /** The vector request count when the catch-up handed over its last chat. */
+    private var drainedAtRequest = 0L
     private val pending = LinkedHashSet<String>()
     private val counted = HashMap<String, CountedChat>()
     private var latest: IndexingNumbers? = null
@@ -249,7 +253,12 @@ class IndexProgressTracker(
      * was handled, so nothing will ask for another vector pass, and the last
      * pass stopped on a failure.
      */
-    val isStalled: Boolean get() = synchronized(lock) { catchingUp && drained } && vectorsStoppedOnFailure()
+    val isStalled: Boolean
+        get() {
+            val drainedAt = synchronized(lock) { if (catchingUp && drained) drainedAtRequest else return false }
+            // Only a stop by a pass asked for after the hand-over counts: the hand-over always asks for one.
+            return vectorsStoppedOnFailureAt() > drainedAt
+        }
 
     /** The Step 11 conditions the display is worked out from. */
     fun conditions(): IndexingConditions = source.conditions()
@@ -297,7 +306,12 @@ class IndexProgressTracker(
     }
 
     override fun catchUpDrained() {
-        synchronized(lock) { if (catchingUp) drained = true }
+        synchronized(lock) {
+            if (catchingUp) {
+                drained = true
+                drainedAtRequest = vectorRequests()
+            }
+        }
     }
 
     override fun catchUpStopped() {

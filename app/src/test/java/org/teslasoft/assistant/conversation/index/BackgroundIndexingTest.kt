@@ -275,12 +275,18 @@ class BackgroundIndexingTest {
         assertFalse("the approved notice is for Android's limits only", "notice" in platform.calls)
         assertEquals(3, platform.logcat.count { it == BackgroundIndexingLog.stopped(BackgroundStopReason.UNEXPECTED_FAILURE) })
 
-        // After a start that works, the same failure is written again when it returns.
+        // A start that works does not end the ongoing failure: the same failure is still not written again.
         platform.refuseWith = null
         controller.appOpened()
         controller.appLeft()
         controller.serviceStarted()
         controller.serviceFailed(SecurityException("Starting FGS with type dataSync requires permissions"))
+        assertEquals(1, platform.errors.size)
+        // A different failure is written, with the running service's effect.
+        controller.appOpened()
+        controller.appLeft()
+        controller.serviceStarted()
+        controller.serviceFailed(IllegalStateException("the progress could not be read"))
         assertEquals(2, platform.errors.size)
         assertTrue(platform.errors.last().contains(BackgroundIndexingLog.EFFECT_STOPPED))
         assertFalse(permit.mayRun())
@@ -424,6 +430,12 @@ class BackgroundIndexingTest {
         prefixFor = { "title: $it | text: " }, countModelInput = { whileCutting(it); words(it) }
     )
     private var recoveries = 0
+    /** What a recovery returns: true when the index can be used and is caught up. */
+    private var recoveryUsable = true
+    /** A recovery has the index to itself, as `ConversationIndexAccess.recovering` in the app. */
+    private var recovering = false
+    /** Runs when the catch-up has handed over its last chat, before it asks for vectors. */
+    private var afterHandOver: () -> Unit = {}
     private var settingOn = true
     private var modelInstalled = true
     private var modelProblem = false
@@ -485,7 +497,7 @@ class BackgroundIndexingTest {
         val passes = IndexVectorPasses(
             runPass = {
                 val catchUp = tracker.vectorPassStarting()
-                PassageEmbeddingWorker(index, chats, reader, model, pause).runPass { !settingOn || !mayRun() }.also {
+                PassageEmbeddingWorker(index, chats, reader, model, pause).runPass { !settingOn || recovering || !mayRun() }.also {
                     if (it is PassageEmbeddingWorker.Outcome.Finished) tracker.vectorPassFinished(catchUp)
                     if (it is PassageEmbeddingWorker.Outcome.Paused) tracker.vectorPassPaused()
                 }.also { passesRun++ }
@@ -494,7 +506,8 @@ class BackgroundIndexingTest {
             isOn = { settingOn && mayRun() }
         )
         // As in the runtime: passes that stopped on a failure, with none asked for, leave the catch-up stalled.
-        tracker.vectorsStoppedOnFailure = { passes.isStoppedOnFailure }
+        tracker.vectorRequests = { passes.requestCount }
+        tracker.vectorsStoppedOnFailureAt = { passes.stoppedOnFailureAt }
         coordinator = ConversationIndexCoordinator(
             source = chats,
             storage = { index },
@@ -507,8 +520,13 @@ class BackgroundIndexingTest {
                 override fun modelUnavailable(cause: Exception?) { modelProblem = true; tracker.publish() }
             },
             isPaused = { tracker.isPaused },
-            recover = { recoveries++; true },
-            progress = tracker,
+            recover = { recoveries++; recovering = false; recoveryUsable },
+            progress = object : IndexProgressEvents by tracker {
+                override fun catchUpDrained() {
+                    tracker.catchUpDrained()
+                    afterHandOver()
+                }
+            },
             mayRun = ::mayRun,
             clock = { tasks.now }
         )
@@ -938,6 +956,67 @@ class BackgroundIndexingTest {
             assertFalse("the catch-up asks for another pass itself", tracker.isStalled)
         }
         assertFinished(3)
+    }
+
+    @Test fun leavingAtTheHandOverWithAnOlderFailureStillContinuesInTheBackground() {
+        putChats(3)
+        startCatchUpWithTheAppOpen()
+        // An earlier pass failed with nothing else asked for at that moment.
+        while (index.rows.isEmpty()) check(tasks.runOne())
+        model.failNext = true
+        coordinator.mayRunAgain()
+        while (passesRun == 0) check(tasks.runOne())
+        // The app is left right after the hand-over, before the catch-up asks for its vectors.
+        var stalledAtHandOver: Boolean? = null
+        afterHandOver = {
+            afterHandOver = {}
+            stalledAtHandOver = tracker.isStalled
+            controller.appLeft()
+        }
+        tasks.runAll()
+        assertEquals("an older failure is not a stall", false, stalledAtHandOver)
+        assertEquals("the service continues the catch-up", "start", platform.calls.last())
+        assertFinished(3)
+    }
+
+    @Test fun aRecoveryThatCannotRunNowLetsTheCatchUpGoOnOrStopRatherThanWait() {
+        putChats(2)
+        leaveDuringTheCatchUp()
+        // A vector pass is stopped by a recovery taking the index, and the recovery is postponed.
+        model.afterRead = {
+            if (model.inputs.size == 2 && !recovering && recoveries == 0) {
+                recovering = true
+                recoveryUsable = false
+                coordinator.recoverIndex()
+            }
+        }
+        tasks.runAll()
+        model.afterRead = {}
+        assertEquals(1, recoveries)
+        assertTrue("the catch-up was not left waiting with nothing asked for",
+            tracker.display.value == IndexingDisplay.Hidden || tracker.isStalled)
+        assertFinished(2)
+    }
+
+    @Test fun anOngoingFailureOfTheRunningServiceIsWrittenOnce() {
+        val platform = Platform().apply { display = IndexingDisplay.Running(numbers42) }
+        val controller = controllerFor(platform, BackgroundIndexingPermit())
+        repeat(3) {
+            controller.appOpened()
+            controller.appLeft()
+            controller.serviceStarted()
+            controller.serviceFailed(IllegalStateException("the progress could not be read"))
+        }
+        assertEquals(1, platform.errors.size)
+        controller.appOpened()
+        controller.appLeft()
+        controller.serviceStarted()
+        controller.serviceStopped(BackgroundStopReason.CATCH_UP_ENDED)
+        controller.appOpened()
+        controller.appLeft()
+        controller.serviceStarted()
+        controller.serviceFailed(IllegalStateException("the progress could not be read"))
+        assertEquals("written again after a run that ended normally", 2, platform.errors.size)
     }
 
     @Test fun leavingWithAStalledCatchUpStartsNoServiceAndOpeningContinuesIt() {
