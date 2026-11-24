@@ -293,7 +293,8 @@ class ConversationIndexCoordinator(
         // admitted. Its queued chats then wait for the next opening, which starts it again;
         // a changed chat's own update below is not held.
         val catchUpQueued = synchronized(lock) { catchUp.isNotEmpty() || toCount.isNotEmpty() }
-        if (catchUpQueued && catchUpWaits()) {
+        val deferred = catchUpQueued && catchUpWaits()
+        if (deferred) {
             synchronized(lock) {
                 catchUp.clear()
                 toCount.clear()
@@ -319,7 +320,8 @@ class ConversationIndexCoordinator(
         }
         if (next == null) {
             val remaining = wait
-            if (remaining != null) scheduleDrain(remaining.coerceAtLeast(1)) else drained()
+            // A deferred catch-up does not ask for its vectors either; the opening asks again.
+            if (remaining != null) scheduleDrain(remaining.coerceAtLeast(1)) else if (!deferred) drained()
             return
         }
         val (chatId, work) = next

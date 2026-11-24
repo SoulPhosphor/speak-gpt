@@ -765,6 +765,34 @@ class BackgroundIndexingTest {
         }
     }
 
+    @Test fun aCatchUpDeferredWithVectorsAlreadyWaitingReadsNoneOfThemUntilTheAppOpens() {
+        putChats(2)
+        controller.appOpened()
+        // An earlier run compared the chats but was stopped before any vector was read.
+        model.afterRead = { throw IllegalStateException("not now") }
+        coordinator.turnedOn()
+        tasks.runAll()
+        model.inputs.clear()
+        model.afterRead = {}
+        assertTrue(index.vectors.values.all { it.state == ConversationIndexStore.STATE_WAITING })
+        chats.put("c3", chat("c3"))
+
+        // The next start: the app is opened and left while the startup catch-up is being admitted.
+        startProcess()
+        controller.appOpened()
+        whileFindingWork = { whileFindingWork = {}; controller.appLeft() }
+        coordinator.appStarted()
+        tasks.runAll()
+        assertEquals("not shown yet, so no service", listOf("clear"), platform.calls)
+        assertTrue("no vector read without the notification", model.inputs.isEmpty())
+
+        controller.appOpened()
+        tasks.runAll()
+        assertTrue(allMade())
+        assertEquals(9, model.inputs.size)
+        assertNothingReadTwice()
+    }
+
     @Test fun aCatchUpThatStopsInTheBackgroundLeavesLaterCatchUpsWaitingForTheApp() {
         putChats(2)
         leaveDuringTheCatchUp()
