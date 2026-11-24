@@ -231,6 +231,12 @@ class BackgroundIndexingController(
     @Volatile var lastStop: BackgroundStopReason? = null
         private set
 
+    init {
+        // A process starts with no screen visible (Android may start it for background work):
+        // catch-ups wait until a screen opens.
+        gateCatchUps()
+    }
+
     /** The last screen of the app left (not a rotation). */
     fun appLeft() {
         appVisible = false

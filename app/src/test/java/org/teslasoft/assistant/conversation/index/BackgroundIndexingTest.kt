@@ -709,6 +709,21 @@ class BackgroundIndexingTest {
         assertNothingReadTwice()
     }
 
+    @Test fun aProcessStartedForBackgroundWorkIndexesNothingUntilAScreenOpens() {
+        putChats(2)
+        // Android starts the process for other background work: the startup catch-up runs before any screen.
+        coordinator.appStarted()
+        tasks.runAll()
+        assertTrue("nothing indexed without a screen or the notification", model.inputs.isEmpty())
+        assertTrue(platform.calls.isEmpty())
+
+        controller.appOpened()
+        tasks.runAll()
+        assertTrue(allMade())
+        assertEquals(6, model.inputs.size)
+        assertNothingReadTwice()
+    }
+
     @Test fun aCatchUpThatStopsInTheBackgroundLeavesLaterCatchUpsWaitingForTheApp() {
         putChats(2)
         leaveDuringTheCatchUp()
