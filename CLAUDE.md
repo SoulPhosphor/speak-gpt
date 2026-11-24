@@ -188,9 +188,9 @@ Before requesting more crash reports, backup files, or diagnostic artifacts, ver
 For code work, use this sequence:
 
 1. Fetch `main`, confirm its current commit, and branch from that commit unless the owner explicitly names a different target. Inspect relevant code, finish the assigned changes, and review the full diff yourself.
-2. Run the local checks and fix failures: `./gradlew testDebugUnitTest assembleBeta assembleDebugAndroidTest` (one invocation, so build outputs are shared). Do not open a code PR with known failed local checks.
+2. Run the full local checks once, when the work is complete, and fix failures: `./gradlew testDebugUnitTest assembleBeta assembleDebugAndroidTest` (one invocation, so build outputs are shared). Do not open a code PR with known failed local checks.
 3. Open one pull request once the work is complete, required owner decisions are resolved, and local checks pass.
-4. Android Checks must pass on **the final commit**. Investigate and fix real failures, rerunning the relevant local checks before pushing.
+4. Android Checks must pass on **the final commit**. Investigate and fix real failures, running the focused tests for the fix before pushing.
 5. Codex reviews each PR automatically when it is opened (see **Codex reviews** below). Validate each finding against the actual code and owner-approved behavior, fix valid findings, and reply with the reason for any finding not fixed.
 6. Do not merge work whose checks are still running or failed. Merge only with the owner's explicit permission for that PR, into **`main`** (or a different integration branch the owner designates), using an ordinary merge method and no force-push.
 
@@ -202,7 +202,7 @@ For code work, use this sequence:
 
 After opening a PR, do not run repetitive status checks or schedule watchers. Check while CI or review action is pending, then stop. If only the owner can decide the remaining blocker, ask once and leave the PR intact.
 
-**Testing during development:** run focused tests for the code you changed; widen them when a change touches shared code. Do not rerun unchanged tests against unchanged code or rebuild the whole app after every small edit. The full local checks above run once the work is complete and again after code changes; required GitHub checks must pass on the final commit, never on a different commit's run.
+**Testing during development:** run focused tests for the code you changed; widen them when a change touches shared code. Do not rerun unchanged tests against unchanged code or rebuild the whole app after every small edit. The full local checks above run once, before the PR opens. A fix made after that (for CI, Codex or review) runs the focused tests for what it changed, widened for shared code, but not the full local checks again: Android Checks reruns the full unit tests, both builds and the device tests on every pushed commit, and must pass on the final commit, never on a different commit's run.
 
 **CI efficiency and reliability:** Android Checks runs once per pull-request commit and on `main`. Avoid redundant builds and runs while preserving all required coverage. Distinguish infrastructure failures (runner, emulator, network, rate limits) from application and test failures using the run's logs and diagnostics. Record each infrastructure failure in the open GitHub issue **CI Reliability Log** (run link, commit, job and step, exact error, diagnosis, resolution), adding to an existing failure signature instead of duplicating it. Investigate recurring failures before rerunning; rerun a job at most once. Never remove, disable or weaken a test to get a passing result.
 
