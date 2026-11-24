@@ -47,7 +47,11 @@ class ManualCompactionWiringContractTest {
 
     @Test
     fun manualCompactionUsesAttachmentBlindSnapshotAndActivatesTransmission() {
-        assertTrue(activity.contains(".summarizerConversation(storedCanonical)"))
+        // The snapshot is built by the shared model-facing text functions, which
+        // use the attachment-blind Summarizer conversation.
+        assertTrue(activity.contains(".summarizerEntries(this, messages)"))
+        val modelFacing = source("src/main/java/org/teslasoft/assistant/ui/chat/ModelFacingMessageText.kt")
+        assertTrue(modelFacing.contains("SummarizerSafeIncludeProjectionBuilder.summarizerConversation(canonical)"))
         assertTrue(activity.contains("controller.runManualCompaction("))
         assertTrue(activity.contains("getManualCompactionBoundary()"))
         assertTrue(activity.contains("ManualCompactionStorageGuard"))
