@@ -408,6 +408,22 @@
                 app:srcCompat="@drawable/ic_manufacturing"
                 tools:visibility="visible" />
 
+            <!-- Conversation indexing (G.16a; Owner, 2026-11-24, Step 12):
+                 shown only while indexing catches up or is paused; spins while
+                 it runs. Right after the background-work icon, or after the
+                 drawer icon when that one is hidden. Owner:
+                 ui.conversationindex.ConversationIndexingIcon. -->
+            <ImageButton
+                android:id="@+id/btn_conversation_indexing"
+                style="@style/Widget.App.Chat.HeaderAction.Activity"
+                android:contentDescription="@null"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toEndOf="@+id/btn_background_activity"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_sync"
+                tools:visibility="visible" />
+
             <!-- The chat title is hidden for now (owner ruling, Nov 18 2026);
                  rename moved to the chat menu. Set this back to visible (and
                  put it back in restoreTopBarVisibility) to bring it back. -->

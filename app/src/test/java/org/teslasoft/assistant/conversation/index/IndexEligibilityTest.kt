@@ -93,6 +93,23 @@ class IndexEligibilityTest {
         assertEquals("Sam", IndexSourceMessage.from(user, SummarizerController.Entry(false, "Hi", "u1"))!!.recordedSpeakerName)
     }
 
+    @Test fun theProgressCountsEachIndexedMessageOnceAndThoseWaitingForAnIdSeparately() {
+        val messages = listOf(
+            message(id = "u1", isBot = false, text = "Hello"),
+            message(id = "a1"),
+            message(id = "a1", text = "A repeated ID is indexed once."),
+            message(id = "h1", hidden = true),
+            message(id = "s1", state = MessageCompletionState.STREAMING),
+            message(id = "", isBot = false, text = "Saved before IDs"),
+            message(id = "", hidden = true),
+            message(id = "e1", text = "  ")
+        )
+        // The same messages the updater writes: u1 and a1.
+        assertEquals(2, IndexEligibility.indexedMessages(messages))
+        // Only the visible message without an ID could be indexed once it has one.
+        assertEquals(1, IndexEligibility.unidentified(messages))
+    }
+
     @Test fun anEntryForAnotherMessageIsRefused() {
         val stored = hashMapOf<String, Any>("message_id" to "m1", "isBot" to false, "message" to "Hi")
         assertNull(IndexSourceMessage.from(stored, SummarizerController.Entry(false, "Hi", "m2")))

@@ -44,7 +44,8 @@ class ConversationIndexStore private constructor(
     CorruptionHandler,
     null,
     true
-), ConversationIndexStorage, PassageVectorStorage, ConversationIndexMaintenance, ConversationIndexSummaries {
+), ConversationIndexStorage, PassageVectorStorage, ConversationIndexMaintenance, ConversationIndexSummaries,
+    ConversationIndexMessageProgress {
 
     /** Test hook: called inside a message or restamp write after it has changed rows, before the commit check. */
     @Volatile internal var afterOldRowsRemoved: (() -> Unit)? = null
@@ -555,6 +556,27 @@ class ConversationIndexStore private constructor(
                     madePassages = cursor.getInt(5),
                     otherModelPassages = cursor.getInt(6)
                 ))
+            }
+        }
+
+    /**
+     * Step 12: per chat, the messages with passages for the model, and those
+     * whose every passage's vector is made or failed. A passage whose vector
+     * row is missing or waiting is not finished.
+     */
+    override fun messageProgress(vectorModel: String, vectorDimensions: Int): Map<String, MessageProgress> =
+        readableDatabase.rawQuery(
+            "SELECT chat_id, COUNT(*), SUM(CASE WHEN unfinished = 0 THEN 1 ELSE 0 END) FROM (" +
+                "SELECT p.chat_id AS chat_id, SUM(CASE WHEN v.state IN ('$STATE_MADE', '$STATE_FAILED') " +
+                "THEN 0 ELSE 1 END) AS unfinished " +
+                "FROM passages p LEFT JOIN passage_vectors v ON v.search_fingerprint = p.search_fingerprint " +
+                "AND v.vector_model = p.vector_model AND v.vector_dimensions = p.vector_dimensions " +
+                "WHERE p.vector_model = ? AND p.vector_dimensions = ? GROUP BY p.chat_id, p.message_id" +
+                ") GROUP BY chat_id",
+            arrayOf(vectorModel, vectorDimensions.toString())
+        ).use { cursor ->
+            buildMap {
+                while (cursor.moveToNext()) put(cursor.getString(0), MessageProgress(cursor.getInt(1), cursor.getInt(2)))
             }
         }
 

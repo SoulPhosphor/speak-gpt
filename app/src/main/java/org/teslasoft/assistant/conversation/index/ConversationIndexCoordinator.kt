@@ -79,6 +79,9 @@ class ConversationIndexCoordinator(
      * the setting on after a failed recovery.
      */
     private val recover: (requestedByUser: Boolean) -> Boolean = { false },
+    /** The user's pause (Step 12): nothing is counted, compared or cut while it is on. */
+    private val isPaused: () -> Boolean = { false },
+    private val progress: IndexProgressEvents = IndexProgressEvents.NONE,
     private val changeWaitMillis: Long = CHANGE_WAIT_MILLIS,
     private val catchUpPauseMillis: Long = CATCH_UP_PAUSE_MILLIS,
     /** Milliseconds on a clock that only moves forward. */
@@ -88,6 +91,8 @@ class ConversationIndexCoordinator(
     /** Each changed chat, with when it last changed. */
     private val changed = LinkedHashMap<String, Long>()
     private val catchUp = ArrayDeque<String>()
+    /** Chats whose messages are counted, by reading them, before the catch-up compares them (Step 12). */
+    private val toCount = ArrayDeque<String>()
     private val staleRetries = HashMap<String, Int>()
     private val drainScheduled = AtomicBoolean(false)
 
@@ -158,8 +163,10 @@ class ConversationIndexCoordinator(
         synchronized(lock) {
             changed.clear()
             catchUp.clear()
+            toCount.clear()
             staleRetries.clear()
         }
+        report { progress.catchUpStopped() }
         runner.run(0) {
             val failure = try {
                 if (whenIndexExists) maintenance().deleteEverything()
@@ -187,6 +194,20 @@ class ConversationIndexCoordinator(
         runner.run(0) { catchUpAll() }
     }
 
+    /**
+     * The user resumed (Step 12): existing chats are caught up again. Chats a
+     * pause left partly compared are compared again from where they stand;
+     * what is already indexed is not written or read by the model again.
+     */
+    fun resumed() {
+        runner.run(0) { catchUpAll() }
+    }
+
+    /**
+     * Removes the entries of chats that are gone, even while paused, then
+     * queues every chat; the chats the index does not describe are counted
+     * first (Step 12).
+     */
     private fun catchUpAll() {
         if (!isOn()) return
         val chats = try { source.chatIdsNewestFirst() } catch (_: Exception) { null } ?: return
@@ -198,11 +219,47 @@ class ConversationIndexCoordinator(
             emptySet()
         }
         gone.forEach { id -> guarded(id) { maintenance().deleteChat(id) } }
+        val updater = if (chats.isEmpty()) null else try {
+            updaterFor().also { if (it == null) report { events.modelUnavailable(null) } }
+        } catch (e: Exception) {
+            report { events.modelUnavailable(e) }
+            null
+        }
+        if (isPaused()) {
+            // Resuming starts the catch-up again; nothing waits in the queues meanwhile. The model
+            // is still checked, so a removed or returning model is noticed while paused: a vector
+            // pass loads it and stops at once, reading nothing.
+            synchronized(lock) {
+                catchUp.clear()
+                toCount.clear()
+            }
+            if (updater != null) requestVectorsSafely()
+            return
+        }
+        if (chats.isNotEmpty() && updater == null) {
+            // Nothing can be counted or cut without the model: indexing waits, as in [drain].
+            stopCatchUp()
+            return
+        }
+        val counting = if (updater == null) emptyList() else {
+            try { progress.catchUpStarted(chats, updater.settingsKey) } catch (_: Exception) { emptyList() }
+        }
         synchronized(lock) {
             catchUp.clear()
             catchUp.addAll(chats)
+            toCount.clear()
+            toCount.addAll(counting)
         }
         scheduleDrain(0)
+    }
+
+    private fun stopCatchUp() {
+        synchronized(lock) {
+            changed.clear()
+            catchUp.clear()
+            toCount.clear()
+        }
+        report { progress.catchUpStopped() }
     }
 
     private fun scheduleDrain(delayMillis: Long) {
@@ -217,43 +274,75 @@ class ConversationIndexCoordinator(
      */
     private fun drain() {
         drainScheduled.set(false)
-        if (!isOn()) return
+        // While paused nothing is counted, compared or cut; resuming starts a catch-up.
+        if (!isOn() || isPaused()) return
         val now = clock()
         var wait: Long? = null
         val next = synchronized(lock) {
             val ready = changed.entries.firstOrNull { now - it.value >= changeWaitMillis }?.key
             if (ready != null) {
                 changed.remove(ready)
-                ready to false
+                ready to Work.CHANGED
             } else {
                 wait = changed.values.minOfOrNull { changeWaitMillis - (now - it) }
-                // A chat still waiting out its changes (a streaming reply) is compared when they settle.
-                var item = catchUp.removeFirstOrNull()
-                while (item != null && item in changed) item = catchUp.removeFirstOrNull()
-                item?.let { it to true }
+                toCount.removeFirstOrNull()?.let { it to Work.COUNT } ?: run {
+                    // A chat still waiting out its changes (a streaming reply) is compared when they settle.
+                    var item = catchUp.removeFirstOrNull()
+                    while (item != null && item in changed) item = catchUp.removeFirstOrNull()
+                    item?.let { it to Work.CATCH_UP }
+                }
             }
         }
         if (next == null) {
             val remaining = wait
-            if (remaining != null) scheduleDrain(remaining.coerceAtLeast(1)) else requestVectorsSafely()
+            if (remaining != null) scheduleDrain(remaining.coerceAtLeast(1)) else drained()
             return
         }
-        val (chatId, catchingUp) = next
+        val (chatId, work) = next
+        if (work == Work.COUNT) {
+            count(chatId)
+            scheduleDrain(0)
+            return
+        }
+        val catchingUp = work == Work.CATCH_UP
         val result = updateChat(chatId, catchingUp)
         if (result == ChatResult.NO_MODEL) {
             // Nothing can be cut without the model: indexing waits. The chats are
             // compared again by their stored version once the model works.
-            synchronized(lock) {
-                changed.clear()
-                catchUp.clear()
-            }
+            stopCatchUp()
             return
         }
         if (result == ChatResult.WROTE && !catchingUp) requestVectorsSafely()
-        val more = synchronized(lock) { changed.isNotEmpty() || catchUp.isNotEmpty() }
+        val more = synchronized(lock) { changed.isNotEmpty() || catchUp.isNotEmpty() || toCount.isNotEmpty() }
         // Only a chat that was actually compared is followed by a pause.
         val pause = if (catchingUp && result != ChatResult.SKIPPED) catchUpPauseMillis else 0L
-        if (more) scheduleDrain(pause) else requestVectorsSafely()
+        if (more) scheduleDrain(pause) else drained()
+    }
+
+    private enum class Work { CHANGED, COUNT, CATCH_UP }
+
+    /** Every queued chat was handled: the vectors come next. */
+    private fun drained() {
+        report { progress.catchUpDrained() }
+        requestVectorsSafely()
+    }
+
+    /**
+     * Counts a chat's messages for the progress by reading it (Step 12);
+     * writes nothing. Every chat queued for counting is reported, even one
+     * that cannot be read, so the count always finishes.
+     */
+    private fun count(chatId: String) {
+        val read = try { source.read(chatId) } catch (_: Exception) { IndexChatSource.Read.Unavailable }
+        report {
+            when (read) {
+                is IndexChatSource.Read.Messages -> progress.chatRead(chatId, read.version, read.messages)
+                IndexChatSource.Read.Unavailable -> {
+                    val version = try { source.chatVersion(chatId) } catch (_: Exception) { "" }
+                    progress.chatRead(chatId, version, null)
+                }
+            }
+        }
     }
 
     private enum class ChatResult { SKIPPED, COMPARED, WROTE, NO_MODEL }
@@ -277,6 +366,7 @@ class ConversationIndexCoordinator(
         if (upToDate) ChatResult.SKIPPED else when (val read = source.read(chatId)) {
             IndexChatSource.Read.Unavailable -> ChatResult.SKIPPED
             is IndexChatSource.Read.Messages -> {
+                report { progress.chatRead(chatId, read.version, read.messages) }
                 val described = describedVersion(read.version, settings)
                 when (val outcome = updater.update(
                     chatId, described, read.messages,
@@ -285,7 +375,7 @@ class ConversationIndexCoordinator(
                         if (source.changeCount(chatId) != read.changeCount) null
                         else describedVersion(source.chatVersion(chatId), settings)
                     },
-                    { !isOn() }
+                    { !isOn() || isPaused() }
                 )) {
                     is ConversationIndexUpdater.Outcome.Updated -> {
                         synchronized(lock) { staleRetries.remove(chatId) }

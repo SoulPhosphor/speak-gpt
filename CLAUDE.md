@@ -70,6 +70,8 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 - Add or update meaningful tests for changed behavior. Fix production code when a test legitimately fails. Never disable, weaken, or delete a test just to obtain a passing result. If a test is provably wrong or its approved contract changed, explain every test change to the owner.
 - Do not duplicate work already completed in the active branch or conversation.
 - **Changes during waits.** Before opening a PR for code that waits on a model request, a pause, or background work, list each decision made from stored data, how a change to that data during the wait is detected, and the test that proves it. Fix any gap before review.
+- **Collisions with existing states.** Before opening a PR that adds a state, pause, setting, background task or thread, list every existing state and task it can overlap with (for example a setting turned off, a missing model, a rebuild or recovery, a deletion, a restore, work on another thread) and check what happens when each occurs during the new one, and the new one during each. Fix any gap and add a test for each overlap that changes behavior.
+- **Display logic tested locally.** Put the choice of user-facing wording, status and labels for each state in plain functions with JVM unit tests, so a wrong choice is caught by the local tests, not only by device tests on GitHub.
 
 ### Changes during waits — Stage 6D
 
@@ -126,6 +128,20 @@ Once a question is asked, do not silently act on an assumed answer. If no decisi
 | Whether a paused or stopped condition is over | Cleared only when the model loaded and passed its check (a vector worker was made) or a recovery's new index passed its check; turning the setting on again is an attempt, not a recovery | `ConversationIndexConditionsTest.aConditionThatRecoveredAndReturnsGetsANewNotice`; `aFailedRecoveryOutlivesItsNoticeUntilARecoveryIsVerified` |
 | Whether a notice is still due when shown | Rechecked on the main thread just before it is shown and marked shown at once; the same ongoing condition is never shown again | `ConversationIndexConditionsTest.aModelProblemGetsOneNoticeAndClosingItKeepsTheCondition`; `aDifferentCauseIsANewConditionWithItsOwnNotice` |
 
+### Changes during waits — Stage 9, Step 12
+
+| Decision | Detect changes during the wait | Verification |
+| --- | --- | --- |
+| Whether a catch-up shows the icon, and which chats are counted | Read on the index's thread when the catch-up starts, from the index and each chat's stored version; a chat counted earlier is read again only when its version changed; nothing left to do never shows the icon | `ConversationIndexProgressTest.theIconNeverAppearsWhenEverythingIsAlreadyIndexedAtStart`; `pausingWhileCountingStopsAtTheNextChatAndResumingCountsOnlyTheRest` |
+| A chat's message count, made by reading it before it is compared | The count keeps the version it was read at and the chat's own update read replaces it; a chat the index describes as stored now is counted from the index, never from an older count; a chat that cannot be read is left out and the count still finishes | `theNumbersFollowTheIndexAndTheCountWithTheSameDefinitionAsTheSettingsStatus`; `aChatThatCannotBeReadWhileCountingIsLeftOutAndTheCountStillFinishes` |
+| Whether numbers read from the index may be shown | Read on the index's thread; a catch-up that started, or counting that resumed, meanwhile throws them away | `numbersReadForAnEarlierCatchUpAreThrownAway` |
+| Whether a finished vector pass ends the catch-up | Only a pass that started after every queued chat of the same catch-up was handled ends it | `aVectorPassThatStartedBeforeEveryChatWasHandledDoesNotEndTheCatchUp`; `turningIndexingOnShowsCountingThenTheRealPercentageAndEndsWhenEverythingIsDone` |
+| Whether work continues after Pause | The saved pause is read before every chat counted or compared, between messages of an update and before every vector; a write or read already running finishes and is kept | `pausingWhileCountingStopsAtTheNextChatAndResumingCountsOnlyTheRest`; `pausingWhileComparingKeepsTheMessagesWrittenAndResumingDoesNotDoThemAgain`; `pausingDuringVectorsKeepsTheFinishedOnesAndResumingNeverReadsOneTwice` |
+| What a paused pop-up shows after a restart | The numbers are saved with the pause only when the count had finished, and read and saved again when the vector worker reaches its pause point, so a vector being read when Pause was pressed is included; Resume, turning indexing on and deleting the index clear them; nothing is read until Resume | `thePauseAndItsNumbersSurviveARestartAndNothingRunsUntilResume`; `thePausedNumbersIncludeTheVectorBeingReadWhenPauseWasPressed`; `pausedBeforeTheCountFinishedShowsNoNumbersAfterARestart` |
+| Deletions while paused | A deleted chat's entries are removed at once on the index's thread; a restore removes chats that are gone | `aChatDeletedOrRemovedByARestoreWhilePausedLeavesTheIndexAtOnce` |
+| Whether the model is available while paused | A catch-up while paused (start, model change, restore) still checks the model and reports one that is missing; with a model, a vector pass loads it and stops at once, so a returning model clears its condition without anything being read | `aModelRemovedOrReturningWhilePausedIsStillNoticedWithoutIndexingAnything` |
+| Which state the icon shows when the setting or a condition changes | Worked out again on every change, one at a time so an older answer never replaces a newer one; the model coming back never clears the user's pause | `theModelBeingUnavailableOrIndexingOffHidesThePausedIconWithoutClearingThePause`; `ConversationIndexingIconInstrumentedTest` |
+
 ### External services and costs
 
 - Obtain model catalogs, capabilities, voice lists, prices, and other provider-controlled information from the provider or an authorized live source. Do not hard-code data that providers can change.
@@ -174,9 +190,9 @@ Before requesting more crash reports, backup files, or diagnostic artifacts, ver
 For code work, use this sequence:
 
 1. Fetch `main`, confirm its current commit, and branch from that commit unless the owner explicitly names a different target. Inspect relevant code, finish the assigned changes, and review the full diff yourself.
-2. Run the local checks and fix failures: `./gradlew testDebugUnitTest assembleBeta assembleDebugAndroidTest` (one invocation, so build outputs are shared). Do not open a code PR with known failed local checks.
+2. Run the full local checks once, when the work is complete, and fix failures: `./gradlew testDebugUnitTest assembleBeta assembleDebugAndroidTest` (one invocation, so build outputs are shared). Do not open a code PR with known failed local checks.
 3. Open one pull request once the work is complete, required owner decisions are resolved, and local checks pass.
-4. Android Checks must pass on **the final commit**. Investigate and fix real failures, rerunning the relevant local checks before pushing.
+4. Android Checks must pass on **the final commit**. Investigate and fix real failures, running the focused tests for the fix before pushing.
 5. Codex reviews each PR automatically when it is opened (see **Codex reviews** below). Validate each finding against the actual code and owner-approved behavior, fix valid findings, and reply with the reason for any finding not fixed.
 6. Do not merge work whose checks are still running or failed. Merge only with the owner's explicit permission for that PR, into **`main`** (or a different integration branch the owner designates), using an ordinary merge method and no force-push.
 
@@ -188,7 +204,7 @@ For code work, use this sequence:
 
 After opening a PR, do not run repetitive status checks or schedule watchers. Check while CI or review action is pending, then stop. If only the owner can decide the remaining blocker, ask once and leave the PR intact.
 
-**Testing during development:** run focused tests for the code you changed; widen them when a change touches shared code. Do not rerun unchanged tests against unchanged code or rebuild the whole app after every small edit. The full local checks above run once the work is complete and again after code changes; required GitHub checks must pass on the final commit, never on a different commit's run.
+**Testing during development:** run focused tests for the code you changed; widen them when a change touches shared code. Do not rerun unchanged tests against unchanged code or rebuild the whole app after every small edit. The full local checks above run once, before the PR opens. A fix made after that (for CI, Codex or review) runs the focused tests for what it changed, widened for shared code, but not the full local checks again: Android Checks reruns the full unit tests, both builds and the device tests on every pushed commit, and must pass on the final commit, never on a different commit's run.
 
 **CI efficiency and reliability:** Android Checks runs once per pull-request commit and on `main`. Avoid redundant builds and runs while preserving all required coverage. Distinguish infrastructure failures (runner, emulator, network, rate limits) from application and test failures using the run's logs and diagnostics. Record each infrastructure failure in the open GitHub issue **CI Reliability Log** (run link, commit, job and step, exact error, diagnosis, resolution), adding to an existing failure signature instead of duplicating it. Investigate recurring failures before rerunning; rerun a job at most once. Never remove, disable or weaken a test to get a passing result.
 

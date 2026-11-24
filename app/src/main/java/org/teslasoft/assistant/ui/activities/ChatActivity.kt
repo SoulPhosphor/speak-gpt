@@ -253,6 +253,7 @@ import org.teslasoft.assistant.ui.util.ChatExportDialog
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
 import org.teslasoft.assistant.ui.chat.ChatBackgroundActivity
+import org.teslasoft.assistant.ui.conversationindex.ConversationIndexingIcon
 import org.teslasoft.assistant.ui.chat.ChatMemoryScan
 import org.teslasoft.assistant.ui.chat.MemoryAttachmentController
 import org.teslasoft.assistant.ui.util.IncludeStripController
@@ -3610,6 +3611,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 this, findViewById(R.id.btn_background_activity), header
             ).also { it.attach() }
         }
+        ConversationIndexingIcon(this, findViewById(R.id.btn_conversation_indexing)).attach()
         summarizerOperationSpinner = findViewById(R.id.summarizer_operation_spinner)
         summarizerOperationSuccess = findViewById(R.id.summarizer_operation_success)
         summarizerOperationText = findViewById(R.id.summarizer_operation_text)

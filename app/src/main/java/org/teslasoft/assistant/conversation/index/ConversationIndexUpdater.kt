@@ -113,7 +113,7 @@ class ConversationIndexUpdater(
                 }
                 removed++
             }
-            if (storage.finishUpdate(chatId, chatVersion, final, unidentified(messages), chatUnchanged) == IndexWrite.STALE) {
+            if (storage.finishUpdate(chatId, chatVersion, final, IndexEligibility.unidentified(messages), chatUnchanged) == IndexWrite.STALE) {
                 return Outcome.Stale
             }
             Outcome.Updated(written, restamped, removed, unchanged)
@@ -121,13 +121,6 @@ class ConversationIndexUpdater(
             Outcome.Failed(e)
         }
     }
-
-    /**
-     * Messages that would be indexed if they had a permanent ID (G.5a rule 7):
-     * the chat has not been opened since IDs were introduced (G28).
-     */
-    private fun unidentified(messages: List<IndexSourceMessage>): Int =
-        messages.count { it.messageId.isBlank() && IndexEligibility.isEligible(it.copy(messageId = ID_PROBE)) }
 
     /** Steps 1 and 3: the eligible messages, each with the stamp its passages must carry. */
     private fun wantedStamps(messages: List<IndexSourceMessage>): List<Pair<IndexSourceMessage, MessageStamp>> {
@@ -161,9 +154,6 @@ class ConversationIndexUpdater(
             settingsKey(SearchSettings(targetTokens, overlapWords, readerKey).encoded)
 
         private fun settingsKey(encodedSettings: String) = "$encodedSettings|c${PassageCutter.CUTTER_VERSION}"
-
-        /** Stands in for a missing permanent ID when asking whether a message could otherwise be indexed. */
-        private const val ID_PROBE = "unidentified"
     }
 }
 
