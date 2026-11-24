@@ -435,6 +435,7 @@ class BackgroundIndexingTest {
             },
             isPaused = { tracker.isPaused || hold.held },
             progress = tracker,
+            catchUpWaits = hold::catchUpMustWait,
             clock = { tasks.now }
         )
         tracker.publish()
@@ -676,16 +677,52 @@ class BackgroundIndexingTest {
 
         chats.put("c3", chat("c3"))
         coordinator.chatSetReplaced()
-        tasks.runOne()
-        assertTrue(tracker.display.value is IndexingDisplay.Running)
+        tasks.runAll()
         assertEquals("no start after the app has left", listOf("clear"), platform.calls)
+        assertEquals("the catch-up waits for the app: nothing read without the notification", 6, model.inputs.size)
+        assertEquals(IndexingDisplay.Hidden, tracker.display.value)
 
-        // Android ends the process before the work finishes; the next opening continues it.
+        // A changed chat's own update is not held back.
+        chats.put("c1", chat("c1") + user("c1-u3", "Again c1"))
+        coordinator.chatChanged("c1")
+        tasks.runAll()
+        assertEquals(7, model.inputs.size)
+
+        controller.appOpened()
+        tasks.runAll()
+        assertTrue(allMade())
+        assertEquals(10, model.inputs.size)
+        assertNothingReadTwice()
+
+        // The same after the process ends instead: the next opening continues it.
+        controller.appLeft()
+        chats.put("c4", chat("c4"))
+        coordinator.chatSetReplaced()
+        tasks.runAll()
+        assertEquals(10, model.inputs.size)
         startProcess()
         controller.appOpened()
         coordinator.appStarted()
         tasks.runAll()
         assertTrue(allMade())
+        assertEquals(13, model.inputs.size)
+        assertNothingReadTwice()
+    }
+
+    @Test fun aCatchUpThatStopsInTheBackgroundLeavesLaterCatchUpsWaitingForTheApp() {
+        putChats(2)
+        leaveDuringTheCatchUp()
+        tasks.runAll()
+        controller.serviceStopped(BackgroundStopReason.CATCH_UP_ENDED)
+        assertFalse(hold.held)
+
+        chats.put("c3", chat("c3"))
+        coordinator.chatSetReplaced()
+        tasks.runAll()
+        assertEquals(6, model.inputs.size)
+
+        controller.appOpened()
+        tasks.runAll()
         assertEquals(9, model.inputs.size)
         assertNothingReadTwice()
     }

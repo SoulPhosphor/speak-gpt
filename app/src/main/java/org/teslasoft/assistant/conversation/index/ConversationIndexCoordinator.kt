@@ -82,6 +82,11 @@ class ConversationIndexCoordinator(
     /** The user's pause (Step 12): nothing is counted, compared or cut while it is on. */
     private val isPaused: () -> Boolean = { false },
     private val progress: IndexProgressEvents = IndexProgressEvents.NONE,
+    /**
+     * Step 13: a catch-up that would start while the app is closed and no
+     * background service runs waits for the next opening, which starts it again.
+     */
+    private val catchUpWaits: () -> Boolean = { false },
     private val changeWaitMillis: Long = CHANGE_WAIT_MILLIS,
     private val catchUpPauseMillis: Long = CATCH_UP_PAUSE_MILLIS,
     /** Milliseconds on a clock that only moves forward. */
@@ -234,6 +239,14 @@ class ConversationIndexCoordinator(
                 toCount.clear()
             }
             if (updater != null) requestVectorsSafely()
+            return
+        }
+        if (catchUpWaits()) {
+            // Nothing is queued; opening the app starts the catch-up again from the index as it stands.
+            synchronized(lock) {
+                catchUp.clear()
+                toCount.clear()
+            }
             return
         }
         if (chats.isNotEmpty() && updater == null) {

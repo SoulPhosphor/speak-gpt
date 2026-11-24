@@ -136,7 +136,8 @@ object ConversationIndexRuntime {
             recover = { requestedByUser -> recover(app, requestedByUser) },
             // The background hold stops work at the same safe points as the user's pause, without saving it.
             isPaused = { progress(app).isPaused || backgroundHold.held },
-            progress = progress(app)
+            progress = progress(app),
+            catchUpWaits = backgroundHold::catchUpMustWait
         )
     }
 

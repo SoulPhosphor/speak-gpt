@@ -144,17 +144,35 @@ object BackgroundIndexingLog {
  * vector worker treat it like a pause at their next safe point, so finished
  * work is kept and nothing runs without the notification. It is not the
  * user's pause: it is never saved, and opening the app releases it.
+ *
+ * Apart from that, a catch-up that would start while the app is closed and
+ * no service runs (a restore finishing in the background) waits for the
+ * next opening; the ordinary update of a changed chat does not.
  */
 class BackgroundIndexingHold {
     @Volatile var held: Boolean = false
         private set
 
+    /** Set by the controller: the app is closed and no indexing service runs. */
+    @Volatile internal var catchUpsWait: Boolean = false
+
+    @Volatile private var catchUpWaiting = false
+
     fun hold() { held = true }
 
-    /** True when it was held. */
+    /** Asked by the coordinator before a catch-up; true when it must wait for the app, which is then remembered. */
+    fun catchUpMustWait(): Boolean {
+        if (!catchUpsWait) return false
+        catchUpWaiting = true
+        return true
+    }
+
+    /** True when indexing was held or a catch-up waited, so the app continues it. */
     fun release(): Boolean {
-        val was = held
+        val was = held || catchUpWaiting
         held = false
+        catchUpWaiting = false
+        catchUpsWait = false
         return was
     }
 }
@@ -198,8 +216,16 @@ class BackgroundIndexingController(
         private set
 
     /** Whether a service start was asked for and has not stopped yet. */
-    var serviceActive: Boolean = false
-        private set
+    @Volatile var serviceActive: Boolean = false
+        private set(value) {
+            field = value
+            gateCatchUps()
+        }
+
+    /** A catch-up may start without the service only while a screen of the app is visible. */
+    private fun gateCatchUps() {
+        hold.catchUpsWait = !appVisible && !serviceActive
+    }
 
     /** Why the service last stopped or did not start; null before the first time. */
     @Volatile var lastStop: BackgroundStopReason? = null
@@ -208,6 +234,7 @@ class BackgroundIndexingController(
     /** The last screen of the app left (not a rotation). */
     fun appLeft() {
         appVisible = false
+        gateCatchUps()
         val decision = try {
             BackgroundIndexingRule.startDecision(
                 platform.display(), platform.conditions(), platform.userPaused(), platform.userWorkRunning()
@@ -236,6 +263,7 @@ class BackgroundIndexingController(
     /** A screen of the app started after none was visible. */
     fun appOpened() {
         appVisible = true
+        gateCatchUps()
         if (serviceActive) platform.stopService(BackgroundStopReason.APP_OPENED)
         platform.clearStoppedNotice()
         if (hold.release()) platform.resumeIndexing()
