@@ -2543,9 +2543,9 @@ notice is shown once per unchanged condition, not once per message.
 | Hint under the button, replacing today's | Checks the memory, lorebook, user image, and conversation index databases for problems. Saved chats are not checked. |
 | Name in the report | Conversation Index Database |
 | Healthy | No problems found. |
-| Could not be checked | Could not be checked. (the app's existing wording for this state, in sentence case; awaiting the owner's confirmation) |
+| Could not be checked | Could not be checked. Follow with the known plain-language cause, an appropriate retry action, and a reference to the error log. Unknown causes are not guessed. The exception and cause chain are logged, never inserted into the report |
 | Automatic repair running | The conversation index is being rebuilt. |
-| Repair failed | The conversation index could not be rebuilt. Index Conversations is off. Open RAG Active Memory Settings to try again. |
+| Repair failed | The conversation index could not be rebuilt. Indexing is off. Open RAG active memory settings and turn indexing on again to retry. |
 
 Result messages use sentence case after the title-case name. The index uses
 its automatic rebuild, never the other databases' Repair and Revert
@@ -2599,11 +2599,11 @@ repair that succeeds has no pop-up.
 
 | Situation | Proposed wording and actions |
 |---|---|
-| Turning on Index Conversations with no model installed | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** On-Device Search Model Needed. **Text:** Indexing conversations requires an on-device search model. Install one in AI Settings > Embedding Model, then turn Index Conversations on. **Buttons:** Close, Open Model Settings (opens Embedding Model). The switch stays off. The wording for Conversation Recall is proposed with Step 16 |
-| The installed model was removed or no longer loads, with Index Conversations on | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** Indexing Paused. **Removed:** Indexing has paused because the on-device search model is no longer installed. Reinstall it in AI Settings > Embedding Model. Indexing will resume automatically when the model is available. **Cannot load:** Indexing has paused because the installed on-device search model could not be loaded. Reinstall it in AI Settings > Embedding Model. Indexing will resume when the model can be loaded. **Buttons:** Close, Open Model Settings. The setting stays on, finished work is kept, and indexing resumes by itself |
+| Turning on Index Conversations with no model installed | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** On-Device Search Model Needed. **Text:** Indexing conversations requires an on-device search model. Install one in AI settings > embedding model, then turn indexing on. **Buttons:** Close, Open Model Settings (opens Embedding Model). The switch stays off. The wording for Conversation Recall is proposed with Step 16 |
+| The installed model was removed or no longer loads, with Index Conversations on | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** Indexing Paused. **Removed:** Indexing has paused because the on-device search model is no longer installed. Reinstall it in AI settings > embedding model. Indexing will resume automatically when the model is available. **Cannot load:** Indexing has paused because the installed on-device search model could not be loaded. Reinstall it in AI settings > embedding model. Indexing will resume when the model can be loaded. **Buttons:** Close, Open Model Settings. The setting stays on, finished work is kept, and indexing resumes by itself |
 | Recall fails for one turn and no user action is available | Conversation Recall could not check earlier messages this time. Your message was sent normally without recalled conversation. No action is needed unless this keeps happening. |
 | Recall fails for one turn and the code knows an action | Conversation Recall could not check earlier messages because (plain cause). Your message was sent normally without recalled conversation. (Specific action.) |
-| The index cannot be rebuilt | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** Indexing Stopped. **Text:** The conversation index could not be rebuilt, so Index Conversations was turned off. Open RAG Active Memory Settings to try rebuilding the index again. **Buttons:** Close, Open RAG Active Memory Settings. Turning Index Conversations on again starts a new recovery attempt |
+| The index cannot be rebuilt | **Approved (Owner, 2026-11-24, built in Step 11):** **Title:** Indexing Stopped. **Text:** The conversation index could not be rebuilt, so indexing was turned off. Open RAG active memory settings and turn indexing on again to retry. **Buttons:** Close, Open RAG Active Memory Settings. Turning Index Conversations on again starts a new recovery attempt |
 | Recall reaches its sending-time allowance | **What was sent:** Conversation Recall did not finish in time, so this message was sent normally without recalled conversation. |
 | Android pauses background indexing until the app is reopened | **Notification/status:** Background indexing is paused. Open the app to continue. Finished work was saved. |
 | Long-message section search reaches its allowance | **Approved Step 2:** Time limit reached while searching your message in sections. The full-message search still ran, but only {checked} of {total} additional sections were checked. |
@@ -2631,13 +2631,55 @@ Near-miss labels explain the existing gate, similarity and meaningful-word rules
 they do not change those rules. Physical-phone timing remains pending;
 the emulator measurements are recorded in `memory baseline.md`.
 
-The two model-load/self-check messages remain assigned to Step 11; their
-proposed replacements are not implemented by Step 2:
-- self-check: The on-device memory-search model did not pass its check, so
-  saved-memory search is using keywords only. Cause: {cause}.
-- model load: The on-device memory-search model could not be loaded.
-  Saved-memory search is using keywords only, and Conversation Recall is
-  unavailable. Cause: {cause}.
+**Step 11 corrective wording (Owner, 2026-11-24).** The owner authorized the
+failure wording and diagnostics in this correction without further wording
+questions. The two existing Librarian **Memory Debug Log** entries become:
+- self-check: The on-device embedding model failed its self-check.
+  Saved-memory search is using keywords only. Model: {identifier}. Cause: {details}.
+- model load: The on-device embedding model could not be loaded.
+  Saved-memory search is using keywords only. Model: {identifier}. Cause: {details}.
+
+Model failure entries include exception types, causes, and any related cleanup
+failures. A self-check that throws is reported as a self-check failure, and the
+unpublished model is closed. If the model was already published and only
+background reread scheduling fails, the diagnostic identifies that preparation
+failure and states that meaning search remains available. These entries remain under the existing memory diagnostics switch;
+they are not messages sent to the companion and do not announce later recall
+features as active.
+
+The current settings screen uses a separate inline stopped status:
+"The conversation index could not be rebuilt. Turn indexing on again to retry."
+A notice elsewhere still includes the direct settings action. An unreadable
+count says "Conversation index count is unavailable. Reopen this screen to
+retry." It never becomes zero or a stale count.
+
+A failed user-requested deletion shows a persistent Material snackbar with
+**Okay**: "Could not finish deleting the conversation index." Then the known
+plain cause, "Indexing is off.", the relevant recovery action, and "Try deleting
+the index again. Technical details are available in the error log." The toggle
+and delete button wait for the outstanding deletion to finish. The count is
+read again regardless of the result. Verified deletion clears the obsolete failed
+or pending rebuild condition; a failed deletion does not clear it. An incomplete cleanup can coexist with a
+real zero count if the index data was deleted but recovery files remain.
+
+Plain causes distinguish a busy database, full device storage, storage I/O,
+an inaccessible encryption key, denied access, a read-only database, and a
+file that could not be opened. Full storage asks the user to free space; key
+access asks them to reopen the app. A key-access failure alone does not prove
+that the device is locked. Other failures offer
+retry. The app does not infer corruption, permanent key loss, or a specific
+cause from an unclassified failure or arbitrary words in an exception.
+
+Additional **Error Log** entries identify the failed operation (integrity
+check, count read, index upkeep, vector-worker startup, or deletion), its
+technical cause, actual effect, and retry condition. Deletion entries name the
+failed step: index data, damaged index files, or recovery files. Related
+exceptions are retained with cycle protection and a bounded diagnostic chain.
+Read/startup failures are deduplicated per operation and cause until that
+operation succeeds; each explicitly requested deletion failure is reported.
+An unreadable waiting-passage count is logged as unknown, never zero. No chat
+content is added to logs, no provider logs change, and automatic repairs do not
+acquire pop-ups.
 
 Before Step 11, the builder lists every failure cause the code can
 distinguish and maps each one to: automatic repair with no notice; affected
@@ -3696,7 +3738,7 @@ section above the test rows at the bottom:
 | Status | 310 conversations indexed (real number) |
 | Button | Delete Conversation Index |
 | Confirmation title | Delete Conversation Index? |
-| Confirmation text | This deletes the searchable index stored on this device. You can rebuild it by turning Index Conversations on again. (Owner, 2026-11-24, replacing the 2026-11-11 text) |
+| Confirmation text | This deletes the searchable index stored on this device. You can rebuild it by turning indexing on again. (Owner, 2026-11-24, replacing the 2026-11-11 text) |
 | Confirmation buttons | Cancel, Delete |
 
 **Owner (2026-11-24), built in Step 11:** the section sits between Memory
@@ -3706,7 +3748,7 @@ indexed." (G28). A conversation counts as indexed only when every eligible
 message and every search vector is done; a failed vector is never counted as
 indexed; conversations with nothing to index are in neither count. The count
 is shown while the setting is off too, and turning the setting off keeps the
-index. Delete Conversation Index stays visible and enabled, stops indexing,
+index. Delete Conversation Index stays visible and is enabled except while its deletion is running, stops indexing,
 removes all derived data and updates the count, with no success pop-up; a
 failed deletion never shows zero. An ongoing condition (rebuilding, paused,
 stopped) stays visible beneath the status after its notice is closed.

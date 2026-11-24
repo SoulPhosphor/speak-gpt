@@ -2106,17 +2106,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
      */
     /** The conversation index's result line (owner-approved wording, 2026-11-24). */
     private fun conversationIndexCheckLine(result: org.teslasoft.assistant.conversation.index.IndexCheckResult): String {
-        val name = getString(R.string.health_db_conversation_index)
-        return when (result.status) {
-            org.teslasoft.assistant.conversation.index.IndexCheckResult.Status.OK ->
-                getString(R.string.health_check_index_ok, name)
-            org.teslasoft.assistant.conversation.index.IndexCheckResult.Status.UNCHECKED ->
-                getString(R.string.health_check_index_unchecked, name)
-            org.teslasoft.assistant.conversation.index.IndexCheckResult.Status.REBUILDING ->
-                getString(R.string.health_check_index_rebuilding, name)
-            org.teslasoft.assistant.conversation.index.IndexCheckResult.Status.REPAIR_FAILED ->
-                getString(R.string.health_check_index_failed, name)
-        }
+        return org.teslasoft.assistant.ui.conversationindex.IndexFailureMessages.databaseCheck(this, result)
     }
 
     private fun showCheckReportDialog(

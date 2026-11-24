@@ -284,6 +284,21 @@ RAG Active Memory Settings.
 
 A future inline secondary button should inherit `AppButton.Secondary` and change only its geometry.
 
+## Actionable error snackbars
+
+Use Material `Snackbar` with the existing Material 3 theme appearance. For a
+failure explanation that needs more than two lines, opt in locally with
+`ThemeOverlay.App.Snackbar.Error` through `ContextThemeWrapper`. Its
+`Widget.App.Snackbar.Error.Text` inherits `Widget.Material3.Snackbar.TextView`
+and only removes the line limit and ellipsis. Colors, typography, spacing,
+and shape remain inherited; no app-wide snackbar defaults change.
+
+An actionable failure remains visible (`LENGTH_INDEFINITE`) with **Okay** to
+dismiss. Reuse the same snackbar for that operation rather than stacking
+notices. First user: failed **Delete Conversation Index** in RAG Active Memory
+Settings. The section's counts and ongoing condition keep using
+`Widget.App.Section.Status`.
+
 ## Dialogs
 
 ### Standard dialog theme

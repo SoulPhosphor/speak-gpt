@@ -26,6 +26,7 @@ import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.preferences.memory.librarian.InputTooLongException
 import org.teslasoft.assistant.ui.activities.MemoryControlsActivity
 import org.teslasoft.assistant.ui.conversationindex.ConversationIndexSection
+import org.teslasoft.assistant.ui.conversationindex.IndexFailureMessages
 
 /**
  * Step 11 on a device (G.16a, G.13a, G20, G28; Owner 2026-11-24):
@@ -249,12 +250,16 @@ class ConversationIndexSettingsInstrumentedTest {
         aside.parentFile?.mkdirs()
         aside.writeBytes(ByteArray(4096) { 1 })
         try {
+            ConversationIndexConditions.setRecoveryFailed(app, notice = false)
+            ConversationIndexConditions.setRecoveryPending(app, true)
             val done = java.util.concurrent.CountDownLatch(1)
             var gone = false
-            ConversationIndexRuntime.deleteIndex(app) { gone = it; done.countDown() }
+            ConversationIndexRuntime.deleteIndex(app) { gone = it.deleted; done.countDown() }
             assertTrue(done.await(10, java.util.concurrent.TimeUnit.SECONDS))
             assertTrue(gone)
             assertFalse(aside.exists())
+            assertFalse(ConversationIndexConditions.recoveryFailed(app))
+            assertFalse(ConversationIndexConditions.recoveryPending(app))
             // Nothing is left that a later recovery could bring back.
             assertTrue(AppIndexRecoveryFiles(app).readKeptVectors().vectors.isEmpty())
         } finally {
@@ -339,6 +344,97 @@ class ConversationIndexSettingsInstrumentedTest {
         scenario.onActivity { activity ->
             assertFalse(activity.findViewById<MaterialSwitch>(R.id.switch_index_conversations).isChecked)
         }
+    }
+
+    @Test fun anUnreadableCountReplacesTheOldCountWithAnExplanationAndCanRecover() = withScreen { scenario ->
+        scenario.onActivity { activity ->
+            val section = ConversationIndexSection(activity, activity.findViewById(R.id.section_conversation_index))
+            try {
+                val status = activity.findViewById<TextView>(R.id.text_conversation_index_status)
+                section.showCounts(ConversationIndexCounts(3, 1))
+                assertTrue(status.text.toString().startsWith("3 conversations indexed"))
+                section.showCounts(null)
+                assertEquals(View.VISIBLE, status.visibility)
+                assertEquals(activity.getString(R.string.conversation_index_count_unavailable), status.text.toString())
+                section.showCounts(ConversationIndexCounts(1, 0))
+                assertEquals("1 conversation indexed", status.text.toString())
+            } finally {
+                section.onDestroy()
+            }
+        }
+    }
+
+    @Test fun databaseFailureMessagesExplainKnownCausesWithoutExposingRawDetails() {
+        val raw = "sensitive diagnostic filename / exception detail"
+        val cases = mapOf(
+            IndexFailureReason.BUSY to "database is busy",
+            IndexFailureReason.STORAGE_FULL to "storage is full",
+            IndexFailureReason.STORAGE_IO to "could not be read or written",
+            IndexFailureReason.KEY_UNAVAILABLE to "encryption key",
+            IndexFailureReason.ACCESS_DENIED to "Access to the database was denied",
+            IndexFailureReason.READ_ONLY to "database is read-only",
+            IndexFailureReason.CANNOT_OPEN to "database could not be opened",
+            IndexFailureReason.UNKNOWN to "could not be checked"
+        )
+        for ((reason, expected) in cases) {
+            val text = IndexFailureMessages.databaseCheck(context, IndexCheckResult(IndexCheckResult.Status.UNCHECKED, raw, reason))
+            assertTrue(text, text.contains(expected, ignoreCase = true))
+            assertTrue(text, text.contains("Try checking again"))
+            assertFalse(text, text.contains(raw))
+            assertFalse(text, text.contains("corrupt", ignoreCase = true))
+        }
+    }
+
+    @Test fun stoppedSettingsStatusDoesNotTellTheUserToOpenTheCurrentScreen() = withScreen { scenario ->
+        ConversationIndexConditions.setRecoveryFailed(context, notice = false)
+        val text = awaitText(scenario, R.id.text_conversation_index_condition) { it.contains("Turn indexing on again") }
+        assertFalse(text, text.contains("Open RAG"))
+    }
+
+    @Test fun failedRecoveryFileDeletionShowsAPersistentReadableFailure() = withScreen { scenario ->
+        val leftover = File(context.getDatabasePath(ConversationIndexStore.DATABASE_NAME).path + ".damaged-wal")
+        assertFalse("test fixture already exists", leftover.exists())
+        assertTrue(leftover.mkdirs())
+        File(leftover, "keep").writeText("test fixture")
+        try {
+            scenario.onActivity { activity ->
+                activity.findViewById<MaterialButton>(R.id.btn_delete_conversation_index).performClick()
+                ConversationIndexSection.lastDialogForTest!!
+                    .findViewById<MaterialButton>(R.id.btn_dialog_primary_action)!!.performClick()
+                assertFalse(activity.findViewById<MaterialSwitch>(R.id.switch_index_conversations).isEnabled)
+                assertFalse(activity.findViewById<MaterialButton>(R.id.btn_delete_conversation_index).isEnabled)
+            }
+            val text = awaitText(scenario, com.google.android.material.R.id.snackbar_text) { it.contains("Could not finish deleting") }
+            assertTrue(text, text.contains("Indexing is off"))
+            assertTrue(text, text.contains("Try deleting the index again"))
+            assertFalse(text, text.contains(".damaged-wal"))
+            scenario.onActivity { activity ->
+                val message = activity.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)
+                assertTrue("failure text must not be cut to two lines", message.maxLines > 2)
+                assertEquals(activity.getString(R.string.okay), activity.findViewById<TextView>(com.google.android.material.R.id.snackbar_action).text.toString())
+                assertFalse(activity.findViewById<MaterialSwitch>(R.id.switch_index_conversations).isChecked)
+                assertTrue(activity.findViewById<MaterialSwitch>(R.id.switch_index_conversations).isEnabled)
+                assertTrue(activity.findViewById<MaterialButton>(R.id.btn_delete_conversation_index).isEnabled)
+            }
+        } finally {
+            leftover.deleteRecursively()
+        }
+    }
+
+    private fun awaitText(
+        scenario: ActivityScenario<MemoryControlsActivity>, id: Int, matches: (String) -> Boolean
+    ): String {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline) {
+            var text: String? = null
+            scenario.onActivity { activity ->
+                activity.findViewById<TextView>(id)?.takeIf { it.visibility == View.VISIBLE }
+                    ?.text?.toString()?.takeIf(matches)?.let { text = it }
+            }
+            text?.let { return it }
+            Thread.sleep(50)
+        }
+        error("expected status text was never shown")
     }
 
     private companion object {

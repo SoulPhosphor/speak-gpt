@@ -14,7 +14,11 @@ import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorag
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 
 /** The result of the conversation index's line in Check Database Integrity (G.13a, Step 11). */
-data class IndexCheckResult(val status: Status, val detail: String?) {
+data class IndexCheckResult(
+    val status: Status,
+    val detail: String?,
+    val reason: IndexFailureReason = IndexFailureReason.UNKNOWN
+) {
     enum class Status { OK, UNCHECKED, REBUILDING, REPAIR_FAILED }
 }
 
@@ -116,37 +120,45 @@ object ConversationIndexRuntime {
      * Delete Conversation Index (G.16a): the setting is turned off, so nothing
      * is rebuilt, and everything derived is removed; the chats are not read or
      * changed. The setting is off when this returns; [onDone] runs off the
-     * main thread with whether the index is gone. A damaged index that cannot
+     * main thread with the outcome and any failed step. A damaged index that cannot
      * run the deletion has its files removed, and a damaged file kept aside by
      * an unfinished recovery is removed too, so nothing deleted comes back.
      */
-    fun deleteIndex(context: Context, onDone: (Boolean) -> Unit) {
+    fun deleteIndex(context: Context, onDone: (IndexDeleteResult) -> Unit) {
         val app = context.applicationContext
         ConversationIndexSetting.set(app, false)
         coordinator(app).deleteIndex(whenIndexExists = ConversationIndexStore.exists(app)) { failure ->
-            val gone = (failure == null || (IndexFailures.isDamage(failure) && removeDamagedFiles(app))) &&
-                removeSetAside(app)
-            onDone(gone)
+            val result = IndexDeletion.finish(failure, { removeDamagedFiles(app) }, { removeSetAside(app) })
+            if (result.deleted) {
+                // Verified deletion removes the index that needed rebuilding.
+                ConversationIndexConditions.setRecoveryPending(app, false)
+                ConversationIndexConditions.clearRecoveryFailed(app)
+            } else log(app, "error", ConversationIndexErrorLog.deletionFailed(result))
+            onDone(result)
         }
     }
 
-    /** Removes a damaged file an unfinished recovery kept aside; true when none is left. */
-    private fun removeSetAside(app: Context): Boolean = try {
-        ConversationIndexAccess.exclusive { AppIndexRecoveryFiles(app).discardDamaged() }
-        !AppIndexRecoveryFiles(app).hasDamaged()
-    } catch (_: Exception) {
-        false
+    /** Removes recovery files, throwing with their names if cleanup is incomplete. */
+    private fun removeSetAside(app: Context) {
+        ConversationIndexAccess.exclusive {
+            val files = AppIndexRecoveryFiles(app)
+            files.discardDamaged()
+            val remaining = files.remainingDamagedFiles()
+            if (remaining.isNotEmpty()) throw java.io.IOException("conversation index recovery files remain after deletion: ${remaining.joinToString()}")
+        }
     }
 
-    private fun removeDamagedFiles(app: Context): Boolean = try {
+    private fun removeDamagedFiles(app: Context) {
         ConversationIndexAccess.exclusive {
             val files = AppIndexRecoveryFiles(app)
             files.setDamagedAside()
             files.discardDamaged()
+            val remaining = files.remainingDamagedFiles() +
+                listOfNotNull(ConversationIndexStore.DATABASE_NAME.takeIf { ConversationIndexStore.exists(app) })
+            if (remaining.isNotEmpty()) {
+                throw java.io.IOException("damaged conversation index files remain after deletion: ${remaining.joinToString()}")
+            }
         }
-        !ConversationIndexStore.exists(app)
-    } catch (_: Exception) {
-        false
     }
 
     /**
@@ -157,9 +169,15 @@ object ConversationIndexRuntime {
     fun readCounts(context: Context): ConversationIndexCounts? {
         val app = context.applicationContext
         val source = SavedChatIndexSource(app)
-        val live = source.chatIdsNewestFirst() ?: return null
-        if (!ConversationIndexStore.exists(app)) return ConversationIndexCounts(0, 0)
         return try {
+            val live = source.chatIdsNewestFirst() ?: run {
+                reporter(app).operationFailed(IndexReadOperation.COUNTS, source.chatListProblem ?: "the stored chat list is unavailable")
+                return null
+            }
+            if (!ConversationIndexStore.exists(app)) {
+                reporter(app).operationSucceeded(IndexReadOperation.COUNTS)
+                return ConversationIndexCounts(0, 0)
+            }
             val model = EmbeddingModelStorage.activeModel(app)
             val settingsKey = model?.let {
                 ConversationIndexUpdater.settingsKey(
@@ -171,9 +189,12 @@ object ConversationIndexRuntime {
             val summaries = ConversationIndexAccess.shared {
                 ConversationIndexStore.get(app).chatSummaries(model?.embeddingTag ?: "", model?.dimensions ?: 0)
             }
-            ConversationIndexCounting.count(live, summaries, source::chatVersion, settingsKey)
+            ConversationIndexCounting.count(live, summaries, source::chatVersion, settingsKey).also {
+                reporter(app).operationSucceeded(IndexReadOperation.COUNTS)
+            }
         } catch (e: Exception) {
             if (IndexFailures.isDamage(e)) damageFound(app, ConversationIndexErrorLog.cause(e))
+            reporter(app).operationFailed(IndexReadOperation.COUNTS, ConversationIndexErrorLog.cause(e))
             null
         }
     }
@@ -192,12 +213,17 @@ object ConversationIndexRuntime {
             return IndexCheckResult(IndexCheckResult.Status.REPAIR_FAILED, null)
         }
         // No index has been made, so there is nothing that could be damaged.
-        if (!ConversationIndexStore.exists(app)) return IndexCheckResult(IndexCheckResult.Status.OK, null)
+        if (!ConversationIndexStore.exists(app)) {
+            reporter(app).operationSucceeded(IndexReadOperation.CHECK)
+            return IndexCheckResult(IndexCheckResult.Status.OK, null)
+        }
         return try {
             val problem = ConversationIndexAccess.shared { ConversationIndexStore.get(app).integrityProblem() }
             if (problem == null) {
+                reporter(app).operationSucceeded(IndexReadOperation.CHECK)
                 IndexCheckResult(IndexCheckResult.Status.OK, null)
             } else {
+                reporter(app).operationSucceeded(IndexReadOperation.CHECK)
                 damageFound(app, "integrity check: $problem")
                 IndexCheckResult(IndexCheckResult.Status.REBUILDING, problem)
             }
@@ -207,7 +233,8 @@ object ConversationIndexRuntime {
                 damageFound(app, cause)
                 IndexCheckResult(IndexCheckResult.Status.REBUILDING, cause)
             } else {
-                IndexCheckResult(IndexCheckResult.Status.UNCHECKED, cause)
+                reporter(app).operationFailed(IndexReadOperation.CHECK, cause)
+                IndexCheckResult(IndexCheckResult.Status.UNCHECKED, cause, IndexFailureReason.from(e))
             }
         }
     }
@@ -289,12 +316,14 @@ object ConversationIndexRuntime {
                 PassageEmbeddingWorker.forInstalledModel(app, source)
             } catch (e: Exception) {
                 if (IndexFailures.isDamage(e)) damageFound(app, ConversationIndexErrorLog.cause(e))
+                else reporter(app).operationFailed(IndexReadOperation.VECTOR_START, ConversationIndexErrorLog.cause(e))
                 return@shared null
             }
             if (worker == null) {
                 events.modelUnavailable(null)
                 return@shared null
             }
+            reporter(app).operationSucceeded(IndexReadOperation.VECTOR_START)
             // The model loaded and passed its check: a paused condition is over.
             ConversationIndexConditions.clearModelProblem(app)
             val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering }

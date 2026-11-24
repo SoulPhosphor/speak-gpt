@@ -49,6 +49,25 @@ class Librarian private constructor(private val appContext: Context) {
                 instance ?: Librarian(context.applicationContext).also { instance = it }
             }
 
+        internal fun selfCheckFailureMessage(modelId: String, cause: String, cleanupFailure: Throwable? = null): String =
+            "The on-device embedding model failed its self-check. Saved-memory search is using keywords only. " +
+                "Model: $modelId. Cause: $cause." + (cleanupFailure?.let {
+                    " Model cleanup also failed: ${org.teslasoft.assistant.util.DiagnosticCause.describe(it)}."
+                } ?: "")
+
+        internal fun modelLoadFailureMessage(modelId: String, failure: Throwable): String =
+            "The on-device embedding model could not be loaded. Saved-memory search is using keywords only. " +
+                "Model: $modelId. Cause: ${org.teslasoft.assistant.util.DiagnosticCause.describe(failure)}."
+
+        internal fun failedModelMessage(
+            modelId: String, duringSelfCheck: Boolean, failure: Throwable, closeCandidate: () -> Unit
+        ): String {
+            try { closeCandidate() } catch (cleanup: Throwable) { if (cleanup !== failure) failure.addSuppressed(cleanup) }
+            return if (duringSelfCheck) {
+                selfCheckFailureMessage(modelId, org.teslasoft.assistant.util.DiagnosticCause.describe(failure))
+            } else modelLoadFailureMessage(modelId, failure)
+        }
+
         // Relevance floor (seed-safety audit requirement 8): top-k alone
         // surfaces weak matches when the store is small, so results below
         // this cosine similarity are dropped even if they'd make the cut.
@@ -480,23 +499,26 @@ class Librarian private constructor(private val appContext: Context) {
         model?.let { return it }
         if (modelLoadFailed) return null
         val catalog = EmbeddingModelStorage.activeModel(appContext) ?: return null
+        var checkingModel = false
+        var candidate: OnnxEmbeddingModel? = null
         return try {
             val m = OnnxEmbeddingModel.create(appContext, catalog)
+            candidate = m
             // One-time semantic self-check per installed model (marker-cached in
             // the model dir; a re-download clears it): bad tokenization or a
             // mis-probed graph must disable semantic retrieval — keyword
             // fallback — rather than silently index garbage vectors.
             val marker = EmbeddingModelStorage.selfCheckMarker(appContext, catalog)
             if (!marker.exists()) {
+                checkingModel = true
                 val failure = embeddingQueue.run(EmbeddingQueue.Priority.LIVE) { m.selfCheck() }
+                checkingModel = false
                 if (failure != null) {
-                    try { m.close() } catch (_: Throwable) { }
+                    val cleanupFailure = try { m.close(); null } catch (t: Throwable) { t }
                     modelLoadFailed = true
-                    modelProblem = "self-check failed for ${catalog.id}: $failure"
-                    MemoryLog.log(
-                        appContext, "Librarian", "error",
-                        "Embedding self-check FAILED for ${catalog.id}: $failure — semantic retrieval disabled, using keyword fallback"
-                    )
+                    val message = selfCheckFailureMessage(catalog.id, failure, cleanupFailure)
+                    modelProblem = message
+                    MemoryLog.log(appContext, "Librarian", "error", message)
                     return null
                 }
                 try { marker.createNewFile() } catch (_: Throwable) { /* re-check next process; still correct */ }
@@ -507,10 +529,21 @@ class Librarian private constructor(private val appContext: Context) {
             requestLongMemoryReread()
             m
         } catch (t: Throwable) {
-            modelLoadFailed = true
-            modelProblem = "${catalog.id} failed to load: ${t.javaClass.name}: ${t.message}"
-            MemoryLog.log(appContext, "Librarian", "error", "Embedding model failed to load: ${t.message}")
-            null
+            // A failed self-check is distinct from a failure to open the model.
+            // Release the unpublished candidate; retain cleanup failures in the diagnostic.
+            if (model == null) {
+                modelLoadFailed = true
+                val message = failedModelMessage(catalog.id, checkingModel, t) { candidate?.close() }
+                modelProblem = message
+                MemoryLog.log(appContext, "Librarian", "error", message)
+                null
+            } else {
+                // The model was already published and is usable; preparation failing does not disable meaning search.
+                MemoryLog.log(appContext, "Librarian", "error",
+                    "Saved-memory background preparation could not be scheduled. Meaning search remains available. " +
+                        "Model: ${catalog.id}. Cause: ${org.teslasoft.assistant.util.DiagnosticCause.describe(t)}.")
+                model
+            }
         }
     }
 

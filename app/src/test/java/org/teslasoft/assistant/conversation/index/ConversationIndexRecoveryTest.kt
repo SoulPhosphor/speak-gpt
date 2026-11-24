@@ -188,7 +188,7 @@ class ConversationIndexRecoveryTest {
         reporter.vectorPass(stopped, 2048) { 12 }
         val entry = written.single()
         assertTrue(entry.startsWith("Conversation search vector preparation failed for 12 passages: java.lang.IllegalStateException: ORT session failed."))
-        assertTrue(entry.contains("they stay waiting"))
+        assertTrue(entry.contains("unfinished passages stay waiting"))
         assertTrue(entry.contains("Retry: automatically on the next indexing pass"))
         reporter.vectorPass(PassageEmbeddingWorker.Outcome.Finished(PassageEmbeddingWorker.Counts(1, 0, 0), 0), 2048) { 0 }
         reporter.vectorPass(stopped, 2048) { 3 }

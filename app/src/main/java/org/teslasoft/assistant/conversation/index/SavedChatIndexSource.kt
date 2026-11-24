@@ -135,13 +135,22 @@ class SavedChatIndexSource(context: Context) : IndexChatSource {
 
     override fun changeCount(chatId: String): Long = ConversationIndexChatChanges.count(chatId)
 
+    /** Metadata-only diagnostic: never includes a chat title or message. */
+    var chatListProblem: String? = null
+        private set
+
     override fun chatIdsNewestFirst(): List<String>? {
         val list = try {
             chats.getChatListResult(app, includeFirstMessage = false)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            chatListProblem = ConversationIndexErrorLog.cause(e)
             return null
         }
-        if (!ChatStorageHealth.isAuthoritative(list.state)) return null
+        if (!ChatStorageHealth.isAuthoritative(list.state)) {
+            chatListProblem = "the stored chat list is unavailable (storage state: ${list.state})"
+            return null
+        }
+        chatListProblem = null
         return list.chats
             .map { row -> ChatPreferences.storedChatId(row) to newestTime(row) }
             .filter { it.first.isNotBlank() }
