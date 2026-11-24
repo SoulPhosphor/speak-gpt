@@ -227,8 +227,12 @@ class IndexProgressTracker(
     /** Changes with every catch-up, so a result for an older one is thrown away. */
     private var generation = 0L
     private var drained = false
-    /** The catch-up's last vector pass stopped on a failure and no pass has started since (Step 13). */
-    private var stalled = false
+
+    /**
+     * Step 13: whether the vector passes stopped on a failure with none asked
+     * for since ([IndexVectorPasses.isStoppedOnFailure]). Set once by the runtime.
+     */
+    @Volatile var vectorsStoppedOnFailure: () -> Boolean = { false }
     private val pending = LinkedHashSet<String>()
     private val counted = HashMap<String, CountedChat>()
     private var latest: IndexingNumbers? = null
@@ -245,7 +249,7 @@ class IndexProgressTracker(
      * was handled, so nothing will ask for another vector pass, and the last
      * pass stopped on a failure.
      */
-    val isStalled: Boolean get() = synchronized(lock) { catchingUp && drained && stalled }
+    val isStalled: Boolean get() = synchronized(lock) { catchingUp && drained } && vectorsStoppedOnFailure()
 
     /** The Step 11 conditions the display is worked out from. */
     fun conditions(): IndexingConditions = source.conditions()
@@ -255,7 +259,6 @@ class IndexProgressTracker(
         val toCount = synchronized(lock) {
             generation++
             drained = false
-            stalled = false
             pending.clear()
             catchingUp = work != null && (work.notDescribed.isNotEmpty() || work.waitingVectors > 0)
             if (!catchingUp || work == null) {
@@ -294,8 +297,7 @@ class IndexProgressTracker(
     }
 
     override fun catchUpDrained() {
-        // A vector pass is asked for right after, so an earlier failure is not a stall.
-        synchronized(lock) { if (catchingUp) { drained = true; stalled = false } }
+        synchronized(lock) { if (catchingUp) drained = true }
     }
 
     override fun catchUpStopped() {
@@ -307,19 +309,7 @@ class IndexProgressTracker(
      * A vector pass starts. Returns the catch-up it can finish: one whose
      * queued chats were all handled before the pass started; otherwise null.
      */
-    fun vectorPassStarting(): Long? = synchronized(lock) {
-        stalled = false
-        if (catchingUp && drained) generation else null
-    }
-
-    /**
-     * The vector passes stopped after a pass failed (or the model could not be
-     * loaded for it) and no further pass was asked for: the catch-up cannot end
-     * by itself. Called by [IndexVectorPasses] on the vector thread.
-     */
-    fun vectorPassFailed() {
-        synchronized(lock) { if (catchingUp) stalled = true }
-    }
+    fun vectorPassStarting(): Long? = synchronized(lock) { if (catchingUp && drained) generation else null }
 
     /** A vector pass found nothing more waiting; [token] is what [vectorPassStarting] returned. */
     fun vectorPassFinished(token: Long?) {
@@ -404,7 +394,6 @@ class IndexProgressTracker(
     private fun endCatchUp() {
         catchingUp = false
         drained = false
-        stalled = false
         pending.clear()
         counted.clear()
         latest = null

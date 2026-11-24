@@ -192,18 +192,28 @@ class BackgroundIndexingPermit {
     /** The app is closed and its background service continues indexing. */
     fun service() = moveTo(State.SERVICE)
 
-    /** The app is closed and nothing continues indexing. */
-    fun closed() = moveTo(State.CLOSED)
+    /**
+     * The app is closed and nothing continues indexing. [waiting]: work is
+     * known to wait (a catch-up is going), so it is continued when indexing may
+     * run again even if no indexing thread asks meanwhile (a stalled catch-up).
+     */
+    fun closed(waiting: Boolean = false) {
+        synchronized(lock) {
+            state = State.CLOSED
+            if (waiting) refused = true
+        }
+    }
 
     /**
      * The background service stopped or could not start: indexing waits, unless
-     * a screen opened meanwhile. True when the app is closed.
+     * a screen opened meanwhile. True when the app is closed. [waiting] as for [closed].
      */
-    fun closedUnlessForeground(): Boolean {
-        val wasClosedOrClosing = synchronized(lock) {
-            if (state == State.FOREGROUND) false else { state = State.CLOSED; true }
+    fun closedUnlessForeground(waiting: Boolean = false): Boolean = synchronized(lock) {
+        if (state == State.FOREGROUND) false else {
+            state = State.CLOSED
+            if (waiting) refused = true
+            true
         }
-        return wasClosedOrClosing
     }
 
     private fun moveTo(next: State) {
@@ -274,7 +284,7 @@ class BackgroundIndexingController(
                 platform.stalled()
             )
         } catch (e: Exception) {
-            permit.closed()
+            permit.closed(waiting = true)
             stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
             return
         }
@@ -285,11 +295,18 @@ class BackgroundIndexingController(
             }
             // Work the user started comes first; nothing else to continue: indexing waits for the app.
             BackgroundStartDecision.YIELD, BackgroundStartDecision.NOT_NEEDED -> {
-                permit.closed()
+                permit.closed(waiting = catchUpGoing())
                 // A start asked for on an earlier leave and not yet stopped ends with this leave's reason.
                 if (serviceActive) platform.stopService(notStartedReason(decision))
             }
         }
+    }
+
+    /** Whether a catch-up is going, so the next opening must continue it whatever else happens meanwhile. */
+    private fun catchUpGoing(): Boolean = try {
+        platform.display() is IndexingDisplay.Running || platform.conditions().rebuilding
+    } catch (_: Exception) {
+        true
     }
 
     private fun notStartedReason(decision: BackgroundStartDecision): BackgroundStopReason =
@@ -326,7 +343,7 @@ class BackgroundIndexingController(
         serviceActive = false
         val reason = classify(e)
         lastStop = reason
-        val closed = permit.closedUnlessForeground()
+        val closed = permit.closedUnlessForeground(waiting = catchUpGoing())
         if (reason == BackgroundStopReason.UNEXPECTED_FAILURE) {
             stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
             return
@@ -341,7 +358,7 @@ class BackgroundIndexingController(
     fun serviceStopped(reason: BackgroundStopReason) {
         serviceActive = false
         lastStop = reason
-        val closed = permit.closedUnlessForeground()
+        val closed = permit.closedUnlessForeground(waiting = catchUpGoing())
         platform.logcat(BackgroundIndexingLog.stopped(reason))
         if (reason.isAndroidLimit && closed) platform.showStoppedNotice()
     }
@@ -349,7 +366,7 @@ class BackgroundIndexingController(
     /** The running service failed unexpectedly: indexing waits for the app to open. */
     fun serviceFailed(e: Throwable) {
         serviceActive = false
-        permit.closedUnlessForeground()
+        permit.closedUnlessForeground(waiting = catchUpGoing())
         stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_STOPPED)
     }
 

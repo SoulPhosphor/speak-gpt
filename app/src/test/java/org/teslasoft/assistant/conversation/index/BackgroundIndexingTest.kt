@@ -491,10 +491,10 @@ class BackgroundIndexingTest {
                 }.also { passesRun++ }
             },
             runner = tasks,
-            isOn = { settingOn && mayRun() },
-            // As in the runtime: passes that stopped on a failure, with none coming, leave the catch-up stalled.
-            onStoppedOnFailure = { tracker.vectorPassFailed() }
+            isOn = { settingOn && mayRun() }
         )
+        // As in the runtime: passes that stopped on a failure, with none asked for, leave the catch-up stalled.
+        tracker.vectorsStoppedOnFailure = { passes.isStoppedOnFailure }
         coordinator = ConversationIndexCoordinator(
             source = chats,
             storage = { index },
@@ -929,21 +929,32 @@ class BackgroundIndexingTest {
     @Test fun aVectorFailureBeforeTheCatchUpHandedOverItsChatsIsNotAStall() {
         putChats(3)
         leaveDuringTheCatchUp()
-        tracker.vectorPassFailed()
-        assertFalse("the catch-up will ask for another pass itself", tracker.isStalled)
-        assertTrue(serviceStep() is BackgroundIndexingStep.Show)
-        tasks.runAll()
+        // Some chats are compared, others still queued, when a pass asked for now fails.
+        while (index.rows.isEmpty()) check(tasks.runOne())
+        model.failNext = true
+        coordinator.mayRunAgain()
+        // Until a pass that started after the hand-over fails, it is never a stall.
+        while (tasks.runOne()) {
+            assertFalse("the catch-up asks for another pass itself", tracker.isStalled)
+        }
         assertFinished(3)
     }
 
-    @Test fun aFailureBeforeTheCatchUpHandedOverItsChatsIsNotAStallOnceItHasEither() {
-        putChats(3)
-        leaveDuringTheCatchUp()
-        // A pass failed before the chats were handed over, with none coming at that moment.
-        tracker.vectorPassFailed()
-        // Between handing over the last chat and the next pass starting, it is never a stall.
-        while (tasks.runOne()) assertFalse("a pass is asked for right after the hand-over", tracker.isStalled)
-        assertFinished(3)
+    @Test fun leavingWithAStalledCatchUpStartsNoServiceAndOpeningContinuesIt() {
+        putChats(2)
+        controller.appOpened()
+        coordinator.turnedOn()
+        model.afterRead = { if (model.inputs.size == 2) model.failNext = true }
+        tasks.runAll()
+        model.afterRead = {}
+        assertTrue(tracker.isStalled)
+        controller.appLeft()
+        assertEquals("no service for a stalled catch-up", listOf("clear"), platform.calls)
+
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(2)
+        assertEquals(IndexingDisplay.Hidden, tracker.display.value)
     }
 
     @Test fun leavingWithAStalledCatchUpStartsNoService() {
@@ -969,7 +980,8 @@ class BackgroundIndexingTest {
             BackgroundIndexingStep.Stop(BackgroundStopReason.INDEXING_FAILED), serviceStep())
         controller.serviceStopped(BackgroundStopReason.INDEXING_FAILED)
         assertFalse("not an Android limit: no notice", "notice" in platform.calls)
-        assertFalse(permit.mayRun())
+        // Nothing asks whether it may run after a stall: the opening alone must continue it.
+        assertEquals(BackgroundIndexingPermit.State.CLOSED, permit.current)
 
         controller.appOpened()
         tasks.runAll()

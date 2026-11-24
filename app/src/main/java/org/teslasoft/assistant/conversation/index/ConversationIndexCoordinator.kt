@@ -521,22 +521,47 @@ class ConversationIndexCoordinator(
 class IndexVectorPasses(
     private val runPass: () -> PassageEmbeddingWorker.Outcome?,
     private val runner: IndexTaskRunner,
-    private val isOn: () -> Boolean = { true },
-    /** Step 13: the last pass failed (or could not start) and no further pass is coming. */
-    private val onStoppedOnFailure: () -> Unit = {}
+    private val isOn: () -> Boolean = { true }
 ) {
-    private val wanted = AtomicBoolean(false)
-    private val scheduled = AtomicBoolean(false)
+    /** Guards [wanted], [scheduled] and [stoppedOnFailure] together. */
+    private val lock = Any()
+    private var wanted = false
+    private var scheduled = false
+    private var stoppedOnFailure = false
+
+    /**
+     * Step 13: the passes stopped because the last one failed (or could not
+     * start), and no further pass has been asked for since. Set and cleared
+     * under the same lock as the requests, so it is never true while a pass
+     * is asked for.
+     */
+    val isStoppedOnFailure: Boolean get() = synchronized(lock) { stoppedOnFailure }
 
     fun request() {
-        wanted.set(true)
-        if (scheduled.compareAndSet(false, true)) runner.run(0) { loop() }
+        val start = synchronized(lock) {
+            wanted = true
+            stoppedOnFailure = false
+            if (scheduled) false else { scheduled = true; true }
+        }
+        if (start) schedule()
     }
+
+    private fun schedule() {
+        try {
+            runner.run(0) { loop() }
+        } catch (e: Exception) {
+            synchronized(lock) { scheduled = false }
+            throw e
+        }
+    }
+
+    private fun takeWanted(): Boolean = synchronized(lock) { wanted.also { wanted = false } }
 
     private fun loop() {
         var failed = false
         try {
-            while (wanted.getAndSet(false)) {
+            while (takeWanted()) {
+                failed = false
                 if (!isOn()) break
                 val outcome = try { runPass() } catch (_: Exception) { null }
                 failed = outcome == null || outcome is PassageEmbeddingWorker.Outcome.Interrupted
@@ -545,10 +570,14 @@ class IndexVectorPasses(
                 if (outcome !is PassageEmbeddingWorker.Outcome.Finished) break
             }
         } finally {
-            scheduled.set(false)
-            // A pass asked for meanwhile runs after this one on the same thread, so the report comes first.
-            if (wanted.get() && scheduled.compareAndSet(false, true)) runner.run(0) { loop() }
-            else if (failed) try { onStoppedOnFailure() } catch (_: Exception) { }
+            val again = synchronized(lock) {
+                if (wanted) true else {
+                    scheduled = false
+                    stoppedOnFailure = failed
+                    false
+                }
+            }
+            if (again) schedule()
         }
     }
 }

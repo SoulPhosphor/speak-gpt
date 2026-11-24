@@ -111,9 +111,10 @@ object ConversationIndexRuntime {
             runner = IndexTaskRunner.on(vectorExecutor),
             // A pass while paused only loads the model, so its availability is known, and stops at once.
             // While the app is closed without the background service nothing is loaded or read.
-            isOn = { isOn(app) && backgroundPermit.mayRun() },
-            onStoppedOnFailure = { progress(app).vectorPassFailed() }
+            isOn = { isOn(app) && backgroundPermit.mayRun() }
         )
+        // A catch-up whose passes stopped on a failure, with none asked for, cannot end by itself (Step 13).
+        progress(app).vectorsStoppedOnFailure = { vectors.isStoppedOnFailure }
         return ConversationIndexCoordinator(
             source = source,
             storage = { ConversationIndexStore.get(app) },

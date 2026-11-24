@@ -67,8 +67,14 @@ class ConversationIndexingForegroundService : Service() {
         /** Asks Android to start the service; throws what Android throws. Main thread. */
         fun start(context: Context) {
             val intent = Intent(context, ConversationIndexingForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
-            else context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                else context.startService(intent)
+            } catch (e: Exception) {
+                // An earlier start still on its way is not continuing indexing either.
+                stopWanted = BackgroundStopReason.NOT_CONTINUED
+                throw e
+            }
             // Only a start Android accepted replaces an earlier start's stop request.
             stopWanted = null
         }
@@ -137,6 +143,8 @@ class ConversationIndexingForegroundService : Service() {
     private val update = Runnable { update() }
     private var stopped = true
     private var lastStartId = 0
+    /** Counts this instance's runs, so a step worked out for an earlier run is never applied to a later one. */
+    private var run = 0
     private var shown: BackgroundIndexingContent? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -163,6 +171,7 @@ class ConversationIndexingForegroundService : Service() {
         }
         if (!stopped) return START_NOT_STICKY
         stopped = false
+        run++
         shown = first
         running = this
         AppBackgroundIndexing.controller(this).serviceStarted()
@@ -201,6 +210,7 @@ class ConversationIndexingForegroundService : Service() {
             val progress = ConversationIndexRuntime.progress(applicationContext)
             progress.refresh()
             val controller = AppBackgroundIndexing.controller(this)
+            val thisRun = run
             ConversationIndexRuntime.onIndexThread {
                 val step = try {
                     stepForTest?.invoke() ?: BackgroundIndexingRule.next(
@@ -208,10 +218,10 @@ class ConversationIndexingForegroundService : Service() {
                         progress.isStalled, controller.continuedByService
                     )
                 } catch (e: Exception) {
-                    handler.post { fail(e) }
+                    handler.post { if (thisRun == run) fail(e) }
                     return@onIndexThread
                 }
-                handler.post { apply(step) }
+                handler.post { if (thisRun == run) apply(step) }
             }
         } catch (e: Exception) {
             fail(e)
