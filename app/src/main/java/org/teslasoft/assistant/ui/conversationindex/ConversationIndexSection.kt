@@ -30,8 +30,8 @@ import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorag
  *    beneath it, an ongoing condition: rebuilding, paused for the model, or
  *    stopped after a failed rebuild. Closing a notice never hides it here.
  *  - Delete Conversation Index asks first, turns the setting off and removes
- *    the index; the numbers are read again afterwards, so a failed deletion
- *    never shows zero.
+ *    the index; the numbers are read again afterwards, and a failed deletion
+ *    reports the failed step. An unreadable count is explained, never invented.
  */
 class ConversationIndexSection(private val activity: Activity, root: View) {
 
