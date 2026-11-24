@@ -153,27 +153,29 @@ class BackgroundIndexingHold {
     @Volatile var held: Boolean = false
         private set
 
-    /** Set by the controller: the app is closed and no indexing service runs. */
-    @Volatile internal var catchUpsWait: Boolean = false
-
-    @Volatile private var catchUpWaiting = false
+    /** Guards the catch-up gate, so a catch-up that waits is never missed by the opening that releases it. */
+    private val lock = Any()
+    private var catchUpsWait = false
+    private var catchUpWaiting = false
 
     fun hold() { held = true }
 
-    /** Asked by the coordinator before a catch-up; true when it must wait for the app, which is then remembered. */
-    fun catchUpMustWait(): Boolean {
-        if (!catchUpsWait) return false
-        catchUpWaiting = true
-        return true
+    /** Set by the controller: true while the app is closed and no indexing service runs. */
+    internal fun gateCatchUps(wait: Boolean) = synchronized(lock) { catchUpsWait = wait }
+
+    /** Asked by the coordinator before catch-up work; true when it must wait for the app, which is then remembered. */
+    fun catchUpMustWait(): Boolean = synchronized(lock) {
+        if (catchUpsWait) catchUpWaiting = true
+        catchUpsWait
     }
 
-    /** True when indexing was held or a catch-up waited, so the app continues it. */
-    fun release(): Boolean {
+    /** The app opened: true when indexing was held or a catch-up waited, so the app continues it. */
+    fun release(): Boolean = synchronized(lock) {
         val was = held || catchUpWaiting
         held = false
         catchUpWaiting = false
         catchUpsWait = false
-        return was
+        was
     }
 }
 
@@ -224,7 +226,7 @@ class BackgroundIndexingController(
 
     /** A catch-up may start without the service only while a screen of the app is visible. */
     private fun gateCatchUps() {
-        hold.catchUpsWait = !appVisible && !serviceActive
+        hold.gateCatchUps(!appVisible && !serviceActive)
     }
 
     /** Why the service last stopped or did not start; null before the first time. */

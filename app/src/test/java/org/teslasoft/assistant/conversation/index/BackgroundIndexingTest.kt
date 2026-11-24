@@ -746,6 +746,25 @@ class BackgroundIndexingTest {
         assertNothingReadTwice()
     }
 
+    @Test fun aCatchUpThatWaitsAtTheMomentTheAppOpensIsNeverMissed() {
+        val hold = BackgroundIndexingHold()
+        val start = java.util.concurrent.CyclicBarrier(2)
+        repeat(2_000) {
+            hold.gateCatchUps(true)
+            var waited = false
+            val coordinatorThread = Thread {
+                start.await()
+                waited = hold.catchUpMustWait()
+            }
+            coordinatorThread.start()
+            start.await()
+            val resumed = hold.release()
+            coordinatorThread.join()
+            // Either the catch-up went ahead, or the opening saw it wait and continues it.
+            assertTrue("a waiting catch-up was missed", !waited || resumed)
+        }
+    }
+
     @Test fun aCatchUpThatStopsInTheBackgroundLeavesLaterCatchUpsWaitingForTheApp() {
         putChats(2)
         leaveDuringTheCatchUp()
