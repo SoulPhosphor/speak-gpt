@@ -35,6 +35,10 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
     )
 
     @Volatile private var instance: BackgroundIndexingController? = null
+
+    /** Tests: what the leave decision reads instead of the app's indexing progress and conditions. */
+    @Volatile internal var displayForTest: IndexingDisplay? = null
+    @Volatile internal var conditionsForTest: IndexingConditions? = null
     private var startedScreens = 0
 
     fun register(app: Application) {
@@ -70,11 +74,11 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
 
     private class Platform(private val app: Context) : BackgroundIndexingPlatform {
 
-        override fun display(): IndexingDisplay =
-            ConversationIndexRuntime.progressIfCreated()?.display?.value ?: IndexingDisplay.Hidden
+        override fun display(): IndexingDisplay = displayForTest
+            ?: ConversationIndexRuntime.progressIfCreated()?.display?.value ?: IndexingDisplay.Hidden
 
-        override fun conditions(): IndexingConditions =
-            ConversationIndexRuntime.progressIfCreated()?.conditions()
+        override fun conditions(): IndexingConditions = conditionsForTest
+            ?: ConversationIndexRuntime.progressIfCreated()?.conditions()
                 ?: IndexingConditions(settingOn = false, rebuilding = false, recoveryFailed = false, modelUnavailable = false)
 
         override fun userPaused(): Boolean = ConversationIndexRuntime.progressIfCreated()?.isPaused ?: false

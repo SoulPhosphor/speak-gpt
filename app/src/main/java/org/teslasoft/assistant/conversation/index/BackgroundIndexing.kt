@@ -157,9 +157,9 @@ object BackgroundIndexingLog {
  * is closed without the service ([State.CLOSED]; also how a process starts,
  * before any screen) nothing is counted, compared, cut or read: the coordinator
  * and the vector worker stop at their next safe point and keep every queue, so
- * no work is ever dropped. Whenever the state becomes one that may run again,
- * [onMayRunAgain] is called once, outside the lock, and continues whatever
- * waited. This is not the user's pause, which stays separate and saved.
+ * no work is ever dropped. Whenever the state becomes one that may run again
+ * after an indexing thread was refused, [onMayRunAgain] is called once,
+ * outside the lock, and continues whatever waited. This is not the user's pause, which stays separate and saved.
  */
 class BackgroundIndexingPermit {
     enum class State { FOREGROUND, SERVICE, CLOSED }
@@ -167,11 +167,22 @@ class BackgroundIndexingPermit {
     private val lock = Any()
     @Volatile private var state = State.CLOSED
     @Volatile private var onMayRunAgain: () -> Unit = {}
+    /** An indexing thread was refused since indexing last could run, so something waits. Guarded by [lock]. */
+    private var refused = false
 
     val current: State get() = state
 
-    /** Checked by the indexing threads at every safe point. */
-    fun mayRun(): Boolean = state != State.CLOSED
+    /**
+     * Checked by the indexing threads at every safe point. A refusal is
+     * remembered in the same locked step that a change of state reads it, so
+     * waiting work is always continued, and nothing is started when nothing waited.
+     */
+    fun mayRun(): Boolean {
+        if (state != State.CLOSED) return true
+        return synchronized(lock) {
+            if (state == State.CLOSED) { refused = true; false } else true
+        }
+    }
 
     fun setOnMayRunAgain(listener: () -> Unit) { onMayRunAgain = listener }
 
@@ -199,7 +210,7 @@ class BackgroundIndexingPermit {
         val mayRunAgain = synchronized(lock) {
             val was = state
             state = next
-            was == State.CLOSED && next != State.CLOSED
+            (was == State.CLOSED && next != State.CLOSED && refused).also { if (it) refused = false }
         }
         if (mayRunAgain) onMayRunAgain()
     }

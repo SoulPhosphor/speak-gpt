@@ -111,7 +111,8 @@ object ConversationIndexRuntime {
             runner = IndexTaskRunner.on(vectorExecutor),
             // A pass while paused only loads the model, so its availability is known, and stops at once.
             // While the app is closed without the background service nothing is loaded or read.
-            isOn = { isOn(app) && backgroundPermit.mayRun() }
+            isOn = { isOn(app) && backgroundPermit.mayRun() },
+            onStoppedOnFailure = { progress(app).vectorPassFailed() }
         )
         return ConversationIndexCoordinator(
             source = source,
@@ -348,12 +349,10 @@ object ConversationIndexRuntime {
                 PassageEmbeddingWorker.forInstalledModel(app, source)
             } catch (e: Exception) {
                 if (IndexFailures.isDamage(e)) damageFound(app, ConversationIndexErrorLog.cause(e))
-                progress(app).vectorPassFailed()
                 return@shared null
             }
             if (worker == null) {
                 events.modelUnavailable(null)
-                progress(app).vectorPassFailed()
                 return@shared null
             }
             // The model loaded and passed its check: a paused condition is over.
@@ -363,7 +362,6 @@ object ConversationIndexRuntime {
             when (outcome) {
                 is PassageEmbeddingWorker.Outcome.Finished -> progress(app).vectorPassFinished(catchUp)
                 is PassageEmbeddingWorker.Outcome.Paused -> progress(app).vectorPassPaused()
-                is PassageEmbeddingWorker.Outcome.Interrupted -> progress(app).vectorPassFailed()
                 else -> Unit
             }
             reporter(app).vectorPass(outcome, worker.tokenLimit) {

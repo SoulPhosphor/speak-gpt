@@ -124,18 +124,23 @@ class BackgroundIndexingTest {
         assertFalse("a process starts with no screen", permit.mayRun())
 
         permit.foreground()
-        assertEquals(1, continued)
+        assertEquals("work was refused, so it is continued", 1, continued)
         permit.service()
         assertEquals("foreground to service: it never stopped", 1, continued)
         assertTrue("the app is closed", permit.closedUnlessForeground())
         permit.foreground()
-        assertEquals(2, continued)
+        assertEquals("nothing was refused meanwhile: nothing to continue", 1, continued)
         assertFalse("a stop arriving after the app opened changes nothing", permit.closedUnlessForeground())
         assertTrue(permit.mayRun())
         permit.closed()
+        assertFalse(permit.mayRun())
+        assertFalse(permit.mayRun())
         permit.closed()
         permit.service()
-        assertEquals(3, continued)
+        assertEquals("continued once however often it was refused", 2, continued)
+        permit.closed()
+        permit.foreground()
+        assertEquals(2, continued)
     }
 
     // --- The controller against a recorded platform --------------------------------
@@ -427,6 +432,8 @@ class BackgroundIndexingTest {
     private var readsAtOnce = false
     /** How often the model (its updater) was asked for. */
     private var modelLoads = 0
+    /** How many vector passes ran. */
+    private var passesRun = 0
 
     /** Runs while a catch-up reads its work, before it is shown. */
     private var whileFindingWork: () -> Unit = {}
@@ -481,12 +488,12 @@ class BackgroundIndexingTest {
                 PassageEmbeddingWorker(index, chats, reader, model, pause).runPass { !settingOn || !mayRun() }.also {
                     if (it is PassageEmbeddingWorker.Outcome.Finished) tracker.vectorPassFinished(catchUp)
                     if (it is PassageEmbeddingWorker.Outcome.Paused) tracker.vectorPassPaused()
-                    // As in the runtime: a pass that stopped on a failure leaves the catch-up unable to end by itself.
-                    if (it is PassageEmbeddingWorker.Outcome.Interrupted) tracker.vectorPassFailed()
-                }
+                }.also { passesRun++ }
             },
             runner = tasks,
-            isOn = { settingOn && mayRun() }
+            isOn = { settingOn && mayRun() },
+            // As in the runtime: passes that stopped on a failure, with none coming, leave the catch-up stalled.
+            onStoppedOnFailure = { tracker.vectorPassFailed() }
         )
         coordinator = ConversationIndexCoordinator(
             source = chats,
@@ -929,6 +936,16 @@ class BackgroundIndexingTest {
         assertFinished(3)
     }
 
+    @Test fun aFailureBeforeTheCatchUpHandedOverItsChatsIsNotAStallOnceItHasEither() {
+        putChats(3)
+        leaveDuringTheCatchUp()
+        // A pass failed before the chats were handed over, with none coming at that moment.
+        tracker.vectorPassFailed()
+        // Between handing over the last chat and the next pass starting, it is never a stall.
+        while (tasks.runOne()) assertFalse("a pass is asked for right after the hand-over", tracker.isStalled)
+        assertFinished(3)
+    }
+
     @Test fun leavingWithAStalledCatchUpStartsNoService() {
         val platform = Platform().apply { display = IndexingDisplay.Running(numbers42); stalled = true }
         val permit = BackgroundIndexingPermit()
@@ -1012,6 +1029,63 @@ class BackgroundIndexingTest {
         controller.appOpened()
         controller.appLeft()
         assertEquals("stop:USER_WORK_RUNNING", platform.calls.last())
+    }
+
+    @Test fun chatsARestoreRemovedLeaveTheIndexAtOnceEvenWhileTheAppIsClosed() {
+        putChats(3)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        controller.appLeft()
+        chats.chats.remove("c2")
+        coordinator.chatSetReplaced()
+        tasks.runAll()
+        assertTrue("nothing derived from a removed chat stays", index.rows.none { it.chatId == "c2" })
+        assertEquals("nothing else ran", 9, model.inputs.size)
+
+        controller.appOpened()
+        tasks.runAll()
+        assertTrue(allMade())
+        assertNothingReadTwice()
+    }
+
+    @Test fun openingAndClosingTheAppWithNothingWaitingDoesNoIndexingWork() {
+        putChats(2)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        assertFinished(2)
+        val passes = passesRun
+        val loads = modelLoads
+        val reads = chats.reads.size
+        repeat(3) {
+            controller.appLeft()
+            tasks.runAll()
+            controller.appOpened()
+            tasks.runAll()
+        }
+        assertEquals("no vector pass", passes, passesRun)
+        assertEquals("the model is not loaded", loads, modelLoads)
+        assertEquals("no chat read", reads, chats.reads.size)
+    }
+
+    @Test fun aFailedPassWithAnotherAlreadyAskedForIsNotAStall() {
+        putChats(2)
+        leaveDuringTheCatchUp()
+        // A pass fails while another is already asked for: the next pass is requested during this one.
+        model.afterRead = {
+            if (model.inputs.size == 2) {
+                coordinator.mayRunAgain()
+                tasks.runOne()
+                model.failNext = true
+            }
+        }
+        var stalledSeen = false
+        while (tasks.runOne()) if (tracker.isStalled) stalledSeen = true
+        model.afterRead = {}
+        assertFalse("a pass was still coming", stalledSeen)
+        assertTrue(allMade())
+        assertNothingReadTwice()
     }
 
     // --- The user's pause and the other conditions ------------------------------------------

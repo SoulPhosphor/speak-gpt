@@ -24,6 +24,9 @@ import org.teslasoft.assistant.conversation.index.BackgroundIndexingContent
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingStep
 import org.teslasoft.assistant.conversation.index.BackgroundStopReason
 import org.teslasoft.assistant.conversation.index.ConversationIndexRuntime
+import org.teslasoft.assistant.conversation.index.IndexingConditions
+import org.teslasoft.assistant.conversation.index.IndexingDisplay
+import org.teslasoft.assistant.conversation.index.IndexingNumbers
 import org.teslasoft.assistant.ui.activities.MemoryControlsActivity
 
 /**
@@ -51,10 +54,17 @@ class ConversationIndexingServiceInstrumentedTest {
         }
         ConversationIndexingForegroundService.updateMillis = 300L
         ConversationIndexingForegroundService.stepForTest = { step }
+        // What the leave decision reads: a running catch-up with Index Conversations on.
+        AppBackgroundIndexing.displayForTest = IndexingDisplay.Running(IndexingNumbers(42, 3, 9))
+        AppBackgroundIndexing.conditionsForTest =
+            IndexingConditions(settingOn = true, rebuilding = false, recoveryFailed = false, modelUnavailable = false)
         notifications.cancelAll()
     }
 
     @After fun tearDown() {
+        // The app's own progress decides again before the app is opened and left below.
+        AppBackgroundIndexing.displayForTest = null
+        AppBackgroundIndexing.conditionsForTest = null
         ConversationIndexingForegroundService.stepForTest = { BackgroundIndexingStep.Stop(BackgroundStopReason.CATCH_UP_ENDED) }
         onMain { ConversationIndexingForegroundService.requestStop(BackgroundStopReason.CATCH_UP_ENDED) }
         waitFor("the service stops") { !onMain { ConversationIndexingForegroundService.isRunning } }
@@ -124,7 +134,8 @@ class ConversationIndexingServiceInstrumentedTest {
         assertFalse(onMain { ConversationIndexingForegroundService.isRunning })
         assertFalse(controller.serviceActive)
 
-        // Opening the app removes the notice and releases the hold.
+        // Opening the app removes the notice and lets indexing run (nothing to continue when it is left again).
+        AppBackgroundIndexing.displayForTest = IndexingDisplay.Hidden
         ActivityScenario.launch(MemoryControlsActivity::class.java).use {
             waitFor("the notice goes when the app opens") { find(PAUSED_ID) == null }
             assertTrue("indexing runs again in the app", ConversationIndexRuntime.backgroundPermit.mayRun())
@@ -132,13 +143,11 @@ class ConversationIndexingServiceInstrumentedTest {
     }
 
     @Test fun openingTheAppStopsTheServiceAndRemovesItsNotification() {
-        ActivityScenario.launch(MemoryControlsActivity::class.java).use {
-            onMain { controller.startService() }
-            waitFor("the service runs") { onMain { ConversationIndexingForegroundService.isRunning } }
-        }
+        startWhileVisibleThenLeave()
         waitForIndexing { text(it) == "42% done. Tap to open." }
-        assertTrue("leaving with nothing new to decide keeps it", onMain { ConversationIndexingForegroundService.isRunning })
+        assertTrue(onMain { ConversationIndexingForegroundService.isRunning })
 
+        AppBackgroundIndexing.displayForTest = IndexingDisplay.Hidden
         ActivityScenario.launch(MemoryControlsActivity::class.java).use {
             waitFor("opening the app stops it") { !onMain { ConversationIndexingForegroundService.isRunning } }
             waitFor("its notification goes") { find(INDEXING_ID) == null }
@@ -150,12 +159,15 @@ class ConversationIndexingServiceInstrumentedTest {
 
     // --- Helpers ---------------------------------------------------------------
 
-    /** Starts the service while a screen of the app is visible, then leaves the app, as Android allows. */
+    /**
+     * Opens a screen of the app and leaves it during a catch-up: the app's own
+     * leave decision starts the service as the screen stops, as Android allows.
+     */
     private fun startWhileVisibleThenLeave() {
-        ActivityScenario.launch(MemoryControlsActivity::class.java).use {
-            onMain { ConversationIndexingForegroundService.start(app) }
-            waitFor("the service runs") { onMain { ConversationIndexingForegroundService.isRunning } }
-        }
+        ActivityScenario.launch(MemoryControlsActivity::class.java).close()
+        waitFor("leaving starts the service") { onMain { ConversationIndexingForegroundService.isRunning } }
+        assertTrue(onMain { controller.serviceActive })
+        assertTrue("the service continues indexing", ConversationIndexRuntime.backgroundPermit.mayRun())
     }
 
     private fun waitForIndexing(condition: (StatusBarNotification) -> Boolean): StatusBarNotification =

@@ -294,7 +294,8 @@ class IndexProgressTracker(
     }
 
     override fun catchUpDrained() {
-        synchronized(lock) { if (catchingUp) drained = true }
+        // A vector pass is asked for right after, so an earlier failure is not a stall.
+        synchronized(lock) { if (catchingUp) { drained = true; stalled = false } }
     }
 
     override fun catchUpStopped() {
@@ -312,8 +313,9 @@ class IndexProgressTracker(
     }
 
     /**
-     * A vector pass stopped on a failure, or the model could not be loaded for
-     * it: nothing asks for another pass by itself, so the catch-up cannot end.
+     * The vector passes stopped after a pass failed (or the model could not be
+     * loaded for it) and no further pass was asked for: the catch-up cannot end
+     * by itself. Called by [IndexVectorPasses] on the vector thread.
      */
     fun vectorPassFailed() {
         synchronized(lock) { if (catchingUp) stalled = true }
