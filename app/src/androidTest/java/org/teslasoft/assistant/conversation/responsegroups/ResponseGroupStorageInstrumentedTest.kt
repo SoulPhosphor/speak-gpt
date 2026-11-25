@@ -200,7 +200,10 @@ class ResponseGroupStorageInstrumentedTest {
         ModelEndpointStateGenerationStore.get(context).read()
         val packageFile = file("recovery.sgbak")
         val written = PortableRecoveryWriter.createPackage(context, packageFile, null, null, "response-group-test")
-        assertTrue("package: $written", written is PortableRecoveryWriter.Result.Ok)
+        val backupFailureDetail = if (written is PortableRecoveryWriter.Result.Failed) {
+            runCatching { Logger.getCrashLog(context).takeLast(6_000) }.getOrDefault("Error log unavailable")
+        } else ""
+        assertTrue("package: $written\n$backupFailureDetail", written is PortableRecoveryWriter.Result.Ok)
         val decodeRoot = file("decoded").apply { mkdirs() }
         val decoded = PortablePackage.decodeWithSecret(packageFile, ByteArray(0), decodeRoot) as PortablePackage.DecodeResult.Ok
         val verified = PortablePackage.validateAndExtract(decoded.innerZip, File(decodeRoot, "artifacts").apply { mkdirs() }) as PortablePackage.ValidateResult.Ok
