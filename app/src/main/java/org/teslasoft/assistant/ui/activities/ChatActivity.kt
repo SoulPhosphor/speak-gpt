@@ -1045,7 +1045,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // may re-arm the mic, so the completion handlers are gated on this flag.
     // Volatile for the same binder-thread/main-thread split as the token.
     @Volatile private var handsFreeReadbackExpected = false
-        set(value) { field = value; exitActivity.handsFreeReading(value) }
+        set(value) {
+            synchronized(exitActivity) {
+                field = value
+                exitActivity.handsFreeReading(value)
+            }
+        }
 
     // Consecutive failed attempts to open the mic for the next hands-free
     // turn. The recognition service / capture device can refuse a session
