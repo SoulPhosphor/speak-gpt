@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.util.summarizer.SummarizerController
 import org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 /** Foreground lifetime and notification surface for active summary work. */
 class SummarizerForegroundService : Service() {
     companion object {
+        private const val TAG = "SummarizerService"
         private const val CHANNEL_ID = "summarizer_operations"
         private const val NOTIFICATION_ID = 9931
         private const val ACTION_UPDATE = "summarizer.update"
@@ -139,7 +141,37 @@ class SummarizerForegroundService : Service() {
         }
     }
 
+    /** Android's time limit was reached for this run: logged once, and the keep-alive already released. */
+    private var timedOut = false
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * Android's background execution time limit for data-sync services
+     * (Android 15 and later). The service must stop within seconds or Android
+     * crashes the app. Only the keep-alive stops: the operations are not
+     * cancelled, and their own paths still report how they end.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        if (timedOut) return
+        timedOut = true
+        try {
+            val operations = active.entries.map {
+                DataSyncTimeoutLog.SummarizerOperation(it.key, DataSyncTimeoutLog.summarizerKind(it.value.kind.name))
+            }
+            Logger.logCrashDurable(applicationContext, TAG, "warning", DataSyncTimeoutLog.summarizer(operations))
+        } catch (_: Throwable) { /* the stop below matters more than the log */ }
+        stopForegroundCompat()
+        stopSelf()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun stopForegroundCompat() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+            else stopForeground(true)
+        } catch (_: Exception) { /* already stopped */ }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val chatId = intent?.getStringExtra(EXTRA_CHAT_ID).orEmpty()
@@ -157,6 +189,7 @@ class SummarizerForegroundService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
             } else startForeground(NOTIFICATION_ID, notification)
+            timedOut = false
         } catch (_: Exception) {
             stopSelf()
         }
