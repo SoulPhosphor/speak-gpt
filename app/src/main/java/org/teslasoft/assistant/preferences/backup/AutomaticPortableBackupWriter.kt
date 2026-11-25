@@ -44,6 +44,8 @@ object AutomaticPortableBackupWriter {
         var destination: Uri? = null
         var secret: ByteArray? = null
         var stage = BackupStage.READ_SOURCE
+        val exitActivity = org.teslasoft.assistant.util.ProcessActivityTracker.begin(
+            org.teslasoft.assistant.util.ProcessExitSnapshot.Activity.BACKUP)
         try {
             val passwordBlob: PortablePackageFormat.PasswordBlob?
             if (protected) {
@@ -137,6 +139,7 @@ object AutomaticPortableBackupWriter {
                 BackupFailureClassifier.isInsufficientStorage(error)
             )
         } finally {
+            exitActivity.close()
             secret?.let { PackageCrypto.wipe(it) }
             runCatching { if (staged.exists()) staged.delete() }
         }

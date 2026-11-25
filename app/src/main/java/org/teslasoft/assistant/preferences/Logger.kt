@@ -937,6 +937,8 @@ class Logger {
                 .format(LOG_TIME_FORMAT)
             val detail = info.description?.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""
             val message = "previous app session ended at $whenStr: ${describeExitReason(info.reason)}$detail"
+            val activity = org.teslasoft.assistant.util.ProcessActivityTracker.exitLines(
+                info.processStateSummary, info.importance)
 
             // Low-memory / signaled / crash deaths are the ones that silently cut
             // off a readback; flag them as warnings so they stand out from a clean
@@ -952,7 +954,7 @@ class Logger {
                 // next app start that pairs with it.
                 val nextStart = LocalDateTime.now().format(LOG_TIME_FORMAT)
                 log(context, SYSTEM_LOG_TYPE, "ProcessExit", level,
-                    systemProcessExitEntry(message, nextStart))
+                    systemProcessExitEntry(message, nextStart) + "\n$activity")
             }
 
             // A crash or serious freeze that makes the app unusable must ALSO
@@ -978,7 +980,7 @@ class Logger {
                 }
                 val trace = readMainThreadTrace(info)
                 val errorMessage = if (trace != null) "$message\nMain thread at termination:\n$trace" else message
-                log(context, "crash", "ProcessExit", errorLevel, errorMessage)
+                log(context, "crash", "ProcessExit", errorLevel, "$errorMessage\n$activity")
             }
         }
 

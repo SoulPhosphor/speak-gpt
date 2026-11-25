@@ -417,6 +417,8 @@ import kotlinx.coroutines.asContextElement
 class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
 
+    private val exitActivity = org.teslasoft.assistant.ui.chat.ChatExitActivity()
+
     companion object {
         /** Time between steps of the compaction pop-up's looping dots. */
         private const val COMPACTION_DOTS_STEP_MS = 450L
@@ -738,7 +740,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     // Init states
     private var isRecording = false
+        set(value) { field = value; exitActivity.recording(value) }
     private var transcriptionInProgress = false
+        set(value) { field = value; exitActivity.transcribing(value) }
     private var keyboardMode = false
     private var isTTSInitialized = false
     private var appliedDeviceSpeechSettings: List<Any?>? = null
@@ -1004,6 +1008,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // Hands-free conversation loop state
     private var handsFreeUserSpoke = false
     private var handsFreeStopped = false
+        set(value) { field = value; if (value) exitActivity.voice(false) }
     private var handsFreeListenDeadline = 0L
     private val handsFreeHandler = Handler(Looper.getMainLooper())
 
@@ -1040,6 +1045,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // may re-arm the mic, so the completion handlers are gated on this flag.
     // Volatile for the same binder-thread/main-thread split as the token.
     @Volatile private var handsFreeReadbackExpected = false
+        set(value) { field = value; exitActivity.handsFreeReading(value) }
 
     // Consecutive failed attempts to open the mic for the next hands-free
     // turn. The recognition service / capture device can refuse a session
@@ -1100,6 +1106,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // unreliable across engines) so it can neither leak the wake lock nor release
     // while audio is still playing.
     private var readbackKeepAliveActive = false
+        set(value) { field = value; exitActivity.reading(value) }
     private var readbackKeepAliveToken = 0
     // Dedicated handler so the poll is never swept away by the hands-free
     // teardown's removeCallbacksAndMessages(null); release is always explicit.
@@ -1141,6 +1148,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // generation path.
     private var parseMessageScope: CoroutineScope? = null
     private var requestPreparationInProgress = false
+        set(value) { field = value; exitActivity.preparing(value) }
 
     // A message deletion retires the reply in progress at once instead of
     // waiting for it to wind down; see deleteMessageRange.
@@ -1807,6 +1815,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     override fun onResume() {
         super.onResume()
+        exitActivity.open()
         // Keyboard Chat Interaction Debugging follows the saved switch.
         preferences?.let { ResizeTrace.enabled = it.getKeyboardChatInteractionDebugging() }
 
@@ -3107,6 +3116,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // previous session (or a hard kill mid-loop) can never auto-resume a
         // conversation the moment the chat opens.
         preferences?.setHandsFreeMode(false)
+        exitActivity.voice(false)
         handsFreeStopped = false
 
         if (Build.VERSION.SDK_INT >= 33) {
@@ -3292,6 +3302,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
+        exitActivity.close()
         parallelChat.close()
         org.teslasoft.assistant.util.ResourceDiagnostics.chatScreenDestroyed(
             this, this, isFinishing, isChangingConfigurations
@@ -10863,6 +10874,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // toggle any more — the button is the only control) and return the
         // conversation/send button from its red "live" look to resting.
         preferences?.setHandsFreeMode(false)
+        exitActivity.voice(false)
         refreshConversationButton()
         stopHandsFreeService("loop stopped: $reason")
     }
@@ -11543,6 +11555,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         preferences?.setHandsFreeMode(true)
+        exitActivity.voice(true)
         handsFreeStopped = false
         voiceLogGroup.run {
             logVoiceEvent("hands-free engaged (conversation button)")
@@ -11645,6 +11658,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // hands-free conversation: clear the engaged flag and reset the
         // conversation/send button from its red "live" look to resting.
         preferences?.setHandsFreeMode(false)
+        exitActivity.voice(false)
         refreshConversationButton()
         stopHandsFreeService("stopped: $source")
     }
@@ -12919,6 +12933,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // (otherwise the OS freezes the process / lets Wi-Fi power-save drop the
         // socket, and the request dies with "Software caused connection abort").
         GenerationForegroundService.begin(this, chatId, chatName)
+        val exitGeneration = exitActivity.beginGeneration()
 
         // From here the cancellation handler below writes this reply's
         // terminal state; a message deletion that comes first writes it instead.
@@ -13266,6 +13281,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 setGenerationProgressVisible(false)
             }
         } finally {
+            exitGeneration.close()
             // Reference counted, so a retired reply still releases its own hold.
             GenerationForegroundService.end(this)
             // A message deletion that retired this reply already did the rest.

@@ -680,6 +680,8 @@ object Archivist {
                 "duplicate start ignored — an analysis run is already in progress")
             return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "already_running", analysisType = analysisType)
         }
+        val exitActivity = org.teslasoft.assistant.util.ProcessActivityTracker.begin(
+            org.teslasoft.assistant.util.ProcessExitSnapshot.Activity.MEMORY_SCAN)
         try {
             // The migration runs first (a no-op once complete). A chat it
             // could not read yet keeps its legacy rows and stays out of every
@@ -687,6 +689,7 @@ object Archivist {
             ScanSourceMigration.runIfNeeded(context)
             return body(ready)
         } finally {
+            exitActivity.close()
             liveRun.set(false)
         }
     }

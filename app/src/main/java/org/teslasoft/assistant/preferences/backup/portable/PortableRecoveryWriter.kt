@@ -167,19 +167,23 @@ object PortableRecoveryWriter {
         passwordBlob: PortablePackageFormat.PasswordBlob?,
         appVersion: String
     ): Result = RecoveryOperationGate.runExclusive {
-        for (attempt in 1..PortableBackupCaptureStability.MAX_ATTEMPTS) {
-            val before = PortableBackupMutationTokens.read(context)
-                ?: return@runExclusive failed(context, Reason.SNAPSHOT_FAILED, "reading the change markers before capture")
-            runCatching { if (out.exists()) out.delete() }
-            val result = createPackageLocked(
-                context, out, recoverySecret, passwordBlob, appVersion, before, attempt
-            )
-            if (result !is Result.Failed ||
-                result.reason != Reason.SOURCE_CHANGED_DURING_CAPTURE ||
-                attempt == PortableBackupCaptureStability.MAX_ATTEMPTS
-            ) return@runExclusive result
-        }
-        failed(context, Reason.SOURCE_CHANGED_DURING_CAPTURE, "capture")
+        val exitActivity = org.teslasoft.assistant.util.ProcessActivityTracker.begin(
+            org.teslasoft.assistant.util.ProcessExitSnapshot.Activity.BACKUP)
+        try {
+            for (attempt in 1..PortableBackupCaptureStability.MAX_ATTEMPTS) {
+                val before = PortableBackupMutationTokens.read(context)
+                    ?: return@runExclusive failed(context, Reason.SNAPSHOT_FAILED, "reading the change markers before capture")
+                runCatching { if (out.exists()) out.delete() }
+                val result = createPackageLocked(
+                    context, out, recoverySecret, passwordBlob, appVersion, before, attempt
+                )
+                if (result !is Result.Failed ||
+                    result.reason != Reason.SOURCE_CHANGED_DURING_CAPTURE ||
+                    attempt == PortableBackupCaptureStability.MAX_ATTEMPTS
+                ) return@runExclusive result
+            }
+            failed(context, Reason.SOURCE_CHANGED_DURING_CAPTURE, "capture")
+        } finally { exitActivity.close() }
     }
 
     private fun createPackageLocked(

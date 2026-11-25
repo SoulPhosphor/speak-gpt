@@ -987,18 +987,18 @@ class ChatPreferences private constructor() {
      * memory records stay at it. A pre-ID legacy row remains on its historical
      * title-hash compatibility path: its files move transactionally to the new
      * title hash, without writing an ID into the row. */
-    /** Choose and save a numbered automatic title atomically; manual renames keep their existing rules. */
-    fun editChatWithNumberedTitle(context: Context, title: String, previousName: String, chatId: String): String? =
-        synchronized(CHAT_LIST_LOCK) {
-            val existingTitles = getChatMetadataList(context)
-                .filter { storedChatId(it) != chatId }
-                .mapNotNull { it["name"] }
-                .toSet()
-            val available = org.teslasoft.assistant.util.ChatTitleExtractor.availableTitle(title, existingTitles)
-            if (editChat(context, available, previousName, chatId)) available else null
-        }
+    /** Automatic naming chooses a unique title under the same lock as its metadata write. */
+    fun editChatWithNumberedTitle(context: Context, title: String, previousName: String, chatId: String): String? {
+        var chosen = title
+        return if (editChatInternal(context, title, previousName, chatId, true) { chosen = it }) chosen else null
+    }
 
-    fun editChat(context: Context, chatName: String, previousName: String, chatId: String): Boolean {
+    fun editChat(context: Context, chatName: String, previousName: String, chatId: String): Boolean =
+        editChatInternal(context, chatName, previousName, chatId, false) {}
+
+    private fun editChatInternal(context: Context, requestedName: String, previousName: String, chatId: String,
+        numberDuplicateTitle: Boolean, titleChosen: (String) -> Unit): Boolean {
+        var chatName = requestedName
         if (chatName == previousName) return true
 
         val oldId = chatId
@@ -1021,6 +1021,11 @@ class ChatPreferences private constructor() {
             val list = getChatMetadataList(context)
             val entry = list.firstOrNull { storedChatId(it) == oldId } ?: return false
             if (entry["name"] != previousName) return false
+            if (numberDuplicateTitle) {
+                chatName = org.teslasoft.assistant.util.ChatTitleExtractor.availableTitle(chatName,
+                    list.filter { it !== entry }.mapNotNull { it["name"] }.toSet())
+            }
+            titleChosen(chatName)
             if (!entry.containsKey("id")) newId = Hash.hash(chatName)
 
             // Preserve unique titles, independently of the existing IDs.
