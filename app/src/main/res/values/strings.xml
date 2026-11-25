@@ -9,7 +9,9 @@
     <string name="menu_chat">Chat</string>
     <string name="menu_prompts">Prompts</string>
     <string name="about_version">"Version: "</string>
-    <string name="about_view_other_projects">View other projects</string>
+    <string name="about_view_other_projects">View Other Projects</string>
+    <string name="about_view_source_code">View Source Code</string>
+    <string name="about_action_unavailable">Unavailable</string>
     <string name="about_send_feedback">Feedback</string>
     <string name="about_terms">Terms</string>
     <string name="activation_begin">Let\'s begin</string>
