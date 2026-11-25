@@ -265,6 +265,11 @@ remove_step2_model() {
   adb_t 60 shell run-as "$APP_PACKAGE" rm -rf files/step2-model || event "could not remove the step2 model"
 }
 
+pull_recall_report() {
+  adb_t 120 pull "/sdcard/Android/data/$APP_PACKAGE/files/recall-step14-report.json" "$RESULTS_DIR/recall-step14-report.json" >/dev/null 2>&1 \
+    || event "could not pull the recall evaluation report"
+}
+
 pull_step2_evidence() {
   local base="/sdcard/Android/data/$APP_PACKAGE/files" folder
   adb_t 60 pull "$base/step2-match.png" "$RESULTS_DIR/step2-match.png" >/dev/null 2>&1 || true
@@ -328,6 +333,7 @@ run_class_attempt() {
   adb_t 120 logcat -d -v threadtime > "$RESULTS_DIR/$result_name$suffix-logcat.txt" 2>&1 \
     || event "$result_name: could not save its logcat"
   if [ "$result_name" = "$STEP2_CLASS" ]; then pull_step2_evidence; fi
+  if [ "$result_name" = "RecallEvaluationInstrumentedTest" ]; then pull_recall_report; fi
 
   # classify runs in this shell (not a subshell) so COMPLETION_NOTE survives.
   local outcome

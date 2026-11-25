@@ -42,6 +42,12 @@ android {
     sourceSets {
         androidTest {
             assets.srcDir 'src/test/resources'
+            // The conversation-recall evaluation runner, shared by the JVM
+            // development check and the emulator run with the real model.
+            java.srcDir 'src/recallEval/java'
+        }
+        test {
+            java.srcDir 'src/recallEval/java'
         }
     }
 
