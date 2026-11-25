@@ -1047,7 +1047,11 @@ class SummarizerController(
             return false
         }
         val current = snapshot.sources()
-        if (current.any { it.id.isBlank() }) return false
+        if (current.any { it.id.isBlank() }) {
+            // Messages still waiting for their permanent IDs: the run stops; nothing is claimed.
+            if (operationState is OperationState.Running) cycleResult = cycleResult.copy(stoppedEarly = true)
+            return false
+        }
         val sections = SummarySectionStore.load(prefs, current) ?: run {
             recordStorageFailure(prefs, chatName, "Could not load Summary Sections.")
             return false
@@ -1064,7 +1068,10 @@ class SummarizerController(
                 ?: return false
             current.subList(range.first, range.last + 1).toList()
         }
-        if (owned.isEmpty()) return false
+        if (owned.isEmpty()) {
+            if (operationState is OperationState.Running) cycleResult = cycleResult.copy(stoppedEarly = true)
+            return false
+        }
         val start = current.indexOfFirst { it.id == owned.first().id }
         val context = SummarySections.contextBefore(current, start).toList()
 
@@ -1726,9 +1733,11 @@ class SummarizerController(
             )
         }
         listener?.onSummarizerOperationChanged(state)
-        if (state is OperationState.Succeeded || state is OperationState.Cancelled) {
+        if (state is OperationState.Succeeded || state is OperationState.PartiallyUpdated ||
+            state is OperationState.Cancelled
+        ) {
             terminalClearJob = scope.launch {
-                delay(if (state is OperationState.Succeeded) 3500L else 250L)
+                delay(if (state is OperationState.Cancelled) 250L else 3500L)
                 if (operationState == state) setOperationState(OperationState.Idle)
             }
         }
