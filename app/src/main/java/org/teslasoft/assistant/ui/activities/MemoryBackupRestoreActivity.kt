@@ -24,6 +24,8 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.view.View
 import android.view.WindowInsets
@@ -79,6 +81,7 @@ import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupCategory
 import org.teslasoft.assistant.preferences.backup.readable.ReadableDataBackup
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.backup.portable.ChatMergePlanner
 import org.teslasoft.assistant.preferences.backup.portable.ChatRestorePreferences
 import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
@@ -86,7 +89,9 @@ import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreCategory
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreSelectionPlan
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreScreenRule
 import org.teslasoft.assistant.preferences.backup.portable.PortableStaging
+import org.teslasoft.assistant.preferences.backup.portable.RestoreServiceStartFailure
 import org.teslasoft.assistant.preferences.backup.portable.RecoveryCode
 import org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyFile
 import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestore
@@ -402,7 +407,9 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         super.onStart()
         if (isBackupOptionsPage) return
         val state = UnifiedPortableRestoreCoordinator.addObserver(portableCoordinatorObserver)
-        if (UnifiedPortableRestoreCoordinator.isActive()) renderCoordinatorState(state)
+        if (UnifiedPortableRestoreCoordinator.isActive() ||
+            state is UnifiedPortableRestoreCoordinator.State.StartFailed
+        ) renderCoordinatorState(state)
     }
 
     override fun onStop() {
@@ -1104,11 +1111,28 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         } else {
             UnifiedPortableRestoreCoordinator.retryUnlock(unlock)
         }
-        if (!accepted || !RestoreForegroundService.startUnified(applicationContext)) {
-            UnifiedPortableRestoreCoordinator.cancel()
-            showPortableFailure(getString(R.string.portable_restore_validation_failed))
+        if (!accepted) {
+            if (pending == null) {
+                staleRestoreDecision()
+                return
+            }
+            when (PortableRestoreScreenRule.refusal(
+                startingNew = true,
+                active = UnifiedPortableRestoreCoordinator.isActive(),
+                state = UnifiedPortableRestoreCoordinator.snapshot()
+            )) {
+                // Another restore holds the coordinator: this attempt is set aside and that one is shown.
+                PortableRestoreScreenRule.Refusal.UNAVAILABLE -> {
+                    pendingPortableRestore = null
+                    PortableStaging.delete(pending.decodeRoot)
+                    showRestoreUnavailable()
+                    renderCoordinatorState(UnifiedPortableRestoreCoordinator.snapshot())
+                }
+                else -> showPortableFailure(getString(R.string.portable_restore_validation_failed))
+            }
             return
         }
+        if (!startUnifiedRestoreService()) return
         setRestoreFlowActive(true)
         setRestoreStatus(null, getString(R.string.restore_checking_backup), busy = true)
     }
@@ -1315,7 +1339,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                 collision.backupFolder.id, resolution
             )
         ) startUnifiedRestoreService()
-        else showPortableFailure(getString(R.string.portable_restore_validation_failed))
+        else staleRestoreDecision()
     }
 
     private fun continueAfterChatDecision(
@@ -1324,14 +1348,47 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     ) {
         if (UnifiedPortableRestoreCoordinator.resolveChat(collision.incoming.chatId, resolution)) {
             startUnifiedRestoreService()
-        } else showPortableFailure(getString(R.string.portable_restore_validation_failed))
+        } else staleRestoreDecision()
     }
 
-    private fun startUnifiedRestoreService() {
-        if (!RestoreForegroundService.startUnified(applicationContext)) {
-            UnifiedPortableRestoreCoordinator.cancel()
-            showPortableFailure(getString(R.string.portable_restore_validation_failed))
+    /**
+     * Asks Android for the restore service. A refusal cancels the restore
+     * only when it has not begun applying, is written to the Error Log, and
+     * is shown by [renderCoordinatorState]. True when the start was requested.
+     */
+    private fun startUnifiedRestoreService(): Boolean =
+        when (val start = RestoreForegroundService.startUnified(applicationContext)) {
+            RestoreForegroundService.StartResult.Requested -> true
+            is RestoreForegroundService.StartResult.Refused -> {
+                RestoreForegroundService.unifiedStartFailed(this, start.error)
+                // A restore still applying is not cancelled; its own state stays on screen.
+                renderCoordinatorState(UnifiedPortableRestoreCoordinator.snapshot())
+                false
+            }
         }
+
+    /**
+     * A decision or unlock the coordinator no longer expects (a double tap,
+     * or a dialog left from an earlier state). An active restore is redrawn
+     * from its actual state; otherwise the user is told it must be started
+     * again. Nothing of this attempt was applied.
+     */
+    private fun staleRestoreDecision() {
+        val current = UnifiedPortableRestoreCoordinator.snapshot()
+        when (PortableRestoreScreenRule.refusal(
+            startingNew = false, active = UnifiedPortableRestoreCoordinator.isActive(), state = current
+        )) {
+            PortableRestoreScreenRule.Refusal.REDRAW -> renderCoordinatorState(current)
+            else -> showPortableFailure(getString(R.string.portable_restore_state_changed))
+        }
+    }
+
+    private fun showRestoreUnavailable() {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_unavailable_title)
+            .setMessage(R.string.portable_restore_in_progress)
+            .setPositiveButton(R.string.btn_ok, null)
+            .show()
     }
 
     private fun cancelCoordinatorRestore() {
@@ -1406,6 +1463,20 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                 setRestoreStatus(null, null, busy = false)
                 refreshBackupStatus()
                 PortableRestoreOutcomeFlow.showIfPending(this)
+            }
+            is UnifiedPortableRestoreCoordinator.State.StartFailed -> {
+                // The restore was cancelled before applying began, so nothing was changed.
+                showPortableFailure(getString(PortableRestoreScreenRule.startFailureMessage(state.androidRefused)))
+                val app = applicationContext
+                val version = state.version
+                // After this render returns, so the coordinator's observers are not re-entered.
+                Handler(Looper.getMainLooper()).post {
+                    if (UnifiedPortableRestoreCoordinator.startFailureShown(version)) {
+                        try {
+                            Logger.log(app, "crash", RestoreServiceStartFailure.TAG, "info", RestoreServiceStartFailure.SHOWN)
+                        } catch (_: Throwable) { /* the message was shown */ }
+                    }
+                }
             }
         }
     }

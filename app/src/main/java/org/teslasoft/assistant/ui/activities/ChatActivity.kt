@@ -5845,7 +5845,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // goes away when it finishes.
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running ->
                 summarizerOperationChip?.visibility = View.GONE
-            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded ->
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded,
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.PartiallyUpdated ->
                 summarizerOperationChip?.visibility = View.GONE
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed ->
                 // A failure is already recorded in this chat's Summarizer Errors
@@ -6008,7 +6009,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 R.string.compaction_err_unreadable_title to R.string.compaction_err_unreadable
             org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.SAVE_FAILED ->
                 R.string.compaction_err_save_title to R.string.compaction_err_save
-            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.UNEXPECTED ->
+            // An interruption is only reported at the next start, never as a running compaction's failure.
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.UNEXPECTED,
+            org.teslasoft.assistant.util.summarizer.SummarizerErrorCategory.INTERRUPTED ->
                 R.string.compaction_err_unexpected_title to R.string.compaction_err_unexpected
         }
         val message = buildString {
@@ -6751,9 +6754,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val cyclePreferences = preferences
         // Read live: a section is saved only if its messages are unchanged
         // when the summary comes back.
-        summarizerController?.runCycle(force, chatName, { summarizerSnapshot() }) { succeeded ->
-            if (succeeded) cyclePreferences?.setSummarizerCatchUpPending(false)
-        }
+        summarizerController?.runCycle(
+            force, chatName, { summarizerSnapshot() },
+            onFinished = { succeeded -> if (succeeded) cyclePreferences?.setSummarizerCatchUpPending(false) },
+            // Unreadable chat storage is an actual failure, not a chat that changed or closed.
+            storageUnavailable = { chatStorageUnavailable }
+        )
     }
 
     /** Summarizer Errors dialog (decision 16 + errors doc §1): one status

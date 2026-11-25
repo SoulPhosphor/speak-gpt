@@ -284,6 +284,10 @@ class MainApplication : Application() {
             // The conversation index catches up in the background while Index Conversations is on.
             org.teslasoft.assistant.conversation.index.ConversationIndexHooks.appStarted(this)
             try {
+                // Summarizer operations the previous session left unfinished are reported once.
+                org.teslasoft.assistant.util.summarizer.SummarizerInterruptionReport.reportAtStartup(this)
+            } catch (_: Exception) { }
+            try {
                 // Crash-triggered integrity checking (Build Phase 1 gate,
                 // Build Phase 3 response). The whole-database PRAGMA
                 // integrity_check reads every page and grows with the store,

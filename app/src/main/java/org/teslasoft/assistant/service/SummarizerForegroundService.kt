@@ -54,9 +54,47 @@ class SummarizerForegroundService : Service() {
                 .putExtra(EXTRA_CHAT_NAME, chatName)
                 .putExtra(EXTRA_KIND, kind.name)
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
-                else context.startService(intent)
-            } catch (_: Exception) { /* operation continues without notification */ }
+                synchronized(lifecycleLock) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                    else context.startService(intent)
+                    pendingStarts++
+                }
+            } catch (e: Exception) {
+                // The operation continues without the notification; the refusal is recorded once.
+                startFailed(context, chatId, kind, e)
+            }
+        }
+
+        /**
+         * Starts Android accepted that have not reached [onStartCommand] yet.
+         * A service started with startForegroundService must reach
+         * startForeground before it is stopped, or Android ends the app; an
+         * operation that ends within moments of starting leaves the stop to
+         * the arriving start.
+         */
+        private val lifecycleLock = Any()
+        private var pendingStarts = 0
+
+        /** Operations whose keep-alive start failure was already written: once per operation. */
+        private val startFailureLogged = ConcurrentHashMap<String, SummarizerController.OperationKind>()
+
+        /** Records a keep-alive that could not start (Owner, 2026-11-25), once per operation. */
+        internal fun startFailed(
+            context: Context,
+            chatId: String,
+            kind: SummarizerController.OperationKind,
+            e: Exception
+        ) {
+            if (startFailureLogged.put(chatId, kind) == kind) return
+            try {
+                Logger.logAsync(
+                    context.applicationContext, "crash", TAG, "error",
+                    DataSyncTimeoutLog.summarizerStartFailed(
+                        DataSyncTimeoutLog.SummarizerOperation(chatId, DataSyncTimeoutLog.summarizerKind(kind.name)),
+                        "${e.javaClass.name}: ${e.message?.ifBlank { null } ?: "no message"}"
+                    )
+                )
+            } catch (_: Throwable) { /* the operation matters more than the log */ }
         }
 
         /** Shows a compaction's progress in its notification. */
@@ -131,10 +169,16 @@ class SummarizerForegroundService : Service() {
 
         fun end(context: Context, chatId: String) {
             active.remove(chatId)
+            startFailureLogged.remove(chatId)
             val remaining = active.entries.firstOrNull()
             if (remaining == null) {
-                try { context.stopService(Intent(context, SummarizerForegroundService::class.java)) }
-                catch (_: Exception) { /* already stopped */ }
+                synchronized(lifecycleLock) {
+                    // A start still on its way stops the service itself once it is in the foreground.
+                    if (pendingStarts == 0) {
+                        try { context.stopService(Intent(context, SummarizerForegroundService::class.java)) }
+                        catch (_: Exception) { /* already stopped */ }
+                    }
+                }
             } else {
                 begin(context, remaining.key, remaining.value.name, remaining.value.kind)
             }
@@ -143,6 +187,8 @@ class SummarizerForegroundService : Service() {
 
     /** Android's time limit was reached for this run: logged once, and the keep-alive already released. */
     private var timedOut = false
+    /** Whether an earlier start reached the foreground and still holds it. Main thread. */
+    private var inForeground = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -170,6 +216,7 @@ class SummarizerForegroundService : Service() {
 
     @Suppress("DEPRECATION")
     private fun stopForegroundCompat() {
+        inForeground = false
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
             else stopForeground(true)
@@ -193,8 +240,19 @@ class SummarizerForegroundService : Service() {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
             } else startForeground(NOTIFICATION_ID, notification)
             timedOut = false
-        } catch (_: Exception) {
-            stopSelf()
+            inForeground = true
+        } catch (e: Exception) {
+            if (chatId.isNotBlank()) startFailed(this, chatId, kind, e)
+            // A keep-alive already in the foreground for another operation keeps protecting it.
+            if (!inForeground) stopSelf()
+        }
+        synchronized(lifecycleLock) {
+            pendingStarts = (pendingStarts - 1).coerceAtLeast(0)
+            // Every operation ended while this start was on its way: stop now that it may be stopped.
+            if (pendingStarts == 0 && active.isEmpty()) {
+                stopForegroundCompat()
+                stopSelf()
+            }
         }
         return START_NOT_STICKY
     }

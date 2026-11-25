@@ -1104,6 +1104,7 @@ class ChatPreferences private constructor() {
         }
 
         org.teslasoft.assistant.conversation.index.ConversationIndexHooks.chatRenamed(context, oldId, newId)
+        org.teslasoft.assistant.util.summarizer.SummarizerRunRecords.chatRenamed(context, oldId, newId)
 
         // The rename is now authoritative (chat list names the new id). Complete
         // the cross-store re-point of the memory rows. repointChat is one atomic

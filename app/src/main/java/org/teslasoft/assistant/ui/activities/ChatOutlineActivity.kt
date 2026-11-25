@@ -765,7 +765,8 @@ class ChatOutlineActivity : FragmentActivity() {
                 R.string.outline_err_unreadable_title to R.string.outline_err_unreadable
             SummarizerErrorCategory.SAVE_FAILED ->
                 R.string.outline_err_save_title to R.string.outline_err_save
-            SummarizerErrorCategory.UNEXPECTED ->
+            // An interruption is only reported at the next start, never as a running outline's failure.
+            SummarizerErrorCategory.UNEXPECTED, SummarizerErrorCategory.INTERRUPTED ->
                 R.string.outline_err_unexpected_title to R.string.outline_err_unexpected
         }
         val message = buildString {

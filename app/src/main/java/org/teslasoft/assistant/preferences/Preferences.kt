@@ -78,6 +78,8 @@ class Preferences internal constructor(
         const val LOG_MAX_DAYS_LIMIT = 30
         const val LOG_DEFAULT_MAX_ENTRIES = 50
         const val LOG_DEFAULT_MAX_DAYS = 7
+        /** Per-chat key prefix of a Summarizer run's saved mark (SummarizerRunRecords). */
+        const val RUN_SAVED_PREFIX = "summarizer_run_saved_"
         /** System Logs' own default "Maximum Logs Saved" (owner spec). */
         const val SYSTEM_LOG_DEFAULT_MAX_ENTRIES = 10
         const val CONDENSED_KIND_SUMMARY = "summary"
@@ -3670,34 +3672,43 @@ class Preferences internal constructor(
 
     /** Committed synchronously: a section is conversation state that must
      *  survive a process kill once written. */
-    fun commitSummarySections(json: String): Boolean {
+    fun commitSummarySections(json: String, runSaved: String? = null): Boolean {
         val key = "summary_sections"
+        val runKey = RUN_SAVED_PREFIX + "SUMMARIZING"
         val hadPrevious = runCatching { preferences.contains(key) }.getOrDefault(false)
         val previous = runCatching { preferences.getString(key, null) }.getOrNull()
+        val hadRun = runCatching { preferences.contains(runKey) }.getOrDefault(false)
+        val previousRun = runCatching { preferences.getString(runKey, null) }.getOrNull()
+        fun rollBack() {
+            runCatching {
+                val rollback = preferences.edit()
+                if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
+                if (runSaved != null) {
+                    if (hadRun) rollback.putString(runKey, previousRun) else rollback.remove(runKey)
+                }
+                rollback.commit()
+            }
+        }
         return summarizerStorageCommit(
             "Summarizing: commitSummarySections",
             org.teslasoft.assistant.util.summarizer.SummarizerDiagnostics.privateSectionValues(json)
         ) {
             try {
-                val committed = preferences.edit().putString(key, json).commit()
+                // The run's saved mark goes in the same write, so an interrupted run is told
+                // apart from one whose section was saved (Owner, 2026-11-25).
+                val editor = preferences.edit().putString(key, json)
+                if (runSaved != null) editor.putString(runKey, runSaved)
+                val committed = editor.commit()
                 if (!committed) {
                     // Android installs an edit in the process-local map before
                     // it knows whether the disk write succeeded. Restore the
                     // prior value so rejected sections cannot affect model
                     // projection or be persisted by an unrelated later edit.
-                    runCatching {
-                        val rollback = preferences.edit()
-                        if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
-                        rollback.commit()
-                    }
+                    rollBack()
                 }
                 committed
             } catch (error: Exception) {
-                runCatching {
-                    val rollback = preferences.edit()
-                    if (hadPrevious) rollback.putString(key, previous) else rollback.remove(key)
-                    rollback.commit()
-                }
+                rollBack()
                 throw error
             }
         }
@@ -3885,6 +3896,21 @@ class Preferences internal constructor(
     fun getSummarizerErrorsUnseen(): Boolean =
         getString("summarizer_errors_unseen", "false") == "true"
 
+    /**
+     * Writes an interruption report's Summarizer Errors entries, episode and
+     * unseen badge in one synchronous commit (Owner, 2026-11-25); false when
+     * it did not reach the disk, so the caller keeps the report for later.
+     */
+    fun commitSummarizerInterruptionReport(errorsJson: String, episode: String?): Boolean = try {
+        val editor = preferences.edit()
+            .putString("summarizer_errors", errorsJson)
+            .putString("summarizer_errors_unseen", "true")
+        if (episode != null) editor.putString("summarizer_episode", episode)
+        editor.commit()
+    } catch (_: Exception) {
+        false
+    }
+
     fun setSummarizerErrorsUnseen(value: Boolean) {
         putString("summarizer_errors_unseen", if (value) "true" else "false")
     }
@@ -3948,10 +3974,13 @@ class Preferences internal constructor(
         /** The compaction version tabs after this compaction (CompactionVersions). */
         versionsJson: String? = null,
         /** The compaction regeneration lock to save with it. */
-        regenerationLock: Int? = null
+        regenerationLock: Int? = null,
+        /** This run's saved mark, written in the same commit (Owner, 2026-11-25). */
+        runSaved: String? = null
     ): Boolean {
         return summarizerStorageCommit("Compacting: commitManualCompaction", listOf(summary)) {
             val editor = preferences.edit()
+            if (runSaved != null) editor.putString(RUN_SAVED_PREFIX + "COMPACTING", runSaved)
             if (versionsJson != null) editor.putString("compaction_versions", versionsJson)
             if (regenerationLock != null) {
                 editor.putString("compaction_regeneration_lock_boundary", regenerationLock.coerceAtLeast(0).toString())
@@ -3978,9 +4007,20 @@ class Preferences internal constructor(
     /** This chat's outlines (ChatOutlines JSON), newest tab last. */
     fun getChatOutlines(): String = getString("chat_outlines", "")
 
-    fun setChatOutlines(json: String) {
-        putString("chat_outlines", json)
+    fun setChatOutlines(json: String, runSaved: String? = null) {
+        if (runSaved == null) {
+            putString("chat_outlines", json)
+            return
+        }
+        // The outline and this run's saved mark land together (Owner, 2026-11-25).
+        preferences.edit {
+            putString("chat_outlines", json)
+            putString(RUN_SAVED_PREFIX + "OUTLINING", runSaved)
+        }
     }
+
+    /** What the Summarizer run of [kind] last saved for this chat ("" when none): SummarizerRunRecords. */
+    fun getSummarizerRunSaved(kind: String): String = getString(RUN_SAVED_PREFIX + kind, "")
 
     /** The Chat Outline screen's Tags line, exactly as written. */
     fun getChatOutlineTags(): String = getString("chat_outline_tags", "")

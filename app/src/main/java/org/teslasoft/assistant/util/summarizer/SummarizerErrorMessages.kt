@@ -45,6 +45,7 @@ object SummarizerErrorMessages {
         SummarizerErrorCategory.RESPONSE_UNREADABLE -> R.string.summarizer_err_unreadable_title
         SummarizerErrorCategory.SAVE_FAILED -> R.string.summarizer_err_save_title
         SummarizerErrorCategory.UNEXPECTED -> R.string.summarizer_err_unexpected_title
+        SummarizerErrorCategory.INTERRUPTED -> R.string.summarizer_err_interrupted_title
     }
 
     fun messageRes(category: SummarizerErrorCategory): Int = when (category) {
@@ -62,6 +63,18 @@ object SummarizerErrorMessages {
         SummarizerErrorCategory.RESPONSE_UNREADABLE -> R.string.summarizer_err_unreadable
         SummarizerErrorCategory.SAVE_FAILED -> R.string.summarizer_err_save
         SummarizerErrorCategory.UNEXPECTED -> R.string.summarizer_err_unexpected
+        SummarizerErrorCategory.INTERRUPTED -> R.string.summarizer_err_interrupted_summary
+    }
+
+    /** The message for one entry: an interruption names what it interrupted. */
+    fun messageRes(entry: SummarizerErrorEntry): Int {
+        val category = entry.categoryEnum() ?: SummarizerErrorCategory.UNEXPECTED
+        if (category != SummarizerErrorCategory.INTERRUPTED) return messageRes(category)
+        return when (entry.operation) {
+            SummarizerController.OperationKind.COMPACTING.name -> R.string.summarizer_err_interrupted_compaction
+            SummarizerController.OperationKind.OUTLINING.name -> R.string.summarizer_err_interrupted_outline
+            else -> R.string.summarizer_err_interrupted_summary
+        }
     }
 
     /** Date and 12-hour time without seconds (errors addendum §1). */
@@ -78,7 +91,7 @@ object SummarizerErrorMessages {
         val sb = StringBuilder()
         sb.append(formatTimestamp(entry.timestamp)).append('\n')
         sb.append(context.getString(titleRes(category))).append('\n')
-        sb.append(context.getString(messageRes(category))).append('\n')
+        sb.append(context.getString(messageRes(entry))).append('\n')
         sb.append(context.getString(R.string.summarizer_errors_profile_line, entry.profile)).append('\n')
         sb.append(context.getString(R.string.summarizer_errors_model_line, entry.model))
         entry.detail?.takeIf { it.isNotBlank() }?.let { sb.append('\n').append(it) }
