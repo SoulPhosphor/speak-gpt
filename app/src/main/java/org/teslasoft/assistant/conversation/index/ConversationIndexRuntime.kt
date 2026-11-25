@@ -50,6 +50,22 @@ object ConversationIndexRuntime {
 
     @Volatile private var progressInstance: IndexProgressTracker? = null
 
+    /**
+     * Whether indexing may run now (Step 13): while a screen is visible or the
+     * background service runs. When it may run again, waiting work continues.
+     */
+    val backgroundPermit = BackgroundIndexingPermit().apply {
+        setOnMayRunAgain { instance?.mayRunAgain() }
+    }
+
+    /** The progress when something already created it; null otherwise, so asking creates nothing. */
+    fun progressIfCreated(): IndexProgressTracker? = progressInstance
+
+    /** Runs [task] on the index's thread, after the work handed to it before (Step 13). */
+    fun onIndexThread(task: () -> Unit) {
+        IndexTaskRunner.on(executor).run(0, task)
+    }
+
     /** The indexing progress the chat header shows (Step 12). Creating it starts no work. */
     fun progress(context: Context): IndexProgressTracker =
         progressInstance ?: synchronized(this) {
@@ -94,9 +110,14 @@ object ConversationIndexRuntime {
             runPass = { runVectorPass(app, source) },
             runner = IndexTaskRunner.on(vectorExecutor),
             // A pass while paused only loads the model, so its availability is known, and stops at once.
-            isOn = { isOn(app) }
+            // While the app is closed without the background service nothing is loaded or read.
+            isOn = { isOn(app) && backgroundPermit.mayRun() }
         )
-        return ConversationIndexCoordinator(
+        // A catch-up whose passes stopped on a failure, with none asked for, cannot end by itself (Step 13).
+        progress(app).vectorRequests = { vectors.requestCount }
+        progress(app).vectorsStoppedOnFailureAt = { vectors.stoppedOnFailureAt }
+        progress(app).vectorsStopFailure = { vectors.stopFailure }
+        val coordinator = ConversationIndexCoordinator(
             source = source,
             storage = { ConversationIndexStore.get(app) },
             maintenance = { ConversationIndexStore.get(app) },
@@ -115,8 +136,11 @@ object ConversationIndexRuntime {
             events = Events(app),
             recover = { requestedByUser -> recover(app, requestedByUser) },
             isPaused = { progress(app).isPaused },
-            progress = progress(app)
+            progress = progress(app),
+            mayRun = backgroundPermit::mayRun
         )
+        progress(app).chatsQueued = coordinator::hasQueuedWork
+        return coordinator
     }
 
     // --- The controls of RAG Active Memory Settings -----------------------
@@ -339,7 +363,7 @@ object ConversationIndexRuntime {
             // The model loaded and passed its check: a paused condition is over.
             ConversationIndexConditions.clearModelProblem(app)
             val catchUp = progress(app).vectorPassStarting()
-            val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering }
+            val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering || !backgroundPermit.mayRun() }
             when (outcome) {
                 is PassageEmbeddingWorker.Outcome.Finished -> progress(app).vectorPassFinished(catchUp)
                 is PassageEmbeddingWorker.Outcome.Paused -> progress(app).vectorPassPaused()
@@ -386,7 +410,7 @@ object ConversationIndexRuntime {
 
     private val logLock = Any()
 
-    private fun log(app: Context, level: String, message: String) {
+    internal fun log(app: Context, level: String, message: String) {
         try {
             synchronized(logLock) { Logger.log(app, "crash", ConversationIndexErrorLog.TAG, level, message) }
         } catch (_: Exception) { }

@@ -82,6 +82,13 @@ class ConversationIndexCoordinator(
     /** The user's pause (Step 12): nothing is counted, compared or cut while it is on. */
     private val isPaused: () -> Boolean = { false },
     private val progress: IndexProgressEvents = IndexProgressEvents.NONE,
+    /**
+     * Step 13: whether indexing may run now ([BackgroundIndexingPermit]). While
+     * it may not (the app closed without its background service), nothing is
+     * counted, compared, cut or asked of the vector worker; every queue is kept,
+     * and [mayRunAgain] continues it.
+     */
+    private val mayRun: () -> Boolean = { true },
     private val changeWaitMillis: Long = CHANGE_WAIT_MILLIS,
     private val catchUpPauseMillis: Long = CATCH_UP_PAUSE_MILLIS,
     /** Milliseconds on a clock that only moves forward. */
@@ -95,11 +102,23 @@ class ConversationIndexCoordinator(
     private val toCount = ArrayDeque<String>()
     private val staleRetries = HashMap<String, Int>()
     private val drainScheduled = AtomicBoolean(false)
+    /**
+     * Chats deleted or renamed away whose removal from the index has not run
+     * yet (Step 13): an update of one of them stopped by the closing is never
+     * put back. Guarded by [lock]; each leaves when its removal has run.
+     */
+    private val removed = HashSet<String>()
+
+    /** A catch-up asked for while indexing could not run (Step 13). Read and written on the index's thread only. */
+    private var catchUpWaiting = false
+    /** A recovery asked for while indexing could not run, and whether the user asked for it; index's thread only. */
+    private var recoveryWaiting: Boolean? = null
 
     /** The chat was saved: a new message, a finished reply, an edit, a deletion, hiding or showing, another version, or IDs given on opening. */
     fun chatChanged(chatId: String) {
         if (chatId.isBlank()) return
         synchronized(lock) {
+            removed.remove(chatId)
             changed.remove(chatId)
             changed[chatId] = clock()
         }
@@ -111,22 +130,28 @@ class ConversationIndexCoordinator(
         val ids = chatIds.filter { it.isNotBlank() }.toSet()
         if (ids.isEmpty()) return
         synchronized(lock) {
+            removed.addAll(ids)
             ids.forEach { changed.remove(it) }
             catchUp.removeAll(ids)
         }
-        runner.run(0) { ids.forEach { id -> guarded(id) { maintenance().deleteChat(id) } } }
+        runner.run(0) {
+            ids.forEach { id -> guarded(id) { maintenance().deleteChat(id) } }
+            synchronized(lock) { removed.removeAll(ids) }
+        }
     }
 
     /** A rename changed the chat's ID: its entries move to the new ID and are checked again (G.5a rule 9). */
     fun chatMoved(fromChatId: String, toChatId: String) {
         if (fromChatId.isBlank() || toChatId.isBlank() || fromChatId == toChatId) return
         synchronized(lock) {
+            removed.add(fromChatId)
             changed.remove(fromChatId)
             catchUp.remove(fromChatId)
         }
         runner.run(0) {
             val moved = guarded(fromChatId) { maintenance().moveChat(fromChatId, toChatId) }
             if (!moved) guarded(fromChatId) { maintenance().deleteChat(fromChatId) }
+            synchronized(lock) { removed.remove(fromChatId) }
             chatChanged(toChatId)
         }
     }
@@ -168,6 +193,7 @@ class ConversationIndexCoordinator(
         }
         report { progress.catchUpStopped() }
         runner.run(0) {
+            catchUpWaiting = false
             val failure = try {
                 if (whenIndexExists) maintenance().deleteEverything()
                 null
@@ -183,10 +209,20 @@ class ConversationIndexCoordinator(
      * chat when the index can be used again (G.13a, Step 11).
      */
     fun recoverIndex(requestedByUser: Boolean = false) {
-        runner.run(0) {
-            val usable = try { recover(requestedByUser) } catch (_: Exception) { false }
-            if (usable) catchUpAll()
+        runner.run(0) { recoverNow(requestedByUser) }
+    }
+
+    /** While indexing may not run (Step 13) the recovery waits, still marked as rebuilding, for [mayRunAgain]. */
+    private fun recoverNow(requestedByUser: Boolean) {
+        if (!mayRun()) {
+            recoveryWaiting = (recoveryWaiting ?: false) || requestedByUser
+            return
         }
+        recoveryWaiting = null
+        val usable = try { recover(requestedByUser) } catch (_: Exception) { false }
+        // A recovery that could not run now (postponed) asks for vectors, so a catch-up stopped for it
+        // either goes on or is seen to stall rather than waiting with nothing asked for.
+        if (usable) catchUpAll() else if (isOn()) requestVectorsSafely()
     }
 
     /** The setting was turned on: existing chats are caught up, newest first. */
@@ -201,6 +237,24 @@ class ConversationIndexCoordinator(
      */
     fun resumed() {
         runner.run(0) { catchUpAll() }
+    }
+
+    /** Step 13: whether chats wait to be counted or compared, each of which asks for vectors once it is. */
+    fun hasQueuedWork(): Boolean = synchronized(lock) { changed.isNotEmpty() || catchUp.isNotEmpty() || toCount.isNotEmpty() }
+
+    /**
+     * Indexing may run again (Step 13): a catch-up that waited starts now;
+     * otherwise the queued work and the waiting vectors continue. Handed to the
+     * index's thread, after any task that found it could not run, so none is missed.
+     */
+    fun mayRunAgain() {
+        runner.run(0) {
+            recoveryWaiting?.let { recoverNow(it) }
+            if (catchUpWaiting) catchUpAll()
+            // Whatever else waited continues too, even when the catch-up could not start now.
+            scheduleDrain(0)
+            if (isOn() && !isPaused() && mayRun()) requestVectorsSafely()
+        }
     }
 
     /**
@@ -219,6 +273,13 @@ class ConversationIndexCoordinator(
             emptySet()
         }
         gone.forEach { id -> guarded(id) { maintenance().deleteChat(id) } }
+        // Step 13: chats that are gone leave the index at once; counting and comparing wait.
+        if (!mayRun()) {
+            // Nothing else is read, queued or changed, and the model is not loaded; [mayRunAgain] starts this catch-up.
+            catchUpWaiting = true
+            return
+        }
+        catchUpWaiting = false
         val updater = if (chats.isEmpty()) null else try {
             updaterFor().also { if (it == null) report { events.modelUnavailable(null) } }
         } catch (e: Exception) {
@@ -276,6 +337,8 @@ class ConversationIndexCoordinator(
         drainScheduled.set(false)
         // While paused nothing is counted, compared or cut; resuming starts a catch-up.
         if (!isOn() || isPaused()) return
+        // Step 13: while indexing may not run, every queue is kept for [mayRunAgain].
+        if (!mayRun()) return
         val now = clock()
         var wait: Long? = null
         val next = synchronized(lock) {
@@ -375,7 +438,8 @@ class ConversationIndexCoordinator(
                         if (source.changeCount(chatId) != read.changeCount) null
                         else describedVersion(source.chatVersion(chatId), settings)
                     },
-                    { !isOn() || isPaused() }
+                    // Closing the app without the background service (Step 13) stops at the same point as a pause.
+                    { !isOn() || isPaused() || !mayRun() }
                 )) {
                     is ConversationIndexUpdater.Outcome.Updated -> {
                         synchronized(lock) { staleRetries.remove(chatId) }
@@ -387,7 +451,13 @@ class ConversationIndexCoordinator(
                         retryAfterChange(chatId)
                         ChatResult.COMPARED
                     }
-                    ConversationIndexUpdater.Outcome.Cancelled -> ChatResult.COMPARED
+                    ConversationIndexUpdater.Outcome.Cancelled -> {
+                        // Stopped by the closing, not by the user or the setting: the chat is compared
+                        // again first when indexing may run, from where its update stopped. The permit is
+                        // not read again here, so an opening in between never drops the chat.
+                        if (isOn() && !isPaused()) requeue(chatId, catchingUp)
+                        ChatResult.COMPARED
+                    }
                     is ConversationIndexUpdater.Outcome.Failed -> {
                         report { events.chatFailed(chatId, outcome.cause) }
                         ChatResult.COMPARED
@@ -398,6 +468,20 @@ class ConversationIndexCoordinator(
     } catch (e: Exception) {
         report { events.chatFailed(chatId, e) }
         ChatResult.COMPARED
+    }
+
+    /** Puts a chat whose update the closing stopped back at the front of its queue. */
+    private fun requeue(chatId: String, catchingUp: Boolean) {
+        synchronized(lock) {
+            // Deleted or renamed away meanwhile: its removal runs next and nothing of it comes back.
+            if (chatId in removed) return
+            if (catchingUp) {
+                if (chatId !in catchUp) catchUp.addFirst(chatId)
+            } else if (chatId !in changed) {
+                // Ready at once: its changes had already settled.
+                changed[chatId] = clock() - changeWaitMillis
+            }
+        }
     }
 
     /** The chat changed during its update; it is tried again a few times, then left marked for a refresh. */
@@ -460,25 +544,105 @@ class IndexVectorPasses(
     private val runner: IndexTaskRunner,
     private val isOn: () -> Boolean = { true }
 ) {
-    private val wanted = AtomicBoolean(false)
-    private val scheduled = AtomicBoolean(false)
+    /** Guards [wanted], [scheduled], [requests] and [stopAt] together. */
+    private val lock = Any()
+    private var wanted = false
+    private var scheduled = false
+    private var requests = 0L
+    private var stopAt = NOT_STOPPED
+    private var stoppedBy: VectorPassFailure? = null
+
+    /** Step 13: how many passes have been asked for so far. */
+    val requestCount: Long get() = synchronized(lock) { requests }
+
+    /**
+     * Step 13: when the passes stopped because the last one failed (or could
+     * not start) with none asked for since, the [requestCount] at that moment;
+     * otherwise [NOT_STOPPED]. Set and cleared under the same lock as the
+     * requests, so it never shows a stop while a pass is asked for.
+     */
+    val stoppedOnFailureAt: Long get() = synchronized(lock) { stopAt }
+
+    /** Step 13: what the failure that stopped the passes was, while [stoppedOnFailureAt] is set. */
+    val stopFailure: VectorPassFailure? get() = synchronized(lock) { if (stopAt == NOT_STOPPED) null else stoppedBy }
 
     fun request() {
-        wanted.set(true)
-        if (scheduled.compareAndSet(false, true)) runner.run(0) { loop() }
+        val start = synchronized(lock) {
+            wanted = true
+            requests++
+            stopAt = NOT_STOPPED
+            stoppedBy = null
+            if (scheduled) false else { scheduled = true; true }
+        }
+        if (start) schedule()
     }
 
-    private fun loop() {
+    private fun schedule() {
         try {
-            while (wanted.getAndSet(false)) {
+            runner.run(0) { loop() }
+        } catch (e: Exception) {
+            synchronized(lock) { scheduled = false }
+            throw e
+        }
+    }
+
+    private fun takeWanted(): Boolean = synchronized(lock) { wanted.also { wanted = false } }
+
+    private fun loop() {
+        var failed = false
+        var failure: VectorPassFailure? = null
+        try {
+            while (takeWanted()) {
+                failed = false
+                failure = null
                 if (!isOn()) break
-                val outcome = try { runPass() } catch (_: Exception) { null } ?: break
+                // Counted as failed until the pass returns normally, so an Error (out of memory) is a failure too.
+                failed = true
+                failure = VectorPassFailure(VectorPassFailure.Stage.VECTORS, "it ended without returning")
+                val outcome = try {
+                    runPass()
+                } catch (e: Exception) {
+                    failure = VectorPassFailure(VectorPassFailure.Stage.VECTORS, ConversationIndexErrorLog.cause(e))
+                    null
+                } catch (t: Throwable) {
+                    failure = VectorPassFailure(VectorPassFailure.Stage.VECTORS, ConversationIndexErrorLog.cause(t))
+                    throw t
+                }
+                failed = outcome == null || outcome is PassageEmbeddingWorker.Outcome.Interrupted
+                when {
+                    outcome is PassageEmbeddingWorker.Outcome.Interrupted ->
+                        failure = VectorPassFailure(VectorPassFailure.Stage.VECTORS, ConversationIndexErrorLog.cause(outcome.cause))
+                    // A pass that could not start: the model or the index could not be prepared.
+                    outcome == null && failure?.cause == "it ended without returning" -> failure = VectorPassFailure(
+                        VectorPassFailure.Stage.PREPARING, "the on-device search model or the index could not be prepared"
+                    )
+                }
+                if (outcome == null) break
                 // A paused, interrupted or busy pass is not repeated now; the next request tries again.
                 if (outcome !is PassageEmbeddingWorker.Outcome.Finished) break
             }
         } finally {
-            scheduled.set(false)
-            if (wanted.get() && scheduled.compareAndSet(false, true)) runner.run(0) { loop() }
+            val again = synchronized(lock) {
+                if (wanted) true else {
+                    scheduled = false
+                    stopAt = if (failed) requests else NOT_STOPPED
+                    stoppedBy = if (failed) failure else null
+                    false
+                }
+            }
+            if (again) schedule()
         }
+    }
+
+    companion object {
+        const val NOT_STOPPED = -1L
+    }
+}
+
+/** What stopped the vector passes (Step 13), for the background service's log. Holds no message content. */
+data class VectorPassFailure(val stage: Stage, val cause: String) {
+    enum class Stage(val text: String) {
+        PREPARING("preparing the on-device search model and the index"),
+        VECTORS("making search vectors")
     }
 }

@@ -227,6 +227,22 @@ class IndexProgressTracker(
     /** Changes with every catch-up, so a result for an older one is thrown away. */
     private var generation = 0L
     private var drained = false
+
+    /**
+     * Step 13: the vector passes' request count, and the count at which they
+     * stopped on a failure with none asked for since, or
+     * [IndexVectorPasses.NOT_STOPPED] ([IndexVectorPasses]). Set once by the runtime.
+     */
+    @Volatile var vectorRequests: () -> Long = { 0L }
+    @Volatile var vectorsStoppedOnFailureAt: () -> Long = { IndexVectorPasses.NOT_STOPPED }
+    @Volatile var vectorsStopFailure: () -> VectorPassFailure? = { null }
+
+    /** What stopped a stalled catch-up, when [isStalled]; for the background service's log. */
+    val stallFailure: VectorPassFailure? get() = if (isStalled) vectorsStopFailure() else null
+    /** Whether chats still wait to be counted or compared; each asks for vectors once it is. Set once by the runtime. */
+    @Volatile var chatsQueued: () -> Boolean = { false }
+    /** The vector request count when the catch-up handed over its last chat. */
+    private var drainedAtRequest = 0L
     private val pending = LinkedHashSet<String>()
     private val counted = HashMap<String, CountedChat>()
     private var latest: IndexingNumbers? = null
@@ -237,6 +253,22 @@ class IndexProgressTracker(
     val display: StateFlow<IndexingDisplay> = state
 
     val isPaused: Boolean get() = pause.paused
+
+    /**
+     * Whether the catch-up cannot go on by itself (Step 13): every queued chat
+     * was handled, so nothing will ask for another vector pass, and the last
+     * pass stopped on a failure.
+     */
+    val isStalled: Boolean
+        get() {
+            val drainedAt = synchronized(lock) { if (catchingUp && drained) drainedAtRequest else return false }
+            // Only a stop by a pass asked for after the hand-over counts: the hand-over always asks for one.
+            // A chat still queued asks for another pass once it is handled.
+            return vectorsStoppedOnFailureAt() > drainedAt && !chatsQueued()
+        }
+
+    /** The Step 11 conditions the display is worked out from. */
+    fun conditions(): IndexingConditions = source.conditions()
 
     override fun catchUpStarted(chats: List<String>, settingsKey: String): List<String> {
         val work = try { source.work(chats, settingsKey) } catch (_: Exception) { null }
@@ -281,7 +313,12 @@ class IndexProgressTracker(
     }
 
     override fun catchUpDrained() {
-        synchronized(lock) { if (catchingUp) drained = true }
+        synchronized(lock) {
+            if (catchingUp) {
+                drained = true
+                drainedAtRequest = vectorRequests()
+            }
+        }
     }
 
     override fun catchUpStopped() {
