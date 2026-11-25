@@ -200,7 +200,7 @@ class ConversationIndexingForegroundService : Service() {
         shown = first
         hadCatchUp = false
         wakeLockFailureWritten = false
-        requestsAtStart = ConversationIndexRuntime.vectorRequestCount()
+        requestsAtStart = ConversationIndexRuntime.vectorStallBaseline()
         running = this
         AppBackgroundIndexing.controller(this).serviceStarted()
         val wanted = stopWanted

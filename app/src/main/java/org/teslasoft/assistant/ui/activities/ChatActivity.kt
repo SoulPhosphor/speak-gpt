@@ -11724,7 +11724,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (!readbackKeepAliveActive) return
         readbackKeepAliveActive = false
         readbackKeepAliveToken++ // stop any in-flight poll
-        GenerationForegroundService.end(this)
+        GenerationForegroundService.end(this, reading = true)
         // The plain read-aloud is over — drop the mic's STOP look back to idle
         // (unless a hands-free conversation is running, where the mic stays hidden).
         if (!isHandsFreeEngaged()) runOnUiThread { micIdle() }

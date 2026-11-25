@@ -145,7 +145,7 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
         @Volatile private var serviceRunRequests = Long.MAX_VALUE
 
         override fun serviceRunMarked(running: Boolean) {
-            if (running) serviceRunRequests = ConversationIndexRuntime.vectorRequestCount()
+            if (running) serviceRunRequests = ConversationIndexRuntime.vectorStallBaseline()
             try {
                 val edit = runMarks(app).edit()
                 if (running) edit.putBoolean(RUN_MARK_KEY, true) else edit.remove(RUN_MARK_KEY)
@@ -178,7 +178,8 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
         val app = context.applicationContext
         if (ConversationIndexRuntime.hasPendingWork()) return true
         val now = android.os.SystemClock.elapsedRealtime()
-        if (GenerationForegroundService::class.java.name in runningServices(app)) {
+        // Only a reply's text being written; reading a reply aloud uses the same keep-alive and is not work for indexing.
+        if (GenerationForegroundService.isWritingReply) {
             replySeenAt = now
             return true
         }

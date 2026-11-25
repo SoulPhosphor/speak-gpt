@@ -82,8 +82,15 @@ object ConversationIndexRuntime {
     fun hasPendingWork(): Boolean =
         instance?.hasPendingWork() == true || vectorPasses?.isBusy == true
 
-    /** How many vector passes were asked for so far; a service run takes it as its starting point. */
-    fun vectorRequestCount(): Long = vectorPasses?.requestCount ?: 0L
+    /**
+     * Where a service run starts counting vector failures from. A pass
+     * already asked for or running is the run's own work, so its failure
+     * counts too: the starting point is then just before its request.
+     */
+    fun vectorStallBaseline(): Long {
+        val passes = vectorPasses ?: return 0L
+        return VectorStallBaseline.of(passes.requestCount, passes.isBusy)
+    }
 
     /**
      * An ordinary update that cannot go on by itself: its vector pass, asked

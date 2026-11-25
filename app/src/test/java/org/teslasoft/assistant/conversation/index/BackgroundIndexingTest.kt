@@ -944,6 +944,26 @@ class BackgroundIndexingTest {
         assertFinished(2)
     }
 
+    @Test fun aVectorPassAlreadyPendingWhenTheServiceStartsCountsAsTheRunsOwnWork() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        chats.put("c2", chat("c2"))
+        coordinator.chatChanged("c2")
+        // Run until the change's vector pass is asked for, then leave: the pass is pending at the service start.
+        while (!passes.isBusy) check(tasks.runOne())
+        controller.appLeft()
+        controller.serviceStarted()
+        val baseline = VectorStallBaseline.of(passes.requestCount, passes.isBusy)
+        model.failNext = true
+        tasks.runAll()
+        assertTrue("the inherited pass failed", passes.stoppedOnFailureAt != IndexVectorPasses.NOT_STOPPED)
+        assertTrue("and its failure is the run's", passes.stoppedOnFailureAt > baseline)
+        assertFalse("the old starting point would have missed it",
+            passes.stoppedOnFailureAt > VectorStallBaseline.of(passes.requestCount, passBusy = false))
+    }
+
     @Test fun withNotificationsOffAChangedChatWaitsForTheAppAndLosesNothing() {
         putChats(1)
         controller.appOpened()

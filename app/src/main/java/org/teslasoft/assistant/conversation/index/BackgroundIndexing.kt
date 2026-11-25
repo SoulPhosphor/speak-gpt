@@ -554,3 +554,8 @@ enum class IndexingNotificationAccess {
         }
     }
 }
+
+/** Where a background service run starts counting vector failures from (see ConversationIndexRuntime.vectorStallBaseline). */
+object VectorStallBaseline {
+    fun of(requestCount: Long, passBusy: Boolean): Long = if (passBusy) requestCount - 1 else requestCount
+}
