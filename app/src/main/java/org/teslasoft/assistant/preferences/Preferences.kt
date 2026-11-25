@@ -3845,6 +3845,21 @@ class Preferences internal constructor(
     fun getSummarizerErrorsUnseen(): Boolean =
         getString("summarizer_errors_unseen", "false") == "true"
 
+    /**
+     * Writes an interruption report's Summarizer Errors entries, episode and
+     * unseen badge in one synchronous commit (Owner, 2026-11-25); false when
+     * it did not reach the disk, so the caller keeps the report for later.
+     */
+    fun commitSummarizerInterruptionReport(errorsJson: String, episode: String?): Boolean = try {
+        val editor = preferences.edit()
+            .putString("summarizer_errors", errorsJson)
+            .putString("summarizer_errors_unseen", "true")
+        if (episode != null) editor.putString("summarizer_episode", episode)
+        editor.commit()
+    } catch (_: Exception) {
+        false
+    }
+
     fun setSummarizerErrorsUnseen(value: Boolean) {
         putString("summarizer_errors_unseen", if (value) "true" else "false")
     }

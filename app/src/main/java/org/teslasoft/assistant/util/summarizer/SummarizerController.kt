@@ -584,7 +584,7 @@ class SummarizerController(
             ChatOutlines.isFull(current) -> return null
             else -> ChatOutlines.afterGenerateNew(current, outline, prompt.id, prompt.name)
         }
-        prefs.setChatOutlines(ChatOutlines.toJson(updated), runToken)
+        prefs.setChatOutlines(ChatOutlines.toJson(updated), runToken(OperationKind.OUTLINING))
         notifyStateChanged()
         return outline
     }
@@ -991,7 +991,7 @@ class SummarizerController(
                 summary, target, false, target,
                 versionsJson = CompactionVersions.toJson(versions),
                 regenerationLock = CompactionVersions.furthestCount(versions),
-                runSaved = runToken
+                runSaved = runToken(OperationKind.COMPACTING)
             )
         ) {
             val configuredModel = prefs.getSummarizerModel()
@@ -1085,7 +1085,7 @@ class SummarizerController(
         val testRequest = sectionRequestForTest
         val runtime = if (testRequest != null) null
         else resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.SUMMARY) ?: return false
-        SummarizerRunRecords.sectionStarted(appContext, chatId, runToken)
+        SummarizerRunRecords.sectionStarted(appContext, chatId, runToken(OperationKind.SUMMARIZING))
         val text = (if (runtime != null) requestSection(runtime, owned, context) else testRequest?.invoke(owned))
             ?: return false
 
@@ -1121,7 +1121,7 @@ class SummarizerController(
             }
             fresh + SummarySections.newSection(owned, context, text)
         }
-        val savedMark = runToken?.let { SummarizerRunRecords.summarySaved(it, cycleResult.saved + 1) }
+        val savedMark = runToken(OperationKind.SUMMARIZING)?.let { SummarizerRunRecords.summarySaved(it, cycleResult.saved + 1) }
         if (!SummarySectionStore.save(prefs, updated, savedMark)) {
             recordFailure(
                 prefs, SummarizerErrorCategory.SAVE_FAILED, runtime?.endpoint?.label ?: "Not Reported",
@@ -1689,26 +1689,34 @@ class SummarizerController(
         listener?.onSummarizerStateChanged()
     }
 
-    /** The running operation's interruption record (SummarizerRunRecords): its token, chat and kind. */
-    private var runToken: String? = null
-    private var runChatId: String = ""
-    private var runKind: OperationKind = OperationKind.SUMMARIZING
+    /**
+     * Each operation kind's interruption record (SummarizerRunRecords): its
+     * token and the chat it was started for. Kept per kind, because an
+     * outline or compaction starts while a cancelled summary is still ending.
+     */
+    private val runTokens = java.util.EnumMap<OperationKind, Pair<String, String>>(OperationKind::class.java)
+
+    /** The token the running operation of [kind] saves with its result. */
+    private fun runToken(kind: OperationKind): String? = runTokens[kind]?.first
 
     private fun setOperationState(state: OperationState) {
         terminalClearJob?.cancel()
         val previous = operationState
         operationState = state
-        if (state is OperationState.Running && previous !is OperationState.Running) {
-            runChatId = chatIdProvider()
-            runKind = state.kind
-            runToken = SummarizerRunRecords.started(appContext, runChatId, state.kind)
-        } else if (state !is OperationState.Running && previous is OperationState.Running) {
-            // Every ending (success, failure, cancellation, a superseded result) removes the record.
-            val token = runToken
-            runToken = null
-            SummarizerRunRecords.ended(appContext, runChatId, runKind, token)
-            val current = chatIdProvider()
-            if (current != runChatId) SummarizerRunRecords.ended(appContext, current, runKind, token)
+        val kind = kindOf(state)
+        if (state is OperationState.Running) {
+            // A new operation of this kind gets its record, whatever ran before it.
+            if (!runTokens.containsKey(state.kind)) {
+                val chatId = chatIdProvider()
+                SummarizerRunRecords.started(appContext, chatId, state.kind)?.let { runTokens[state.kind] = it to chatId }
+            }
+        } else if (kind != null) {
+            // Every ending of an operation (success, failure, cancellation, a superseded result) removes its record.
+            runTokens.remove(kind)?.let { (token, chatId) ->
+                SummarizerRunRecords.ended(appContext, chatId, kind, token)
+                val current = chatIdProvider()
+                if (current != chatId) SummarizerRunRecords.ended(appContext, current, kind, token)
+            }
         }
         if (state is OperationState.Running) {
             if (previous !is OperationState.Running) {

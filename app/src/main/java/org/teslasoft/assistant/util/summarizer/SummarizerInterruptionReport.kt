@@ -60,14 +60,13 @@ object SummarizerInterruptionReport {
                         SummarizerErrorLog.fromJson(prefs.getSummarizerErrors()),
                         item.kind, System.currentTimeMillis(), prefs.getSummarizerModel()
                     )
-                    val json = SummarizerErrorLog.toJson(entries)
-                    prefs.setSummarizerErrors(json)
-                    // A compaction or summary leaves the automatic summary behind, as its failures do.
-                    if (item.kind != SummarizerController.OperationKind.OUTLINING) {
-                        prefs.setSummarizerEpisode(SummarizerErrorCategory.INTERRUPTED.name)
-                    }
-                    prefs.setSummarizerErrorsUnseen(true)
-                    prefs.getSummarizerErrors() == json
+                    // One synchronous commit; a compaction or summary leaves the automatic summary
+                    // behind, as its failures do. A commit that does not reach the disk keeps the record.
+                    prefs.commitSummarizerInterruptionReport(
+                        SummarizerErrorLog.toJson(entries),
+                        if (item.kind != SummarizerController.OperationKind.OUTLINING) SummarizerErrorCategory.INTERRUPTED.name
+                        else null
+                    )
                 } catch (_: Exception) {
                     false
                 }

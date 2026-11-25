@@ -62,13 +62,16 @@ class SummarizerResultTrackingInstrumentedTest {
     private fun recordStarted(): Int? = records.getString("$chatId|SUMMARIZING", null)
         ?.let { JSONObject(it).optInt("started") }
 
+    /** What the record counted while each section was requested; asserted on the test's thread. */
+    private val countedAtRequest = java.util.Collections.synchronizedList(ArrayList<Int?>())
+
     /** Runs one automatic summary to its end; [answer] is called with the request number. */
     private fun run(storageUnavailable: () -> Boolean = { false }, answer: (Int) -> String?): OperationState {
         var request = 0
         controller.sectionRequestForTest = {
             request++
-            // While a section is requested, its record exists and counts it.
-            assertEquals(request, recordStarted())
+            // Recorded, not asserted here: this runs on the app's main thread.
+            countedAtRequest += recordStarted()
             answer(request)
         }
         instrumentation.runOnMainSync {
@@ -79,7 +82,11 @@ class SummarizerResultTrackingInstrumentedTest {
         val deadline = System.currentTimeMillis() + 20_000
         while (System.currentTimeMillis() < deadline) {
             val last = states.lastOrNull()
-            if (last != null && last !is OperationState.Running && last != OperationState.Idle) return last
+            if (last != null && last !is OperationState.Running && last != OperationState.Idle) {
+                // While each section was requested, its record existed and counted it.
+                assertEquals((1..countedAtRequest.size).toList(), countedAtRequest.toList())
+                return last
+            }
             Thread.sleep(20)
         }
         throw AssertionError("the summary run did not end: $states")

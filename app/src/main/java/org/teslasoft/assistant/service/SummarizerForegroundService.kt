@@ -54,13 +54,26 @@ class SummarizerForegroundService : Service() {
                 .putExtra(EXTRA_CHAT_NAME, chatName)
                 .putExtra(EXTRA_KIND, kind.name)
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
-                else context.startService(intent)
+                synchronized(lifecycleLock) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                    else context.startService(intent)
+                    pendingStarts++
+                }
             } catch (e: Exception) {
                 // The operation continues without the notification; the refusal is recorded once.
                 startFailed(context, chatId, kind, e)
             }
         }
+
+        /**
+         * Starts Android accepted that have not reached [onStartCommand] yet.
+         * A service started with startForegroundService must reach
+         * startForeground before it is stopped, or Android ends the app; an
+         * operation that ends within moments of starting leaves the stop to
+         * the arriving start.
+         */
+        private val lifecycleLock = Any()
+        private var pendingStarts = 0
 
         /** Operations whose keep-alive start failure was already written: once per operation. */
         private val startFailureLogged = ConcurrentHashMap<String, SummarizerController.OperationKind>()
@@ -159,8 +172,13 @@ class SummarizerForegroundService : Service() {
             startFailureLogged.remove(chatId)
             val remaining = active.entries.firstOrNull()
             if (remaining == null) {
-                try { context.stopService(Intent(context, SummarizerForegroundService::class.java)) }
-                catch (_: Exception) { /* already stopped */ }
+                synchronized(lifecycleLock) {
+                    // A start still on its way stops the service itself once it is in the foreground.
+                    if (pendingStarts == 0) {
+                        try { context.stopService(Intent(context, SummarizerForegroundService::class.java)) }
+                        catch (_: Exception) { /* already stopped */ }
+                    }
+                }
             } else {
                 begin(context, remaining.key, remaining.value.name, remaining.value.kind)
             }
@@ -227,6 +245,14 @@ class SummarizerForegroundService : Service() {
             if (chatId.isNotBlank()) startFailed(this, chatId, kind, e)
             // A keep-alive already in the foreground for another operation keeps protecting it.
             if (!inForeground) stopSelf()
+        }
+        synchronized(lifecycleLock) {
+            pendingStarts = (pendingStarts - 1).coerceAtLeast(0)
+            // Every operation ended while this start was on its way: stop now that it may be stopped.
+            if (pendingStarts == 0 && active.isEmpty()) {
+                stopForegroundCompat()
+                stopSelf()
+            }
         }
         return START_NOT_STICKY
     }
