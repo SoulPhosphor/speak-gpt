@@ -56,7 +56,14 @@ class ChatDrawerController private constructor(
     private val updates = DrawerUpdateDispatcher()
     // A chat is already being opened from this drawer; further taps wait for it.
     private var opening = false
-    private val rowActions = DrawerRowActions(activity) { refresh() }
+    private val rowActions = DrawerRowActions(activity, deleteCurrentChat = { id ->
+        if (id == currentChatId() && activity is ChatActivity) {
+            activity.showChatDeleteDialog()
+            true
+        } else {
+            false
+        }
+    }) { refresh() }
     private val rowCallbacks = object : DrawerHierarchyAdapter.Callbacks {
         override fun onClick(row: DrawerRow) = handleClick(row)
         override fun onLongClick(anchor: View, row: DrawerRow) = rowActions.onLongClick(anchor, row)

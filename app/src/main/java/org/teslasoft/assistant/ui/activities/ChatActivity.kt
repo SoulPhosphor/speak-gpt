@@ -5719,7 +5719,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    private fun showChatDeleteDialog() {
+    internal fun showChatDeleteDialog() {
         if (chatId.isBlank() || deletingChat) return
         ChatDeletionRequestCoordinator.requestChats(
             activity = this,
@@ -8065,6 +8065,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
 
                 override fun onForceUpdate() {
+                    // The waiting assistant row may not have reached a stream
+                    // checkpoint yet. Keep the live snapshot before the new
+                    // screen reads history; ordered reads also see pending saves.
+                    saveSettingsInBackground()
                     // Rebuilding the screen finishes this one. A provisional
                     // conversation must survive that: carry its provisional
                     // state into the new screen, and do not let this finish

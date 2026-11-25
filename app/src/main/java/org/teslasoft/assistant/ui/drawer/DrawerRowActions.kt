@@ -16,6 +16,7 @@ import org.teslasoft.assistant.ui.util.CompactActionPopup
 /** Identical folder/chat management actions in both folder destinations. */
 internal class DrawerRowActions(
     private val activity: FragmentActivity,
+    private val deleteCurrentChat: (String) -> Boolean = { false },
     private val refresh: () -> Unit
 ) {
     private val repository = ChatNavigationRepository.get(activity)
@@ -57,7 +58,10 @@ internal class DrawerRowActions(
                         }
                         MENU_CHAT_MOVE -> { showMoveChooser(row); true }
                         MENU_CHAT_DELETE -> {
-                            ChatDeletionRequestCoordinator.requestChats(activity, setOf(row.value.id), onCommitted = refresh); true
+                            if (!deleteCurrentChat(row.value.id)) {
+                                ChatDeletionRequestCoordinator.requestChats(activity, setOf(row.value.id), onCommitted = refresh)
+                            }
+                            true
                         }
                         else -> false
                     }
