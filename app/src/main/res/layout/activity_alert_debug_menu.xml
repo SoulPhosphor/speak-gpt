@@ -882,6 +882,86 @@
                     android:maxLength="2" />
             </LinearLayout>
 
+            <!-- ============ Conversation indexing logs ============
+                 Owner, 2026-11-25: failures always reach the Error Log; these
+                 switches control extra error detail and the Indexing Log. -->
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/indexing_error_details_title" />
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/indexing_error_details_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_indexing_error_details"
+                    style="@style/Widget.App.Row.Switch"
+                    android:contentDescription="@string/indexing_error_details_title" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/indexing_activity_title" />
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/indexing_activity_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_indexing_activity"
+                    style="@style/Widget.App.Row.Switch"
+                    android:contentDescription="@string/indexing_activity_title" />
+            </LinearLayout>
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/indexing_detailed_title" />
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/indexing_detailed_desc" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_indexing_detailed"
+                    style="@style/Widget.App.Row.Switch"
+                    android:contentDescription="@string/indexing_detailed_title" />
+            </LinearLayout>
+            <!-- The Indexing Log's retention, shown while either of its switches is on. -->
+            <LinearLayout
+                android:id="@+id/row_indexing_log_max_logs"
+                style="@style/Widget.App.Row.Number">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:labelFor="@+id/field_indexing_log_max_logs"
+                        android:text="@string/label_max_logs_saved" />
+                </LinearLayout>
+                <EditText
+                    android:id="@+id/field_indexing_log_max_logs"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:contentDescription="@string/label_max_logs_saved"
+                    android:ems="4"
+                    android:imeOptions="actionDone"
+                    android:maxLength="4" />
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/row_indexing_log_max_days"
+                style="@style/Widget.App.Row.Number">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:labelFor="@+id/field_indexing_log_max_days"
+                        android:text="@string/label_max_days_saved" />
+                </LinearLayout>
+                <EditText
+                    android:id="@+id/field_indexing_log_max_days"
+                    style="@style/Widget.App.Row.Number.Field"
+                    android:contentDescription="@string/label_max_days_saved"
+                    android:ems="3"
+                    android:imeOptions="actionDone"
+                    android:maxLength="2" />
+            </LinearLayout>
             <!-- ============ Audio Debugging shortcut ============ -->
             <!-- All microphone/voice diagnostics moved to their own Audio
                  Debugging screen (reached from Voice & Speech). This row is a

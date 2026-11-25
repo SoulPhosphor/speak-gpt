@@ -153,14 +153,23 @@ class BackgroundIndexingTest {
         var userWork = false
         var stalled = false
         var refuseWith: Exception? = null
+        var pending = false
+        var notifications = true
         val calls = ArrayList<String>()
-        val logcat = ArrayList<String>()
+        /** The Indexing Log's activity entries; nothing goes to Logcat any more (Owner, 2026-11-25). */
+        val activity = ArrayList<String>()
+        val detailed = ArrayList<String>()
         val errors = ArrayList<String>()
+        /** Error Log warnings: Android limits that left work waiting, which are not errors. */
+        val warnings = ArrayList<String>()
+        var runMarked = false
         override fun display() = display
         override fun conditions() = conditions
         override fun userPaused() = paused
         override fun userWorkRunning() = userWork
         override fun stalled() = stalled
+        override fun pendingWork() = pending
+        override fun notificationsAllowed() = notifications
         override fun startService() {
             refuseWith?.let { throw it }
             calls.add("start")
@@ -168,8 +177,11 @@ class BackgroundIndexingTest {
         override fun stopService(reason: BackgroundStopReason) { calls.add("stop:$reason") }
         override fun showStoppedNotice() { calls.add("notice") }
         override fun clearStoppedNotice() { calls.add("clear") }
-        override fun logcat(message: String) { logcat.add(message) }
-        override fun errorLog(message: String) { errors.add(message) }
+        override fun activityLog(message: String) { activity.add(message) }
+        override fun detailedLog(message: String) { detailed.add(message) }
+        override fun errorLog(message: String, cause: Throwable?) { errors.add(message) }
+        override fun warningLog(message: String) { warnings.add(message) }
+        override fun serviceRunMarked(running: Boolean) { runMarked = running }
     }
 
     /** Android's refusal: the real class cannot be made on the JVM, so it is classified by its real name. */
@@ -200,7 +212,8 @@ class BackgroundIndexingTest {
         assertTrue(controller.serviceActive)
         assertEquals(BackgroundIndexingPermit.State.SERVICE, permit.current)
         controller.serviceStarted()
-        assertEquals(listOf(BackgroundIndexingLog.STARTED), platform.logcat)
+        assertEquals(listOf(BackgroundIndexingLog.STARTED), platform.activity)
+        assertTrue("a running service is remembered, so an end without a stop is found", platform.runMarked)
 
         platform.calls.clear()
         controller.appOpened()
@@ -247,8 +260,13 @@ class BackgroundIndexingTest {
                 assertFalse(controller.serviceActive)
                 assertEquals(reason, controller.lastStop)
                 assertTrue("notice" in platform.calls)
-                assertEquals(listOf(BackgroundIndexingLog.stopped(reason)), platform.logcat)
+                // Owner, 2026-11-25: an Android limit that leaves work waiting is kept in the Error Log as a
+                // warning that says it is a limit, not an error; nothing goes to Logcat.
+                assertEquals(listOf(IndexingLogText.pausedByAndroidLimit(reason, "${AndroidRefusal::class.java.name}: $message")),
+                    platform.warnings)
+                assertTrue(platform.warnings.single().contains("This is an Android limit, not an app error."))
                 assertTrue("an Android limit is not an error", platform.errors.isEmpty())
+                assertEquals(listOf(IndexingLogText.WAITING_FOR_APP), platform.activity)
             }
         }
     }
@@ -273,9 +291,10 @@ class BackgroundIndexingTest {
             ),
             platform.errors.single()
         )
-        assertFalse("the approved notice is for Android's limits only", "notice" in platform.calls)
+        // Owner, 2026-11-25: indexing waiting for the app is explained by the approved notice whatever stopped it.
+        assertTrue("the approved notice explains that opening the app continues it", "notice" in platform.calls)
         assertEquals("it never started, and the line says so",
-            3, platform.logcat.count { it == BackgroundIndexingLog.stopped(BackgroundStopReason.UNEXPECTED_FAILURE_AT_START) })
+            3, platform.activity.count { it == BackgroundIndexingLog.stopped(BackgroundStopReason.UNEXPECTED_FAILURE_AT_START) })
 
         // A start that works does not end the ongoing failure: the same failure is still not written again.
         platform.refuseWith = null
@@ -311,7 +330,7 @@ class BackgroundIndexingTest {
         controller.serviceStopped(BackgroundStopReason.TIME_LIMIT)
         assertFalse(permit.mayRun())
         assertTrue("notice" in platform.calls)
-        assertEquals(BackgroundIndexingLog.stopped(BackgroundStopReason.TIME_LIMIT), platform.logcat.last())
+        assertEquals(listOf(IndexingLogText.pausedByAndroidLimit(BackgroundStopReason.TIME_LIMIT, null)), platform.warnings)
         assertTrue(platform.errors.isEmpty())
 
         platform.calls.clear()
@@ -468,6 +487,18 @@ class BackgroundIndexingTest {
     private lateinit var permit: BackgroundIndexingPermit
     private lateinit var platform: Platform
     private lateinit var controller: BackgroundIndexingController
+    private lateinit var passes: IndexVectorPasses
+    /** Notifications for the app, as Android reports them. */
+    private var notificationsOn = true
+    /** A reply is being written (the reply service runs). */
+    private var replyRunning = false
+    /** An ordinary update's vectors stopped on a failure during the service run, as the app reads it. */
+    private var updateStalled = false
+    /** A catch-up ran during the service run, as the service records it. */
+    private var serviceSawCatchUp = false
+
+    /** What the app reads as waiting work besides a catch-up, as [org.teslasoft.assistant.service.AppBackgroundIndexing.waitingWork] does. */
+    private fun pendingWork() = coordinator.hasPendingWork() || passes.isBusy || replyRunning
 
     private val source = object : IndexProgressSource {
         var settingsKey: String? = null
@@ -499,7 +530,7 @@ class BackgroundIndexingTest {
         // reads them the moment they are asked for, as that thread may while a vector pass runs.
         tracker = IndexProgressTracker(source, pause, saved) { delay, task -> if (readsAtOnce) task() else tasks.run(delay, task) }
         val updater = ConversationIndexUpdater(index, reader, 40, OVERLAP)
-        val passes = IndexVectorPasses(
+        passes = IndexVectorPasses(
             runPass = {
                 val catchUp = tracker.vectorPassStarting()
                 PassageEmbeddingWorker(index, chats, reader, model, pause).runPass { !settingOn || recovering || !mayRun() }.also {
@@ -545,8 +576,10 @@ class BackgroundIndexingTest {
             override fun display() = tracker.display.value
             override fun conditions() = tracker.conditions()
             override fun userPaused() = tracker.isPaused
-            override fun stalled() = tracker.isStalled
-            override fun stallFailure() = tracker.stallFailure
+            override fun stalled() = tracker.isStalled || updateStalled
+            override fun stallFailure() = tracker.stallFailure ?: passes.stopFailure
+            override fun pendingWork() = this@BackgroundIndexingTest.pendingWork()
+            override fun notificationsAllowed() = notificationsOn
         }, permit)
     }
 
@@ -557,8 +590,9 @@ class BackgroundIndexingTest {
     /** What the service does at its next update, as it works it out on the index's thread. */
     private fun serviceStep() = BackgroundIndexingRule.next(
         tracker.display.value, tracker.conditions(), tracker.isPaused, controller.appVisible, tracker.isStalled,
-        controller.continuedByService
-    )
+        controller.continuedByService, pendingWork = pendingWork(), notificationsAllowed = notificationsOn,
+        hadCatchUp = serviceSawCatchUp || tracker.display.value is IndexingDisplay.Running
+    ).also { if (tracker.display.value is IndexingDisplay.Running) serviceSawCatchUp = true }
 
     private fun shownContent() = (serviceStep() as? BackgroundIndexingStep.Show)?.content
 
@@ -610,6 +644,7 @@ class BackgroundIndexingTest {
         controller.appLeft()
         assertEquals(listOf("clear", "start"), platform.calls)
         controller.serviceStarted()
+        serviceSawCatchUp = true
     }
 
     @Test fun indexingContinuesWithTheAppClosedAndTheNotificationShowsTheRealPercentageAndNoneWhileCounting() {
@@ -857,7 +892,28 @@ class BackgroundIndexingTest {
         assertFalse("notice" in platform.calls)
     }
 
-    @Test fun aChangedChatSavedJustBeforeClosingWaitsForTheApp() {
+    // Owner, 2026-11-25: every legitimate waiting update qualifies for the service. This replaces the
+    // Step 13 test "aChangedChatSavedJustBeforeClosingWaitsForTheApp", whose approved contract changed.
+    @Test fun aChangedChatSavedJustBeforeClosingIsIndexedByTheServiceAfterClosing() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        assertTrue(allMade())
+        chats.put("c2", chat("c2"))
+        coordinator.chatChanged("c2")
+        controller.appLeft()
+        assertEquals("an ordinary update starts the service", "start", platform.calls.last())
+        controller.serviceStarted()
+        assertEquals("with no percentage, it shows the update line",
+            BackgroundIndexingContent.Updating, shownContent())
+        tasks.runAll()
+        assertFinished(2)
+        assertEquals("nothing left: the service stops, never waiting for work that will not come",
+            BackgroundIndexingStep.Stop(BackgroundStopReason.UPDATES_DONE), serviceStep())
+    }
+
+    @Test fun anUpdateWhoseVectorsFailStopsTheServiceNamingTheFailureAndOpeningContinuesIt() {
         putChats(1)
         controller.appOpened()
         coordinator.turnedOn()
@@ -865,9 +921,166 @@ class BackgroundIndexingTest {
         chats.put("c2", chat("c2"))
         coordinator.chatChanged("c2")
         controller.appLeft()
-        assertNothingIndexedWhile { tasks.runAll() }
-
+        controller.serviceStarted()
+        // As the service does: only a failure after its run started can stall the run.
+        val requestsAtStart = passes.requestCount
+        model.failNext = true
+        tasks.runAll()
+        val stalled = tracker.isStalled || (tracker.display.value !is IndexingDisplay.Running && !pendingWork() &&
+            passes.stoppedOnFailureAt != IndexVectorPasses.NOT_STOPPED && passes.stoppedOnFailureAt > requestsAtStart)
+        val step = BackgroundIndexingRule.next(
+            tracker.display.value, tracker.conditions(), tracker.isPaused, controller.appVisible, stalled,
+            controller.continuedByService, pendingWork = pendingWork(), hadCatchUp = false
+        )
+        assertEquals("never 'finished' after a failure", BackgroundIndexingStep.Stop(BackgroundStopReason.INDEXING_FAILED), step)
+        updateStalled = stalled
+        controller.serviceStopped(BackgroundStopReason.INDEXING_FAILED)
+        assertTrue("an actual failure is in the Error Log", platform.errors.last().contains("Processing stopped after an error"))
+        assertFalse(allMade())
+        // The failed work still waits: opening the app asks for it again, and nothing is read twice.
         controller.appOpened()
+        updateStalled = false
+        tasks.runAll()
+        assertFinished(2)
+    }
+
+    @Test fun aVectorPassAlreadyPendingWhenTheServiceStartsCountsAsTheRunsOwnWork() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        chats.put("c2", chat("c2"))
+        coordinator.chatChanged("c2")
+        // Run until the change's vector pass is asked for, then leave: the pass is pending at the service start.
+        while (!passes.isBusy) check(tasks.runOne())
+        controller.appLeft()
+        controller.serviceStarted()
+        val baseline = VectorStallBaseline.of(passes.requestCount, passes.isBusy)
+        model.failNext = true
+        tasks.runAll()
+        assertTrue("the inherited pass failed", passes.stoppedOnFailureAt != IndexVectorPasses.NOT_STOPPED)
+        assertTrue("and its failure is the run's", passes.stoppedOnFailureAt > baseline)
+        assertFalse("the old starting point would have missed it",
+            passes.stoppedOnFailureAt > VectorStallBaseline.of(passes.requestCount, passBusy = false))
+    }
+
+    @Test fun withNotificationsOffAChangedChatWaitsForTheAppAndLosesNothing() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        notificationsOn = false
+        chats.put("c2", chat("c2"))
+        coordinator.chatChanged("c2")
+        controller.appLeft()
+        assertFalse("no service without a visible notification", "start" in platform.calls)
+        assertEquals(listOf(IndexingLogText.notContinued("notifications are turned off")), platform.activity)
+        assertNothingIndexedWhile { tasks.runAll() }
+        // Indexing in the app is unchanged.
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(2)
+    }
+
+    @Test fun notificationsTurnedOffWhileTheServiceRunsStopItAndOpeningContinues() {
+        putChats(3)
+        leaveDuringTheCatchUp()
+        tasks.runOne()
+        notificationsOn = false
+        assertEquals(BackgroundIndexingStep.Stop(BackgroundStopReason.NOTIFICATIONS_OFF), serviceStep())
+        controller.serviceStopped(BackgroundStopReason.NOTIFICATIONS_OFF)
+        assertNothingIndexedWhile { tasks.runAll() }
+        notificationsOn = true
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(3)
+    }
+
+    @Test fun aReplyStillBeingWrittenKeepsTheServiceOnlyWhileItIsWritten() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        replyRunning = true
+        controller.appLeft()
+        assertEquals("a reply being written is waiting work", "start", platform.calls.last())
+        controller.serviceStarted()
+        assertEquals(BackgroundIndexingContent.Updating, shownContent())
+        // The reply finishes and is saved: it is indexed while the service runs.
+        chats.put("c1", chat("c1") + reply("c1-a2", "A later reply"))
+        coordinator.chatChanged("c1")
+        replyRunning = false
+        tasks.runAll()
+        assertTrue(allMade())
+        assertNothingReadTwice()
+        assertEquals("a reply that has ended adds no waiting",
+            BackgroundIndexingStep.Stop(BackgroundStopReason.UPDATES_DONE), serviceStep())
+    }
+
+    @Test fun aReplyThatEndsWithoutSavingNeverKeepsTheServiceWaiting() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        replyRunning = true
+        controller.appLeft()
+        controller.serviceStarted()
+        // The reply fails or is cancelled: nothing is saved.
+        replyRunning = false
+        tasks.runAll()
+        assertEquals(BackgroundIndexingStep.Stop(BackgroundStopReason.UPDATES_DONE), serviceStep())
+    }
+
+    @Test fun workTheUserStartedStillComesFirstForOrdinaryUpdates() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        platform.userWork = true
+        chats.put("c2", chat("c2"))
+        coordinator.chatChanged("c2")
+        controller.appLeft()
+        assertFalse("start" in platform.calls)
+        assertEquals(listOf(IndexingLogText.notContinued("work you started is running")), platform.activity)
+        assertNothingIndexedWhile { tasks.runAll() }
+        controller.appOpened()
+        tasks.runAll()
+        assertFinished(2)
+    }
+
+    @Test fun anUpdateRefusedByAndroidIsKeptAndTheProcessEndingLosesNothing() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        chats.put("c2", chat("c2"))
+        coordinator.chatChanged("c2")
+        platform.refuseWith = AndroidRefusal("startForegroundService() not allowed")
+        controller.appLeft()
+        assertEquals(1, platform.warnings.size)
+        assertTrue("notice" in platform.calls)
+        assertNothingIndexedWhile { tasks.runAll() }
+        // The process ends before the app is opened; the next one starts with the index as it stood.
+        startProcess()
+        controller.appOpened()
+        coordinator.appStarted()
+        tasks.runAll()
+        assertFinished(2)
+    }
+
+    @Test fun closingPartWayThroughAnUpdateWithTheServiceFinishesItAndReadsNothingTwice() {
+        putChats(1)
+        controller.appOpened()
+        coordinator.turnedOn()
+        tasks.runAll()
+        chats.put("c2", chat("c2"))
+        coordinator.chatChanged("c2")
+        // Leave while the vectors for the change are being made.
+        tasks.now += ConversationIndexCoordinator.CHANGE_WAIT_MILLIS
+        while (!passes.isBusy) check(tasks.runOne())
+        controller.appLeft()
+        assertEquals("start", platform.calls.last())
+        controller.serviceStarted()
         tasks.runAll()
         assertFinished(2)
     }
@@ -1109,7 +1322,8 @@ class BackgroundIndexingTest {
                 "while making search vectors. Cause: java.lang.IllegalStateException: the model could not run for now. " +
                 "The unfinished work is kept and continues the next time the app is opened, " +
                 "unless indexing is paused or turned off.",
-            platform.logcat.last()
+            // An actual failure: in the Error Log, never only Logcat (Owner, 2026-11-25).
+            platform.errors.last()
         )
         assertTrue("an error is not an Android limit: no notice", "notice" !in platform.calls)
     }
@@ -1239,6 +1453,9 @@ class BackgroundIndexingTest {
         tasks.runAll()
         chats.put("c2", chat("c2"))
         coordinator.chatChanged("c2")
+        // Closed without the service: a changed chat now qualifies for it (Owner, 2026-11-25), so the
+        // notifications are off here, which keeps indexing waiting for the app as this test needs.
+        notificationsOn = false
         controller.appLeft()
         assertNothingIndexedWhile {
             coordinator.chatSetReplaced()
@@ -1246,6 +1463,7 @@ class BackgroundIndexingTest {
         }
 
         chats.listFailsOnce = true
+        notificationsOn = true
         controller.appOpened()
         tasks.runAll()
         assertFinished(2)

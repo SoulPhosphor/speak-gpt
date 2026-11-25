@@ -321,6 +321,24 @@ class Logger {
         }
 
         /**
+         * Indexing Log — conversation indexing's activity and detailed
+         * diagnostics, written only while their Logging Preferences switches
+         * are on (off by default), with its own retention (Owner, 2026-11-25).
+         * Indexing failures go to the Error Log instead.
+         * */
+        fun getIndexingLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", INDEXING_LOG_TYPE)
+        }
+
+        private fun setIndexingLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", INDEXING_LOG_TYPE, log)
+        }
+
+        fun clearIndexingLog(context: Context) {
+            setIndexingLog(context, "")
+        }
+
+        /**
          * The persistent log channels [log] recognizes. A `type` outside this
          * set is silently dropped (see the unknown-channel `else` in [log]),
          * so a caller passing e.g. "error" instead of "crash" writes nowhere.
@@ -333,7 +351,7 @@ class Logger {
                 type == "whisper_perf" || type == "memory_usage" ||
                 type == "image_gen_errors" || type == "image_gen" ||
                 type == "response_lifecycle" || type == "tts_lifecycle" ||
-                type == SYSTEM_LOG_TYPE
+                type == SYSTEM_LOG_TYPE || type == INDEXING_LOG_TYPE
 
         /**
          * @param type - type of log (crash/event/memory/performance)
@@ -425,6 +443,15 @@ class Logger {
                         p.getTtsLifecycleLogMaxEntries(), p.getTtsLifecycleLogMaxDays().toLong()
                     )
                     setTtsLifecycleLog(context, log)
+                }
+
+                INDEXING_LOG_TYPE -> {
+                    val p = Preferences.getPreferences(context, "")
+                    val log = trimByEntries(
+                        "${getIndexingLog(context)}$logString",
+                        p.getIndexingLogMaxEntries(), p.getIndexingLogMaxDays().toLong()
+                    )
+                    setIndexingLog(context, log)
                 }
 
                 SYSTEM_LOG_TYPE -> {
@@ -893,6 +920,9 @@ class Logger {
 
         /** The System Logs channel's storage key and [log] type. */
         const val SYSTEM_LOG_TYPE = "system"
+
+        /** The Indexing Log channel's storage key and [log] type. */
+        const val INDEXING_LOG_TYPE = "indexing"
 
         /**
          * The persistent channels one ProcessExit report is written to, in

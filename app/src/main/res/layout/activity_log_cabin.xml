@@ -353,6 +353,23 @@
                     android:tint="@color/text_subtitle" />
             </LinearLayout>
 
+            <!-- Indexing Log: directly below Image Generation Log (owner, Nov 25 2026). -->
+            <LinearLayout
+                android:id="@+id/row_indexing_log"
+                style="@style/Widget.App.Row.TitleOnly">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_indexing_log" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_indexing_log" />
+            </LinearLayout>
+
             <LinearLayout
                 android:id="@+id/row_tts_lifecycle_log"
                 android:layout_width="match_parent"
