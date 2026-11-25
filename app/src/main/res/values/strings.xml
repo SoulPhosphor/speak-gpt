@@ -1512,6 +1512,12 @@
     <string name="portable_partial_title">Restoration Partly Successful</string>
     <string name="portable_failure_title">Restoration Failed</string>
     <string name="portable_failure_message">Nothing was changed.</string>
+    <!-- Restore start failures and stale decisions (owner-approved, Nov 25 2026). -->
+    <string name="portable_restore_start_refused">Android did not allow the restore to start. Keep this screen open and try again.</string>
+    <string name="portable_restore_start_failed">The restore could not be started because of an unexpected error. Try again. Details are in the Error Log.</string>
+    <string name="portable_restore_state_changed">The restore could not continue because its state changed. Start the restore again.</string>
+    <string name="portable_unavailable_title">Restoration Unavailable</string>
+    <string name="portable_restore_in_progress">Another restore is already in progress.</string>
     <string name="portable_restore_failure_reason">Reason: %1$s.</string>
     <string name="portable_restore_category_failure">%1$s could not be restored. Reason: %2$s</string>
     <string name="portable_restore_cleanup_pending">The selected data was restored, but cleanup could not finish. Choose Okay to finish recovery before starting another restore.</string>
@@ -3917,6 +3923,9 @@
     <string name="compaction_summary_summarizing">Summarizing in Progress…</string>
     <string name="compaction_summary_read_only_summarizing">Summary text is read only while the summarizer is in progress. The text below will update when the process is finished.</string>
     <string name="compaction_summary_summarized">Summary Successful!</string>
+    <!-- An automatic summary that saved some sections while others were discarded (owner-approved, Nov 25 2026). -->
+    <string name="summary_partially_updated">Summary Partially Updated</string>
+    <string name="summary_partially_updated_detail">Some sections were not saved because the conversation changed while they were being written.</string>
     <string name="compaction_uncompact_desc">Uncompact Conversation</string>
     <string name="compaction_recompact_desc">Recompact Conversation</string>
     <string name="compaction_uncompact_title">Uncompact Conversation?</string>
@@ -4015,6 +4024,13 @@
     <string name="summarizer_err_unreadable">The AI service returned an unusable response for this Summary Section. Existing sections were not replaced by that response. Try another model or check whether the endpoint supports chat completions.</string>
     <string name="summarizer_err_save_title">Couldn\'t Save Summary</string>
     <string name="summarizer_err_save">The app couldn\'t save Summary Section state on this device. Technical details were recorded in the error log. Check available storage and try again.</string>
+    <!-- Summarizer Interrupted: the app stopped while an operation ran (owner-approved, Nov 25 2026). -->
+    <string name="summarizer_err_interrupted_title">Summarizer Interrupted</string>
+    <string name="summarizer_err_interrupted_compaction">The app stopped before compaction finished. Nothing from the interrupted compaction was saved. Run Compact again to complete it.</string>
+    <string name="summarizer_err_interrupted_summary">The app stopped before the summary finished. Sections that were already finished were kept. The unfinished section was not saved.</string>
+    <string name="summarizer_err_interrupted_outline">The app stopped before the chat outline finished. Nothing from the unfinished outline was saved. Create the outline again to finish it.</string>
+    <!-- Summarizer Errors detail when the chat could not be read as a summary returned (owner-approved, Nov 25 2026). -->
+    <string name="summarizer_chat_unreadable_detail">The chat\'s saved messages could not be read when the summary returned, so the section was not saved. Technical details were recorded in the Error Log.</string>
     <string name="summarizer_err_unexpected_title">Internal Summarizer Error</string>
     <string name="summarizer_err_unexpected">An internal Summary Section error occurred. Technical details were recorded in the error log.</string>
 

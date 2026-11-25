@@ -120,6 +120,12 @@ class SummarizerController(
                 else (successfulMessages.toLong() * 100 / requestedMessages).toInt().coerceIn(0, 100)
         }
         data class Succeeded(val kind: OperationKind, val chatName: String) : OperationState
+        /**
+         * An automatic summary that saved some sections while others it made
+         * were discarded because the conversation changed (Owner, 2026-11-25).
+         * The saved sections stay; this is not success and not an error.
+         */
+        data class PartiallyUpdated(val kind: OperationKind, val chatName: String) : OperationState
         data class Failed(
             val kind: OperationKind,
             val chatName: String,
@@ -201,6 +207,7 @@ class SummarizerController(
         fun kindOf(state: OperationState): OperationKind? = when (state) {
             is OperationState.Running -> state.kind
             is OperationState.Succeeded -> state.kind
+            is OperationState.PartiallyUpdated -> state.kind
             is OperationState.Failed -> state.kind
             is OperationState.Cancelled -> state.kind
             OperationState.Idle -> null
@@ -316,9 +323,17 @@ class SummarizerController(
         force: Boolean,
         chatName: String = "",
         snapshotProvider: () -> Snapshot?,
-        onFinished: ((Boolean) -> Unit)? = null
+        onFinished: ((Boolean) -> Unit)? = null,
+        /**
+         * Whether the chat's stored messages cannot be read now (an actual
+         * failure), as opposed to the chat having changed or closed. Read
+         * only when [snapshotProvider] returns null.
+         */
+        storageUnavailable: () -> Boolean = { false }
     ) {
         if (manualCompactionRunning || outlineRunning || isRunning()) return
+        cycleResult = SummaryCycleResult()
+        this.storageUnavailable = storageUnavailable
         job = scope.launch {
             var advancedAny = false
             try {
@@ -341,20 +356,26 @@ class SummarizerController(
             } catch (e: Exception) {
                 recordUnexpectedFailure(e, OperationKind.SUMMARIZING, chatName)
             } finally {
+                val result = cycleResult
                 if (operationState is OperationState.Running) {
+                    val failure = lastFailureCategory
                     setOperationState(
-                        if (lastFailureCategory == null) {
-                            OperationState.Succeeded(OperationKind.SUMMARIZING, chatName)
-                        } else {
-                            OperationState.Failed(
+                        when (SummaryCycleResult.endOf(result, failure != null)) {
+                            SummaryCycleResult.End.FAILED -> OperationState.Failed(
+                                OperationKind.SUMMARIZING, chatName, failure ?: SummarizerErrorCategory.UNEXPECTED
+                            )
+                            SummaryCycleResult.End.SUCCEEDED -> OperationState.Succeeded(OperationKind.SUMMARIZING, chatName)
+                            SummaryCycleResult.End.PARTIAL -> OperationState.PartiallyUpdated(OperationKind.SUMMARIZING, chatName)
+                            SummaryCycleResult.End.SUPERSEDED -> OperationState.Cancelled(
                                 OperationKind.SUMMARIZING,
                                 chatName,
-                                lastFailureCategory!!
+                                (operationState as? OperationState.Running)?.successfulMessages ?: 0
                             )
                         }
                     )
                 }
-                onFinished?.invoke(advancedAny && lastFailureCategory == null)
+                // A catch-up is complete only when nothing this run made was thrown away.
+                onFinished?.invoke(advancedAny && lastFailureCategory == null && result.discarded == 0 && !result.stoppedEarly)
             }
         }
     }
@@ -563,7 +584,7 @@ class SummarizerController(
             ChatOutlines.isFull(current) -> return null
             else -> ChatOutlines.afterGenerateNew(current, outline, prompt.id, prompt.name)
         }
-        prefs.setChatOutlines(ChatOutlines.toJson(updated))
+        prefs.setChatOutlines(ChatOutlines.toJson(updated), runToken)
         notifyStateChanged()
         return outline
     }
@@ -969,7 +990,8 @@ class SummarizerController(
         if (!prefs.commitManualCompaction(
                 summary, target, false, target,
                 versionsJson = CompactionVersions.toJson(versions),
-                regenerationLock = CompactionVersions.furthestCount(versions)
+                regenerationLock = CompactionVersions.furthestCount(versions),
+                runSaved = runToken
             )
         ) {
             val configuredModel = prefs.getSummarizerModel()
@@ -1004,7 +1026,15 @@ class SummarizerController(
         chatName: String,
         snapshotProvider: () -> Snapshot?
     ): Boolean {
-        val snapshot = snapshotProvider() ?: return false
+        val snapshot = snapshotProvider() ?: run {
+            // A run already going that can no longer read the chat: an actual failure when its
+            // storage is unavailable, otherwise the chat closed or is changing and the run stops.
+            if (operationState is OperationState.Running) {
+                if (storageUnavailable()) recordChatUnreadable(chatName)
+                else cycleResult = cycleResult.copy(stoppedEarly = true)
+            }
+            return false
+        }
         val chatId = chatIdProvider()
         if (chatId.isBlank()) return false
         val prefs = Preferences.getPreferences(appContext, chatId)
@@ -1045,40 +1075,60 @@ class SummarizerController(
             )
         }
 
-        val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.SUMMARY) ?: return false
-        val text = requestSection(runtime, owned, context) ?: return false
+        val testRequest = sectionRequestForTest
+        val runtime = if (testRequest != null) null
+        else resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.SUMMARY) ?: return false
+        SummarizerRunRecords.sectionStarted(appContext, chatId, runToken)
+        val text = (if (runtime != null) requestSection(runtime, owned, context) else testRequest?.invoke(owned))
+            ?: return false
 
         // Never save a summary written from messages that changed meanwhile.
-        val latest = snapshotProvider()?.sources() ?: return false
+        val latest = snapshotProvider()?.sources() ?: run {
+            if (storageUnavailable()) recordChatUnreadable(chatName) else discardStale()
+            return false
+        }
         if (chatIdProvider() != chatId ||
             !SummarySections.sourceStillCurrent(owned, context, latest)
-        ) return false
+        ) {
+            discardStale()
+            return false
+        }
         val fresh = SummarySectionStore.load(prefs, latest) ?: run {
             recordStorageFailure(prefs, chatName, "Could not load Summary Sections before saving.")
             return false
         }
         val updated = if (replacing != null) {
             val target = fresh.firstOrNull { it.id == replacing.id }
-            if (!SummarySections.canCommitReplacement(replacing, target)) return false
+            if (!SummarySections.canCommitReplacement(replacing, target)) {
+                discardStale()
+                return false
+            }
             fresh.map {
                 if (it.id == replacing.id) SummarySections.newSection(owned, context, text, it.id) else it
             }
         } else {
-            if (SummarySections.coveredCount(fresh, latest) != start) return true
+            if (SummarySections.coveredCount(fresh, latest) != start) {
+                // Another save covered these messages first: this section is not saved.
+                discardStale()
+                return true
+            }
             fresh + SummarySections.newSection(owned, context, text)
         }
-        if (!SummarySectionStore.save(prefs, updated)) {
+        val savedMark = runToken?.let { SummarizerRunRecords.summarySaved(it, cycleResult.saved + 1) }
+        if (!SummarySectionStore.save(prefs, updated, savedMark)) {
             recordFailure(
-                prefs, SummarizerErrorCategory.SAVE_FAILED, runtime.endpoint.label, runtime.model,
+                prefs, SummarizerErrorCategory.SAVE_FAILED, runtime?.endpoint?.label ?: "Not Reported",
+                runtime?.model ?: prefs.getSummarizerModel(),
                 httpStatus = null, detail = null
             )
             return false
         }
         if (!prefs.advanceSummaryRegenerationLockBoundary(SummarySections.coveredCount(updated, latest))) {
-            recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, runtime.endpoint.label,
-                runtime.model, null, "Could not save the Summary Section regeneration boundary. Technical details were recorded in the Error Log.")
+            recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, runtime?.endpoint?.label ?: "Not Reported",
+                runtime?.model ?: prefs.getSummarizerModel(), null, "Could not save the Summary Section regeneration boundary. Technical details were recorded in the Error Log.")
             return false
         }
+        cycleResult = cycleResult.copy(saved = cycleResult.saved + 1)
         notifyStateChanged()
         val running = operationState as? OperationState.Running
         if (running?.kind == OperationKind.SUMMARIZING) {
@@ -1563,6 +1613,36 @@ class SummarizerController(
         )
     }
 
+    /**
+     * Device tests only: answers each summary section's request in place of
+     * the AI service, so the real saving and result tracking can be driven.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var sectionRequestForTest: (suspend (List<SummarySections.SourceMessage>) -> String?)? = null
+
+    /** What this automatic summary run saved and discarded (Owner, 2026-11-25). */
+    private var cycleResult = SummaryCycleResult()
+    private var storageUnavailable: () -> Boolean = { false }
+
+    /** A section made from messages that changed meanwhile was thrown away: not an error. */
+    private fun discardStale() {
+        cycleResult = cycleResult.copy(discarded = cycleResult.discarded + 1)
+    }
+
+    /** The chat's stored messages could not be read when the summary returned: an actual failure. */
+    private fun recordChatUnreadable(chatName: String) {
+        val chatId = chatIdProvider()
+        if (chatId.isBlank()) {
+            lastFailureCategory = SummarizerErrorCategory.SAVE_FAILED
+            return
+        }
+        val prefs = Preferences.getPreferences(appContext, chatId)
+        if (operationState !is OperationState.Running)
+            setOperationState(OperationState.Running(OperationKind.SUMMARIZING, chatName, 0, 0))
+        recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, "Not Reported",
+            prefs.getSummarizerModel(), null, appContext.getString(R.string.summarizer_chat_unreadable_detail))
+    }
+
     private fun recordStorageFailure(prefs: Preferences, chatName: String, detail: String) {
         if (operationState !is OperationState.Running)
             setOperationState(OperationState.Running(OperationKind.SUMMARIZING, chatName, 0, 0))
@@ -1602,10 +1682,27 @@ class SummarizerController(
         listener?.onSummarizerStateChanged()
     }
 
+    /** The running operation's interruption record (SummarizerRunRecords): its token, chat and kind. */
+    private var runToken: String? = null
+    private var runChatId: String = ""
+    private var runKind: OperationKind = OperationKind.SUMMARIZING
+
     private fun setOperationState(state: OperationState) {
         terminalClearJob?.cancel()
         val previous = operationState
         operationState = state
+        if (state is OperationState.Running && previous !is OperationState.Running) {
+            runChatId = chatIdProvider()
+            runKind = state.kind
+            runToken = SummarizerRunRecords.started(appContext, runChatId, state.kind)
+        } else if (state !is OperationState.Running && previous is OperationState.Running) {
+            // Every ending (success, failure, cancellation, a superseded result) removes the record.
+            val token = runToken
+            runToken = null
+            SummarizerRunRecords.ended(appContext, runChatId, runKind, token)
+            val current = chatIdProvider()
+            if (current != runChatId) SummarizerRunRecords.ended(appContext, current, runKind, token)
+        }
         if (state is OperationState.Running) {
             if (previous !is OperationState.Running) {
                 org.teslasoft.assistant.service.SummarizerForegroundService.begin(

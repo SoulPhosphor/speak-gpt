@@ -58,6 +58,25 @@ object UnifiedPortableRestoreCoordinator {
             override val version: Long,
             val outcome: PortableRestoreOutcome
         ) : State
+        /**
+         * The restore's foreground service could not start, and the restore
+         * was cancelled before it wrote anything. Shown once on the restore
+         * screen, which then calls [startFailureShown].
+         */
+        data class StartFailed(
+            override val version: Long,
+            val androidRefused: Boolean
+        ) : State
+    }
+
+    /** What [cancelAfterServiceStartFailure] did. */
+    sealed interface ServiceStartFailureResult {
+        /** Cancelled before applying began: nothing was changed. */
+        data class Cancelled(val phase: ProgressPhase?) : ServiceStartFailureResult
+        /** A restore is applying or restarting: it was not cancelled. */
+        data object StillApplying : ServiceStartFailureResult
+        /** No restore was active. */
+        data object NoRestore : ServiceStartFailureResult
     }
 
     sealed interface UnlockMaterial {
@@ -200,6 +219,50 @@ object UnifiedPortableRestoreCoordinator {
         cleanup(abandoned, keepTransactionForRecovery = false)
         return true
     }
+
+    /**
+     * The restore's foreground service could not start (Owner, 2026-11-25).
+     * Cancels the restore only when [cancel] would: never while it applies or
+     * restarts, so "Nothing was changed" is shown only when it is true.
+     * [record] runs with the result before the state is published, so the
+     * Error Log entry precedes the message being shown.
+     */
+    fun cancelAfterServiceStartFailure(
+        androidRefused: Boolean,
+        record: (ServiceStartFailureResult) -> Unit = {}
+    ): ServiceStartFailureResult {
+        var abandoned: Session? = null
+        val result = synchronized(lock) {
+            val current = session
+            val phase = (state as? State.Progress)?.phase
+            val outcome = when {
+                current == null -> ServiceStartFailureResult.NoRestore
+                phase == ProgressPhase.RESTARTING ||
+                    (phase == ProgressPhase.APPLYING && advancing.get()) -> ServiceStartFailureResult.StillApplying
+                else -> ServiceStartFailureResult.Cancelled(phase)
+            }
+            runCatching { record(outcome) }
+            if (outcome is ServiceStartFailureResult.Cancelled) {
+                session = null
+                abandoned = current
+                publishLocked(State.StartFailed(nextVersionLocked(), androidRefused))
+            }
+            outcome
+        }
+        abandoned?.let { cleanup(it, keepTransactionForRecovery = false) }
+        return result
+    }
+
+    /** The restore screen showed the start failure; the next state is Idle. True when it was current. */
+    fun startFailureShown(version: Long): Boolean = synchronized(lock) {
+        val current = state
+        if (current !is State.StartFailed || current.version != version) return@synchronized false
+        publishLocked(State.Idle(nextVersionLocked()))
+        true
+    }
+
+    /** Whether a start failure waits to be shown on the restore screen. */
+    fun hasPendingStartFailure(): Boolean = synchronized(lock) { state is State.StartFailed }
 
     fun addObserver(observer: Observer): State = synchronized(lock) {
         observers.add(observer)
