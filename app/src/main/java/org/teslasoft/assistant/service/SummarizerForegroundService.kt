@@ -155,6 +155,9 @@ class SummarizerForegroundService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) {
         if (timedOut) return
         timedOut = true
+        // The notification goes with the keep-alive: later progress of an operation still running must not
+        // post it again. The operations themselves stay listed, so a later start shows them again.
+        shownChatId = null
         try {
             val operations = active.entries.map {
                 DataSyncTimeoutLog.SummarizerOperation(it.key, DataSyncTimeoutLog.summarizerKind(it.value.kind.name))

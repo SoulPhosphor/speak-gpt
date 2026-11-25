@@ -31,6 +31,10 @@ class DataSyncTimeoutInstrumentedTest {
     private val app: Context = instrumentation.targetContext.applicationContext
 
     @Before fun setUp() {
+        // So a notification posted again would really appear, and the check below means something.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            shell("pm grant ${app.packageName} android.permission.POST_NOTIFICATIONS")
+        }
         // Opening the app resets Android's time for data-sync services.
         ActivityScenario.launch(MemoryControlsActivity::class.java).close()
     }
@@ -61,6 +65,12 @@ class DataSyncTimeoutInstrumentedTest {
         assertTrue(added, added.contains("[SummarizerService] [WARNING]"))
         assertTrue(added, added.contains("Operations running: compaction for chat $CHAT_ID. The operation was not explicitly cancelled"))
         assertTrue("no chat name is written", !added.contains("Timeout test"))
+
+        // The compaction goes on and reports progress: its notification does not come back.
+        instrumentation.runOnMainSync { SummarizerForegroundService.progress(app, CHAT_ID, 50) }
+        Thread.sleep(500)
+        val shown = app.getSystemService(android.app.NotificationManager::class.java).activeNotifications
+        assertTrue("the keep-alive's notification stays gone", shown.none { it.id == SUMMARIZER_NOTIFICATION_ID })
     }
 
     @Test fun theImageGenerationKeepAliveStopsInTimeLogsOnceAndCancelsNothing() {
@@ -120,5 +130,6 @@ class DataSyncTimeoutInstrumentedTest {
 
     private companion object {
         const val CHAT_ID = "timeout-test-chat"
+        const val SUMMARIZER_NOTIFICATION_ID = 9931
     }
 }
