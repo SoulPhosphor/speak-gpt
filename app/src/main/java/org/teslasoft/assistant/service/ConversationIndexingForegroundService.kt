@@ -343,10 +343,7 @@ class ConversationIndexingForegroundService : Service() {
             // A catch-up or rebuild shows at once. An ordinary update uses Android's usual behaviour,
             // which may hold the notification back while the work is short (Owner, 2026-11-25); the
             // indexing itself is never delayed for it.
-            .setForegroundServiceBehavior(
-                if (content == BackgroundIndexingContent.Updating) NotificationCompat.FOREGROUND_SERVICE_DEFAULT
-                else NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE
-            )
+            .setForegroundServiceBehavior(BackgroundIndexingRule.foregroundBehavior(content))
         when (content) {
             null -> Unit
             BackgroundIndexingContent.Updating -> builder

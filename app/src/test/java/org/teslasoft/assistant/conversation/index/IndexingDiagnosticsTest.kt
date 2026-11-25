@@ -77,6 +77,13 @@ class IndexingDiagnosticsTest {
         assertEquals("a catch-up keeps its own percentage", BackgroundIndexingStep.Show(BackgroundIndexingContent.Percent(42)),
             next(pending = true, display = IndexingDisplay.Running(IndexingNumbers(42, 3, 9))))
         assertEquals(BackgroundIndexingStep.Stop(BackgroundStopReason.NOTIFICATIONS_OFF), next(pending = true, notifications = false))
+        // Android's usual timing for an ordinary update; everything else shows at once.
+        assertEquals(androidx.core.app.NotificationCompat.FOREGROUND_SERVICE_DEFAULT,
+            BackgroundIndexingRule.foregroundBehavior(BackgroundIndexingContent.Updating))
+        for (content in listOf(BackgroundIndexingContent.Counting, BackgroundIndexingContent.Rebuilding,
+            BackgroundIndexingContent.Percent(3), null)) {
+            assertEquals(androidx.core.app.NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE, BackgroundIndexingRule.foregroundBehavior(content))
+        }
         assertFalse(BackgroundStopReason.NOTIFICATIONS_OFF.isAndroidLimit)
     }
 

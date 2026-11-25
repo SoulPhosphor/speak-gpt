@@ -177,10 +177,6 @@ class ConversationIndexingServiceInstrumentedTest {
             val updating = waitForIndexing { text(it) == "Updating conversation index…" }
             assertEquals("Indexing Conversations", updating.notification.extras.getString(Notification.EXTRA_TITLE))
             assertTrue("a moving bar", updating.notification.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                assertEquals("Android's usual timing, not immediate",
-                    Notification.FOREGROUND_SERVICE_DEFAULT, updating.notification.foregroundServiceBehavior)
-            }
             step = BackgroundIndexingStep.Stop(BackgroundStopReason.UPDATES_DONE)
             waitFor("the service stops when the updates are done") { !onMain { ConversationIndexingForegroundService.isRunning } }
             val log = Logger.getIndexingLog(app)

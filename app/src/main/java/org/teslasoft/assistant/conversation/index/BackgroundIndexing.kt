@@ -186,6 +186,18 @@ object BackgroundIndexingRule {
     }
 
     const val START_NOT_ALLOWED = "android.app.ForegroundServiceStartNotAllowedException"
+
+    /** NotificationCompat.FOREGROUND_SERVICE_DEFAULT and FOREGROUND_SERVICE_IMMEDIATE. */
+    const val NOTIFICATION_TIMING_DEFAULT = 0
+    const val NOTIFICATION_TIMING_IMMEDIATE = 1
+
+    /**
+     * A catch-up, counting or rebuild shows at once. An ordinary update uses
+     * Android's usual timing, which may hold the notification back while the
+     * work is short (Owner, 2026-11-25); indexing itself is never delayed.
+     */
+    fun foregroundBehavior(content: BackgroundIndexingContent?): Int =
+        if (content == BackgroundIndexingContent.Updating) NOTIFICATION_TIMING_DEFAULT else NOTIFICATION_TIMING_IMMEDIATE
 }
 
 /** The approved diagnostic lines of the background service (Owner, 2026-11-24, Step 13). No content is ever written. */
