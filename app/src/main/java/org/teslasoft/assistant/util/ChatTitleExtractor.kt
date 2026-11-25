@@ -47,6 +47,14 @@ object ChatTitleExtractor {
     private val LIST_MARKER = Regex("^(?:[-*•]|\\d+[.)])\\s+")
     private val HEADING_MARKER = Regex("^#+\\s*")
 
+    /** The caller holds the chat-list lock until the chosen title is saved. */
+    fun availableTitle(title: String, existingTitles: Set<String>): String {
+        if (title !in existingTitles) return title
+        var number = 1
+        while ("$title $number" in existingTitles) number++
+        return "$title $number"
+    }
+
     fun extract(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
         val visible = raw.replace(THINK_BLOCK, "\n").replace(UNCLOSED_THINK, "\n")
@@ -84,6 +92,8 @@ object ChatTitleExtractor {
             .trim()
 
         if (cleaned.isEmpty()) return null
+        // Markdown separators and other punctuation-only replies are not titles.
+        if (cleaned.none { it.isLetterOrDigit() }) return null
         // Titles do not end like sentences; thinking and chatter do.
         if (!labeled && (cleaned.endsWith(".") || cleaned.endsWith("!"))) return null
         if (cleaned.length > MAX_TITLE_CHARS) return null

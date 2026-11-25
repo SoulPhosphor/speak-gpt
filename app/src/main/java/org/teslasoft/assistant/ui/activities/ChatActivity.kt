@@ -13116,7 +13116,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     ?: currentProviderUsageAttempt
             val providerEvidence = evidenceOwner?.diagnosticSnapshot()
             val genError = GenerationErrorClassifier.classify(e, providerEvidence)
-            logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence)
+            logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence,
+                providerRequestWasSent = providerRequestDispatched)
 
             if (genError.isVisionRejection && conversationHasFullImages(requestMessageIncludes())) {
                 recordVisionCapability(
@@ -13387,12 +13388,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         e: Throwable,
         trigger: String,
         failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot? = null,
-        providerEvidence: ProviderDiagnosticSnapshot? = null
+        providerEvidence: ProviderDiagnosticSnapshot? = null,
+        providerRequestWasSent: Boolean = false
     ) {
         val voiceLive = org.teslasoft.assistant.util.resolveFailureVoiceState(
             failureSnapshot,
             isVoiceLive()
         )
+        // Provider-key rejections belong to the provider-failure path.
+        if (providerRequestWasSent && result.code == GenErrorCode.A1 && result.reachedServer()) {
+            logVoiceFailureSnapshot(result.code.code, voiceLive)
+            return
+        }
         try {
             val sb = StringBuilder()
             if (result.code == GenErrorCode.U0) {
@@ -14855,9 +14862,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Persist the title off the main thread. Keep the rename
         // guard across the IO suspension; the chat ID never changes.
         renameInProgress = true
+        var savedName = newChatName
         val renamed = try {
             withContext(Dispatchers.IO) {
-                ChatPreferences.getChatPreferences().editChat(this@ChatActivity, newChatName, placeholderName, chatId)
+                val chats = ChatPreferences.getChatPreferences()
+                if (autoNameAttempts >= AUTO_NAME_MAX_ATTEMPTS) {
+                    val numbered = chats.editChatWithNumberedTitle(this@ChatActivity, newChatName, placeholderName, chatId)
+                    if (numbered != null) savedName = numbered
+                    numbered != null
+                } else {
+                    chats.editChat(this@ChatActivity, newChatName, placeholderName, chatId)
+                }
             }
         } catch (e: Exception) {
             logVoiceEventAlways("auto-name rename threw (${e.message}); keeping the placeholder name and old chat id")
@@ -14872,9 +14887,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (renamed && !isFinishing && !isDestroyed) {
             // Update the display and restored title only. Existing
             // preferences, voice playback and jobs keep the same ID.
-            this.chatName = newChatName
+            this.chatName = savedName
             intent.putExtra("name", this.chatName)
-            activityTitle?.text = newChatName
+            activityTitle?.text = savedName
             autoNameAttempts = 0
             logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
         } else if (!renamed) {

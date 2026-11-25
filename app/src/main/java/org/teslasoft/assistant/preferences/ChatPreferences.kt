@@ -987,6 +987,17 @@ class ChatPreferences private constructor() {
      * memory records stay at it. A pre-ID legacy row remains on its historical
      * title-hash compatibility path: its files move transactionally to the new
      * title hash, without writing an ID into the row. */
+    /** Choose and save a numbered automatic title atomically; manual renames keep their existing rules. */
+    fun editChatWithNumberedTitle(context: Context, title: String, previousName: String, chatId: String): String? =
+        synchronized(CHAT_LIST_LOCK) {
+            val existingTitles = getChatMetadataList(context)
+                .filter { storedChatId(it) != chatId }
+                .mapNotNull { it["name"] }
+                .toSet()
+            val available = org.teslasoft.assistant.util.ChatTitleExtractor.availableTitle(title, existingTitles)
+            if (editChat(context, available, previousName, chatId)) available else null
+        }
+
     fun editChat(context: Context, chatName: String, previousName: String, chatId: String): Boolean {
         if (chatName == previousName) return true
 
