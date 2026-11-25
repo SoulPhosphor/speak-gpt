@@ -45,31 +45,46 @@ object SummarizerInterruptionReport {
 
     fun reportAtStartup(context: Context) {
         val app = context.applicationContext
+        val live = SavedChatIndexSource(app).chatIdsNewestFirst()?.toSet()
         val interrupted = SummarizerRunRecords.takeInterrupted(
             app,
-            savedMark = { chatId, kind -> Preferences.getPreferences(app, chatId).getSummarizerRunSaved(kind.name) },
-            liveChats = { SavedChatIndexSource(app).chatIdsNewestFirst()?.toSet() }
+            savedMark = { chatId, kind -> readableSettings(app, chatId)?.getSummarizerRunSaved(kind.name) },
+            liveChats = { live }
         )
-        if (interrupted.isEmpty()) return
-        val live = SavedChatIndexSource(app).chatIdsNewestFirst()?.toSet().orEmpty()
         for (item in interrupted) {
+            if (item.chatId in live.orEmpty()) {
+                // The chat's settings were readable a moment ago; the record stays unless its entry is saved.
+                val prefs = readableSettings(app, item.chatId) ?: continue
+                val saved = try {
+                    val entries = withInterruption(
+                        SummarizerErrorLog.fromJson(prefs.getSummarizerErrors()),
+                        item.kind, System.currentTimeMillis(), prefs.getSummarizerModel()
+                    )
+                    val json = SummarizerErrorLog.toJson(entries)
+                    prefs.setSummarizerErrors(json)
+                    // A compaction or summary leaves the automatic summary behind, as its failures do.
+                    if (item.kind != SummarizerController.OperationKind.OUTLINING) {
+                        prefs.setSummarizerEpisode(SummarizerErrorCategory.INTERRUPTED.name)
+                    }
+                    prefs.setSummarizerErrorsUnseen(true)
+                    prefs.getSummarizerErrors() == json
+                } catch (_: Exception) {
+                    false
+                }
+                if (!saved) continue
+            }
             try {
                 Logger.log(app, "crash", TAG, "warning", errorLogLine(item))
             } catch (_: Throwable) { }
-            if (item.chatId !in live) continue
-            try {
-                val prefs = Preferences.getPreferences(app, item.chatId)
-                val entries = withInterruption(
-                    SummarizerErrorLog.fromJson(prefs.getSummarizerErrors()),
-                    item.kind, System.currentTimeMillis(), prefs.getSummarizerModel()
-                )
-                prefs.setSummarizerErrors(SummarizerErrorLog.toJson(entries))
-                // A compaction or summary leaves the automatic summary behind, as its failures do.
-                if (item.kind != SummarizerController.OperationKind.OUTLINING) {
-                    prefs.setSummarizerEpisode(SummarizerErrorCategory.INTERRUPTED.name)
-                }
-                prefs.setSummarizerErrorsUnseen(true)
-            } catch (_: Exception) { /* the Error Log entry stands */ }
+            SummarizerRunRecords.reported(app, item)
         }
+    }
+
+    /** A chat's settings, or null when they are locked or cannot be read now. */
+    private fun readableSettings(app: Context, chatId: String): Preferences? = try {
+        val prefs = Preferences.getPreferences(app, chatId)
+        if (org.teslasoft.assistant.preferences.SecurePrefs.isLockedName("settings.$chatId")) null else prefs
+    } catch (_: Exception) {
+        null
     }
 }

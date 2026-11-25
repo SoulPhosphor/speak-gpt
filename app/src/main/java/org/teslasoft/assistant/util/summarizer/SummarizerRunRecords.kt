@@ -33,8 +33,8 @@ object SummarizerRunRecords {
         fun remove(key: String)
     }
 
-    /** What was still unfinished, for the report. */
-    data class Interrupted(val chatId: String, val kind: SummarizerController.OperationKind)
+    /** What was still unfinished, for the report; [key] is its record, removed by [reported]. */
+    data class Interrupted(val chatId: String, val kind: SummarizerController.OperationKind, val key: String = "$chatId|${kind.name}")
 
     /** This process; records written by it are never reported by it. */
     val session: String = UUID.randomUUID().toString()
@@ -99,15 +99,18 @@ object SummarizerRunRecords {
     fun summarySaved(token: String, savedSections: Int) = "$token:$savedSections"
 
     /**
-     * Records left by an earlier process: each is either reported (returned)
-     * or recognised as finished, and removed either way, so it is reported
-     * once. [savedMark] reads a chat's saved mark for a kind; [liveChats] is
-     * the chat list, or null when it cannot be read now, in which case nothing
-     * is decided and the records stay for the next start.
+     * Records left by an earlier process. One whose run saved its result is
+     * removed at once; an unfinished one is returned and stays until the
+     * caller has written its report and calls [reported], so it is reported
+     * once and never lost. [savedMark] reads a chat's saved mark for a kind,
+     * or null when the chat's settings cannot be read now (locked or
+     * unreadable): that record is left alone for a later start. [liveChats]
+     * is the chat list, or null when it cannot be read now, in which case
+     * nothing is decided.
      */
     fun takeInterrupted(
         context: Context,
-        savedMark: (chatId: String, kind: SummarizerController.OperationKind) -> String,
+        savedMark: (chatId: String, kind: SummarizerController.OperationKind) -> String?,
         liveChats: () -> Set<String>?
     ): List<Interrupted> {
         val store = try { store(context) } catch (_: Exception) { return emptyList() }
@@ -120,15 +123,28 @@ object SummarizerRunRecords {
         val live = liveChats() ?: return emptyList()
         val out = ArrayList<Interrupted>()
         for ((k, record) in earlier) {
-            try { store.remove(k) } catch (_: Exception) { continue }
-            record ?: continue
             val chatId = k.substringBeforeLast('|')
-            val kind = runCatching { SummarizerController.OperationKind.valueOf(k.substringAfterLast('|')) }.getOrNull() ?: continue
-            val mark = if (chatId in live) runCatching { savedMark(chatId, kind) }.getOrDefault("") else ""
-            if (!unfinished(kind, record, mark)) continue
-            out += Interrupted(chatId, kind)
+            val kind = runCatching { SummarizerController.OperationKind.valueOf(k.substringAfterLast('|')) }.getOrNull()
+            if (record == null || kind == null) {
+                // Not a record this version can read: nothing to report.
+                runCatching { store.remove(k) }
+                continue
+            }
+            val mark = if (chatId in live) {
+                (try { savedMark(chatId, kind) } catch (_: Exception) { null }) ?: continue
+            } else ""
+            if (!unfinished(kind, record, mark)) {
+                runCatching { store.remove(k) }
+                continue
+            }
+            out += Interrupted(chatId, kind, k)
         }
         return out
+    }
+
+    /** The interruption's report was written: its record goes, so it is never reported again. */
+    fun reported(context: Context, interrupted: Interrupted) {
+        try { store(context).remove(interrupted.key) } catch (_: Exception) { }
     }
 
     /** Whether the run left unfinished work, from its record and the mark its last save wrote. */

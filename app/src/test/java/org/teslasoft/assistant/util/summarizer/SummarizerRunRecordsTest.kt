@@ -42,6 +42,8 @@ class SummarizerRunRecordsTest {
         override fun remove(key: String) { stored.remove(key) }
     }
     private val marks = HashMap<Pair<String, OperationKind>, String>()
+    /** Chats whose settings are locked or unreadable now. */
+    private val locked = HashSet<String>()
 
     @Before fun setUp() { SummarizerRunRecords.storeForTest = store }
     @After fun tearDown() { SummarizerRunRecords.storeForTest = null }
@@ -52,7 +54,11 @@ class SummarizerRunRecordsTest {
     }
 
     private fun take(live: Set<String>? = setOf("chat")) =
-        SummarizerRunRecords.takeInterrupted(context, { chat, kind -> marks[chat to kind] ?: "" }, { live })
+        SummarizerRunRecords.takeInterrupted(context, { chat, kind -> if (chat in locked) null else marks[chat to kind] ?: "" }, { live })
+
+    /** Takes the interruptions and writes their reports, as the start-up report does. */
+    private fun takeAndReport(live: Set<String>? = setOf("chat")) =
+        take(live).onEach { SummarizerRunRecords.reported(context, it) }
 
     // --- Result of an automatic summary run ------------------------------------
 
@@ -99,9 +105,30 @@ class SummarizerRunRecordsTest {
 
     @Test fun anInterruptedCompactionIsReportedOnceAndRepeatedStartsReportNothing() {
         earlierSession("chat", OperationKind.COMPACTING, "t1")
-        assertEquals(listOf(SummarizerRunRecords.Interrupted("chat", OperationKind.COMPACTING)), take())
+        assertEquals(listOf(SummarizerRunRecords.Interrupted("chat", OperationKind.COMPACTING)), takeAndReport())
+        assertTrue(takeAndReport().isEmpty())
+        assertTrue(takeAndReport().isEmpty())
+    }
+
+    @Test fun aReportThatCouldNotBeWrittenKeepsItsRecordForTheNextStart() {
+        earlierSession("chat", OperationKind.COMPACTING, "t1")
+        assertEquals(1, take().size)
+        // Not reported (its entry could not be saved): the record stays and the next start tries again.
+        assertEquals(1, take().size)
+        assertEquals(1, takeAndReport().size)
         assertTrue(take().isEmpty())
-        assertTrue(take().isEmpty())
+    }
+
+    @Test fun aChatWhoseSettingsAreLockedDecidesNothingUntilTheyCanBeRead() {
+        // The compaction saved its result, but its mark cannot be read now: never reported as unsaved.
+        earlierSession("chat", OperationKind.COMPACTING, "t1")
+        marks["chat" to OperationKind.COMPACTING] = "t1"
+        locked += "chat"
+        assertTrue(takeAndReport().isEmpty())
+        assertEquals("the record waits", 1, stored.size)
+        locked.clear()
+        assertTrue("readable again: recognised as saved", takeAndReport().isEmpty())
+        assertTrue(stored.isEmpty())
     }
 
     @Test fun aCompactionOrOutlineThatSavedItsResultBeforeTheAppStoppedIsNotReported() {
@@ -113,13 +140,13 @@ class SummarizerRunRecordsTest {
         assertTrue(stored.isEmpty())
         // A mark left by an earlier, different run does not count as this one's save.
         earlierSession("chat", OperationKind.COMPACTING, "t3")
-        assertEquals(1, take().size)
+        assertEquals(1, takeAndReport().size)
     }
 
     @Test fun aSummaryIsReportedOnlyWhenASectionItStartedWasNeverSaved() {
         earlierSession("chat", OperationKind.SUMMARIZING, "s1", started = 2)
         marks["chat" to OperationKind.SUMMARIZING] = SummarizerRunRecords.summarySaved("s1", 1)
-        assertEquals(listOf(SummarizerRunRecords.Interrupted("chat", OperationKind.SUMMARIZING)), take())
+        assertEquals(listOf(SummarizerRunRecords.Interrupted("chat", OperationKind.SUMMARIZING)), takeAndReport())
 
         // Every section it started was saved; it stopped before its clean-up.
         earlierSession("chat", OperationKind.SUMMARIZING, "s2", started = 2)
@@ -143,7 +170,7 @@ class SummarizerRunRecordsTest {
         earlierSession("chat", OperationKind.COMPACTING, "t1")
         assertTrue(take(live = null).isEmpty())
         assertEquals(1, stored.size)
-        assertEquals(1, take().size)
+        assertEquals(1, takeAndReport().size)
     }
 
     @Test fun aRenameMovesTheRecordSoItsEndStillRemovesIt() {
@@ -156,7 +183,7 @@ class SummarizerRunRecordsTest {
 
     @Test fun aDeletedChatsInterruptionIsStillReported() {
         earlierSession("gone", OperationKind.OUTLINING, "t1")
-        assertEquals(listOf(SummarizerRunRecords.Interrupted("gone", OperationKind.OUTLINING)), take(live = setOf("chat")))
+        assertEquals(listOf(SummarizerRunRecords.Interrupted("gone", OperationKind.OUTLINING)), takeAndReport(live = setOf("chat")))
     }
 
     // --- What is written -----------------------------------------------------------
