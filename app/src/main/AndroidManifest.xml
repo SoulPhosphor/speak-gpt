@@ -792,6 +792,12 @@
             android:name=".service.RestoreForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- Conversation indexing after the app is closed (Step 13): keeps a
+             catch-up with work left running, with its notification. dataSync. -->
+        <service
+            android:name=".service.ConversationIndexingForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <!-- Prepares the chat list's details for existing chats right after an update. -->
         <receiver
             android:name=".preferences.chatnavigation.AppUpdatedReceiver"

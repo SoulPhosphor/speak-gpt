@@ -96,6 +96,8 @@ class MainApplication : Application() {
         DynamicColors.applyToActivitiesIfAvailable(this)
         // Conversation index notices appear on the screen in front (Step 11).
         org.teslasoft.assistant.ui.conversationindex.ConversationIndexNotices.register(this)
+        // Conversation indexing continues after the app is closed (Step 13).
+        org.teslasoft.assistant.service.AppBackgroundIndexing.register(this)
         ThemeManager.getThemeManager().applyTheme(this, isDarkThemeEnabled() && GlobalPreferences.getPreferences(this).getAmoledPitchBlack())
 
         if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
