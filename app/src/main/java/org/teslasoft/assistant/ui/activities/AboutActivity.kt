@@ -49,7 +49,6 @@ class AboutActivity : SettingsPageActivity() {
     private var btnProjects: MaterialButton? = null
     private var btnTerms: MaterialButton? = null
     private var btnPrivacy: MaterialButton? = null
-    private var btnFeedback: MaterialButton? = null
     private var appVer: TextView? = null
     private var btnDonate: MaterialButton? = null
     private var btnGithub: MaterialButton? = null
@@ -78,7 +77,6 @@ class AboutActivity : SettingsPageActivity() {
         btnProjects = findViewById(R.id.btn_projects)
         btnTerms = findViewById(R.id.btn_terms)
         btnPrivacy = findViewById(R.id.btn_privacy)
-        btnFeedback = findViewById(R.id.btn_feedback)
         appVer = findViewById(R.id.app_ver)
         btnDonate = findViewById(R.id.btn_donate)
         btnGithub = findViewById(R.id.btn_github)
@@ -146,10 +144,7 @@ class AboutActivity : SettingsPageActivity() {
         }
 
         btnProjects?.setOnClickListener {
-            val i = Intent()
-            i.data = "https://andrax.dev/".toUri()
-            i.action = Intent.ACTION_VIEW
-            startActivity(i)
+            Toast.makeText(this, R.string.about_action_unavailable, Toast.LENGTH_SHORT).show()
         }
 
         // The terms/privacy pages were hosted by the upstream Teslasoft
@@ -158,23 +153,13 @@ class AboutActivity : SettingsPageActivity() {
         btnTerms?.visibility = View.GONE
         btnPrivacy?.visibility = View.GONE
 
-        btnFeedback?.setOnClickListener {
-            val i = Intent()
-            i.data = "mailto:dostapenko82@gmail.com".toUri()
-            i.action = Intent.ACTION_VIEW
-            startActivity(i)
-        }
-
         btnDonate?.setOnClickListener {
-            val i = Intent()
-            i.data = "https://ko-fi.com/andrax_dev".toUri()
-            i.action = Intent.ACTION_VIEW
-            startActivity(i)
+            Toast.makeText(this, R.string.about_action_unavailable, Toast.LENGTH_SHORT).show()
         }
 
         btnGithub?.setOnClickListener {
             val i = Intent()
-            i.data = "https://github.com/AndraxDev/speak-gpt".toUri()
+            i.data = "https://github.com/SoulPhosphor/speak-gpt".toUri()
             i.action = Intent.ACTION_VIEW
             startActivity(i)
         }

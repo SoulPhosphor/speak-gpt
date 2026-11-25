@@ -5571,7 +5571,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (memoryScanAvailable) {
                     menu.add(Menu.NONE, 12, 5, R.string.chat_menu_scan_memories)
                 }
-                // Rename sits directly above Delete (owner ruling, Nov 18 2026).
+                if (savedChat != null) {
+                    menu.add(Menu.NONE, 13, 5, R.string.chat_move_to_folder)
+                }
+                // Move to Folder sits directly above Rename.
                 menu.add(Menu.NONE, 11, 5, R.string.prompt_menu_rename)
                 if (savedChat != null) {
                     menu.add(Menu.NONE, 7, 4, R.string.chat_menu_change_username)
@@ -5629,6 +5632,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         }
                         3 -> {
                             showChatDeleteDialog()
+                            true
+                        }
+                        13 -> {
+                            drawerController?.moveCurrentChatToFolder()
                             true
                         }
                         11 -> {
@@ -5719,7 +5726,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    private fun showChatDeleteDialog() {
+    internal fun showChatDeleteDialog() {
         if (chatId.isBlank() || deletingChat) return
         ChatDeletionRequestCoordinator.requestChats(
             activity = this,
@@ -8065,6 +8072,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
 
                 override fun onForceUpdate() {
+                    // The waiting assistant row may not have reached a stream
+                    // checkpoint yet. Keep the live snapshot before the new
+                    // screen reads history; ordered reads also see pending saves.
+                    saveSettingsInBackground()
                     // Rebuilding the screen finishes this one. A provisional
                     // conversation must survive that: carry its provisional
                     // state into the new screen, and do not let this finish
