@@ -45,6 +45,7 @@ class DedicatedModelRouting private constructor(val scope: ModelPickerScope) {
             ModelPickerScope.SUMMARIZER -> SUMMARIZER
             ModelPickerScope.MEMORY_SCANNER -> MEMORY_SCANNER
             ModelPickerScope.MEMORY_CONTEXT_HELPER -> MEMORY_CONTEXT_HELPER
+            ModelPickerScope.IMAGE_GENERATION -> throw IllegalArgumentException("Image generation uses its own request path")
             ModelPickerScope.CHAT -> throw IllegalArgumentException("Chat routing belongs to ChatModelRouting")
         }
 

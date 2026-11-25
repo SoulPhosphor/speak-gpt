@@ -2268,3 +2268,16 @@ The setup page uses `ActionBar` / `BackButton` / `Title.NearBack` / `SaveButton`
 ## Parallel response tabs
 
 `view_parallel_response_controls.xml` and `ParallelResponseTabs` bind one assistant group's model tabs, individual completion states, the selected model's regeneration versions, and Stop This Model / Stop All. `Widget.App.ParallelResponse.Controls` owns the vertical host; `Widget.App.ParallelResponse.Tab` inherits `Row.Subtitle` and owns touch geometry, wrapping, truncation, selected text color and ripple. The primary star uses `appRowSubtitleColor`; active text uses `colorPrimary`. Status uses `Row.Subtitle`, and stop actions use `AppButton.Destructive.Inline`. Tabs scroll horizontally on narrow screens. Browsing never changes canonical history; Send adopts the selected answer under existing branch protections. No Make Primary control is added. Device acceptance remains pending.
+
+## Image Generation settings
+
+The Model row opens the shared Favorites / Recent / View All selector with
+image-generation-only catalogs and independent saved lists. The API profile is
+chosen in View All. Model cards retain shared pin, favorite and delete actions;
+text sampling, reasoning and chat-provider routing controls are not applicable.
+
+`Widget.App.ImageGeneration.InputFrame` owns the standard `Field.Box` outline
+for the number and text controls. The transparent `Input` / `NumberInput` child
+retains standard padding. The frame has no top margin and the horizontal row
+has baseline alignment disabled, keeping the full border inside the row even
+while text scrolls or font size changes.

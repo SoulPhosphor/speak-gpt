@@ -73,6 +73,35 @@ class ChatHistoryWriteOrderTest {
             scheduler.shutdownNow()
         }
     }
+    @Test fun aReplacementScreenCanReadTheWaitingReplyBeforeItsFirstTokenIsSaved() {
+        val order = ChatHistoryWriteOrder(scheduler = null)
+        val live = listOf(
+            hashMapOf<String, Any>("isBot" to false, "message" to "question"),
+            hashMapOf<String, Any>(
+                "isBot" to true,
+                "message" to "",
+                MessageIdentity.KEY to "waiting-reply",
+                MessageCompletionState.KEY_STATE to MessageCompletionState.STREAMING
+            )
+        )
+        // Neither the initial save nor the replacement screen's read can
+        // write yet. The kept snapshot must still carry a retry target.
+        order.saveInBackground(chat, order.claim(chat),
+            ChatHistoryWriteOrder.snapshotOf(live), false,
+            ChatHistoryWriteOrder.Writer { _, _, _ -> false })
+        live.last()["message"] = "late token on the old screen"
+
+        val reopened = requireNotNull(order.beforeRead(chat))
+        val reply = reopened.last()
+        assertEquals(2, reopened.size)
+        assertEquals(true, reply["isBot"])
+        assertEquals("", reply["message"])
+        assertEquals("waiting-reply", reply[MessageIdentity.KEY])
+        assertEquals(MessageCompletionState.INTERRUPTED,
+            MessageCompletionState.reconcileOnLoad(reply[MessageCompletionState.KEY_STATE]?.toString()))
+        assertTrue(order.hasPending(chat))
+    }
+
     private val chat = "chat-a"
 
     /** Stands in for stored history: the last list written per chat. */

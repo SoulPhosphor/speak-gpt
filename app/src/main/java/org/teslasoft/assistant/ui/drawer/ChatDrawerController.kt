@@ -56,7 +56,14 @@ class ChatDrawerController private constructor(
     private val updates = DrawerUpdateDispatcher()
     // A chat is already being opened from this drawer; further taps wait for it.
     private var opening = false
-    private val rowActions = DrawerRowActions(activity) { refresh() }
+    private val rowActions = DrawerRowActions(activity, deleteCurrentChat = { id ->
+        if (id == currentChatId() && activity is ChatActivity) {
+            activity.showChatDeleteDialog()
+            true
+        } else {
+            false
+        }
+    }) { refresh() }
     private val rowCallbacks = object : DrawerHierarchyAdapter.Callbacks {
         override fun onClick(row: DrawerRow) = handleClick(row)
         override fun onLongClick(anchor: View, row: DrawerRow) = rowActions.onLongClick(anchor, row)
@@ -149,6 +156,19 @@ class ChatDrawerController private constructor(
     fun close() {
         drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START)
         drawer.closeDrawer(GravityCompat.START, true)
+    }
+
+    fun moveCurrentChatToFolder() {
+        val id = currentChatId()
+        if (id.isBlank()) return
+        rowActions.showMoveChooser(id) { folderName ->
+            val message = if (folderName != null) {
+                activity.getString(R.string.chat_moved_to_folder, folderName)
+            } else {
+                activity.getString(R.string.chat_moved_out_of_folder)
+            }
+            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun isOpen(): Boolean = drawer.isDrawerOpen(GravityCompat.START)

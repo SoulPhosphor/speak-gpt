@@ -21,7 +21,6 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -33,6 +32,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.ScreenChrome
 
 /**
  * The Log Cabin: every diagnostic log in one place, reached from its own row
@@ -80,6 +80,7 @@ class LogCabinActivity : SettingsPageActivity() {
 
         bindViews()
         applyTheme()
+        ScreenChrome.fitSystemBars(findViewById(R.id.root), actionBar, findViewById<ScrollView>(R.id.scroll))
         initLogic()
     }
 
@@ -167,35 +168,6 @@ class LogCabinActivity : SettingsPageActivity() {
         rowSystemLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", Logger.SYSTEM_LOG_TYPE).putExtra("chatId", chatId))
         }
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        adjustPaddings()
-    }
-
-    private fun adjustPaddings() {
-        if (Build.VERSION.SDK_INT < 35) return
-        try {
-            actionBar?.setPadding(
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.statusBars()).top,
-                0,
-                0
-            )
-            val scroll = findViewById<ScrollView>(R.id.scroll)
-            scroll?.setPadding(
-                0,
-                0,
-                0,
-                window.decorView.rootWindowInsets.getInsets(WindowInsets.Type.navigationBars()).bottom + pxToDp(24)
-            )
-        } catch (_: Exception) { /* unused */ }
-    }
-
-    private fun pxToDp(px: Int): Int {
-        val density = resources.displayMetrics.density
-        return (px * density).toInt()
     }
 
     private fun isDarkThemeEnabled(): Boolean {

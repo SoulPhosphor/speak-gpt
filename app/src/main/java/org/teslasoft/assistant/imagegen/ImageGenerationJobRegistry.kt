@@ -226,6 +226,10 @@ object ImageGenerationJobRegistry {
         deletionGuard.markChatsDeleted(chatIds)
     }
 
+    /** The in-flight generations as (chat ID, image ID), for the keep-alive
+     *  service's time-limit log. Same thread as [activeJob]. */
+    fun activeJobIds(): List<Pair<String, String>> = jobs.values.map { it.chatId to it.imageId }
+
     /** The chat's in-flight generation, or null — the screen's restore
      *  check on (re)open. */
     fun activeJob(chatId: String): ActiveJob? = jobs[chatId]

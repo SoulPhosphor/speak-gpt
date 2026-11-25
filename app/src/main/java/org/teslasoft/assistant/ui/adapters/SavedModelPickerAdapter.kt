@@ -124,7 +124,8 @@ internal class SavedModelPickerAdapter(
         holder.pin.isVisible = !catalog && row.pinned
         holder.pin.setOnClickListener { onPin(settings, false) }
 
-        val showsReasoning = capability.isReasoningCapable || row.advertisesReasoning
+        val showsReasoning = scope != ModelPickerScope.IMAGE_GENERATION &&
+            (capability.isReasoningCapable || row.advertisesReasoning)
         // Reasoning settings belong to chat models; the Summarizer does not
         // send them, so its rows only show whether a model reasons.
         val canConfigure = !catalog && capability.hasConfigurableSetting && scope == ModelPickerScope.CHAT
@@ -151,7 +152,7 @@ internal class SavedModelPickerAdapter(
                 popup.add(PIN, 0, context.getString(R.string.chat_menu_pin), enabled = !row.pinned)
                 popup.add(FAVORITE, 1, context.getString(R.string.model_picker_favorite), enabled = !row.saved)
             }
-            if (!catalog && modelSettingsEnabled) {
+            if (!catalog && modelSettingsEnabled && scope != ModelPickerScope.IMAGE_GENERATION) {
                 popup.add(MODEL_SETTINGS, 2, context.getString(R.string.model_picker_model_settings))
             }
             if (!catalog) popup.add(DELETE, 3, context.getString(R.string.btn_delete))
