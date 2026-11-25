@@ -158,6 +158,19 @@ class ChatDrawerController private constructor(
         drawer.closeDrawer(GravityCompat.START, true)
     }
 
+    fun moveCurrentChatToFolder() {
+        val id = currentChatId()
+        if (id.isBlank()) return
+        rowActions.showMoveChooser(id) { folderName ->
+            val message = if (folderName != null) {
+                activity.getString(R.string.chat_moved_to_folder, folderName)
+            } else {
+                activity.getString(R.string.chat_moved_out_of_folder)
+            }
+            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     fun isOpen(): Boolean = drawer.isDrawerOpen(GravityCompat.START)
 
     /**
