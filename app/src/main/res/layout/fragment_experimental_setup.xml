@@ -37,7 +37,7 @@
             </LinearLayout>
             <LinearLayout android:id="@+id/experimental_parallel_controls" style="@style/Widget.App.StackedSelector.Group">
                 <com.google.android.material.button.MaterialButton android:id="@+id/experimental_choose_models"
-                    style="@style/AppButton.Primary" android:text="@string/experimental_choose_models" />
+                    style="@style/AppButton.Primary.Inline" android:text="@string/experimental_choose_models" />
                 <TextView style="@style/Widget.App.Section.Title" android:text="@string/experimental_primary_model" />
                 <LinearLayout android:id="@+id/experimental_primary_models" style="@style/Widget.App.StackedSelector.Group" />
                 <include layout="@layout/view_parallel_model_image_policy" />

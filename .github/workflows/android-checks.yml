@@ -247,6 +247,7 @@ jobs:
             org.teslasoft.assistant.conversation.responsegroups.ResponseGroupStorageInstrumentedTest \
             org.teslasoft.assistant.conversation.parallel.ParallelUsageScreenInstrumentedTest \
             org.teslasoft.assistant.ui.chat.parallel.ParallelResponseUiInstrumentedTest \
+            org.teslasoft.assistant.ui.chat.setup.ExperimentalSetupLayoutInstrumentedTest \
             org.teslasoft.assistant.ui.chat.parallel.ParallelPreparationInstrumentedTest \
             org.teslasoft.assistant.ui.chat.parallel.ParallelControllerInstrumentedTest \
             org.teslasoft.assistant.preferences.chatstore.ChatStoreInstrumentedTest \
