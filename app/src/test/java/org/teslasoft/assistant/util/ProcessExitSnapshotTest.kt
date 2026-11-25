@@ -16,6 +16,10 @@ class ProcessExitSnapshotTest {
         val prior = ProcessExitSnapshot(false, setOf(Activity.VOICE_READING))
         assertEquals(prior.lines(), ProcessActivityTracker.exitLines(prior.encode(),
             RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE))
+        assertEquals(prior.copy(foreground = true).lines(), ProcessActivityTracker.exitLines(prior.encode(),
+            RunningAppProcessInfo.IMPORTANCE_FOREGROUND))
+        assertEquals(prior.lines(), ProcessActivityTracker.exitLines(prior.copy(foreground = true).encode(),
+            RunningAppProcessInfo.IMPORTANCE_CACHED))
     }
     @Test fun foregroundAndBackgroundWorkAreIndependentAndSurviveEncoding() {
         for (foreground in listOf(true, false)) {

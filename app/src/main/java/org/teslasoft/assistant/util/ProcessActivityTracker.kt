@@ -64,9 +64,8 @@ internal object ProcessActivityTracker {
     }
 
     fun exitLines(summary: ByteArray?, importance: Int): String {
-        ProcessExitSnapshot.decode(summary)?.let { return it.lines() }
-        // Old sessions have no custom summary. A foreground service alone
-        // doesn't establish whether any screen was visible.
+        // Prefer Android's definitive exit-time state over an earlier screen
+        // callback. A foreground service alone doesn't establish visibility.
         val position = when (importance) {
             ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND,
             ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE -> "Foreground"
@@ -74,6 +73,14 @@ internal object ProcessActivityTracker {
             ActivityManager.RunningAppProcessInfo.IMPORTANCE_SERVICE,
             ActivityManager.RunningAppProcessInfo.IMPORTANCE_TOP_SLEEPING -> "Background"
             else -> "Unknown"
+        }
+        ProcessExitSnapshot.decode(summary)?.let { snapshot ->
+            val atExit = when (position) {
+                "Foreground" -> true
+                "Background" -> false
+                else -> snapshot.foreground
+            }
+            return snapshot.copy(foreground = atExit).lines()
         }
         return "App Position: $position\nActivity: Unknown"
     }
