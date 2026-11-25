@@ -32,7 +32,8 @@ internal class ModelPickerCatalog(
     private val onChanged: () -> Unit,
     private val onFailure: (ApiEndpointObject, Exception) -> Unit,
     private val onCatalogReceived: (ApiEndpointObject, String) -> Unit,
-    private val rawCatalog: Boolean = false
+    private val rawCatalog: Boolean = false,
+    private val imageModels: Boolean = false
 ) {
     private enum class Filter { ALL, NEW, FREE }
 
@@ -139,6 +140,30 @@ internal class ModelPickerCatalog(
         searchProviders = false
         query = ""
         if (searchField.text?.isNotEmpty() == true) searchField.setText("")
+        if (imageModels) {
+            sort = Sort.CATALOG
+            pageLoading = true
+            pageJob = scope.launch {
+                try {
+                    val models = withContext(Dispatchers.IO) {
+                        org.teslasoft.assistant.imagegen.ImageCatalogClient.models(selected)
+                    }
+                    val page = org.teslasoft.assistant.imagegen.ImageModelPickerCatalog.entries(models)
+                    page.forEach { entries[it.id] = it }
+                    updateCapabilities(page)
+                    pageLoading = false
+                    update()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    pageLoading = false
+                    update()
+                    onFailure(selected, failure)
+                }
+            }
+            update()
+            return
+        }
         val transport = try {
             ModelBrowserCatalogClient(selected)
         } catch (failure: IllegalArgumentException) {

@@ -198,10 +198,11 @@ class DedicatedModelListsTest {
     @Test
     fun eachJobKeepsItsOwnFiles() {
         assertEquals(
-            setOf("", "summarizer_", "memory_scanner_", "memory_context_helper_"),
+            setOf("", "summarizer_", "memory_scanner_", "memory_context_helper_", "image_generation_"),
             ModelPickerScope.entries.map { it.filePrefix }.toSet()
         )
         assertFalse(ModelPickerScope.CHAT.isDedicated)
+        assertFalse(ModelPickerScope.IMAGE_GENERATION.isDedicated)
         assertTrue(ModelPickerScope.SUMMARIZER.isDedicated && ModelPickerScope.MEMORY_SCANNER.isDedicated)
         assertTrue(ModelPickerScope.MEMORY_CONTEXT_HELPER.isDedicated)
     }
@@ -218,6 +219,44 @@ class DedicatedModelListsTest {
 
         assertEquals(listOf("model-s"), parsed.summarizer!!.favorites.map { it["modelId"] })
         assertEquals(listOf("model-m"), parsed.memoryScanner!!.favorites.map { it["modelId"] })
+    }
+
+    @Test
+    fun imageFavoritesAndHistoryRemainSeparateAndKeepPinsThroughBackup() {
+        val imageFavorite = mapOf("modelId" to "invented-image", "endpointId" to "ep-1", "pinned" to "true")
+        val imageHistory = RecentModelsBackup.Snapshot(
+            20, listOf(FavoriteModelObject("invented-image", "ep-1")), emptyList(), emptyMap()
+        )
+        val data = ModelEndpointPortableCodec.Data(
+            listOf(endpoint("ep-1")),
+            listOf(mapOf("modelId" to "invented-text", "endpointId" to "ep-1")),
+            imageGeneration = DedicatedModelsBackup.Snapshot(listOf(imageFavorite), imageHistory)
+        )
+        val decoded = (ModelEndpointPortableCodec.parse(ModelEndpointPortableCodec.encode(data))
+            as ModelEndpointPortableCodec.Result.Ok).data
+        assertEquals(listOf("invented-text"), decoded.favorites.map { it["modelId"] })
+        assertEquals(listOf(imageFavorite), decoded.imageGeneration!!.favorites)
+        assertEquals(listOf("invented-image"), decoded.imageGeneration!!.recents.models.map { it.modelId })
+        assertNull(decoded.summarizer)
+        assertNull(decoded.recents)
+        val legacy = ModelEndpointPortableCodec.Data(listOf(endpoint("ep-1")), emptyList())
+        assertNull((ModelEndpointPortableCodec.parse(ModelEndpointPortableCodec.encode(legacy))
+            as ModelEndpointPortableCodec.Result.Ok).data.imageGeneration)
+    }
+
+    @Test
+    fun imageBackupDropsDeletedProfilesAndRejectsMalformedLists() {
+        val empty = RecentModelsBackup.Snapshot(20, emptyList(), emptyList(), emptyMap())
+        val data = ModelEndpointPortableCodec.Data(listOf(endpoint("ep-1")), emptyList(),
+            imageGeneration = DedicatedModelsBackup.Snapshot(listOf(
+                mapOf("modelId" to "invented-image", "endpointId" to "deleted-profile")
+            ), empty))
+        val parsed = (ModelEndpointPortableCodec.parse(ModelEndpointPortableCodec.encode(data))
+            as ModelEndpointPortableCodec.Result.Ok).data
+        assertTrue(parsed.imageGeneration!!.favorites.isEmpty())
+        val malformed = org.json.JSONObject(ModelEndpointPortableCodec.encode(data))
+            .put("image_generation_models", org.json.JSONObject())
+        assertTrue(ModelEndpointPortableCodec.parse(malformed.toString()) is ModelEndpointPortableCodec.Result.Rejected)
     }
 
     private fun installEndpoints(state: FakeSharedPreferences, vararg ids: String) {

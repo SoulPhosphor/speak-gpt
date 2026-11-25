@@ -102,7 +102,7 @@ class ApiEndpointPreferences private constructor(
         // The Summarizer's and Memory Scanner's own lists, too. Their
         // favorites hide the profile's models at once; this also removes them
         // from storage.
-        for (scope in ModelPickerScope.entries.filter { it.isDedicated }) {
+        for (scope in ModelPickerScope.entries.filter { it != ModelPickerScope.CHAT }) {
             RecentOnlyProvidersStore.get(context, scope).clearEndpoint(id)
             runCatching { RecentModelsPreferences(context, scope).removeEndpoint(id) }
             runCatching {

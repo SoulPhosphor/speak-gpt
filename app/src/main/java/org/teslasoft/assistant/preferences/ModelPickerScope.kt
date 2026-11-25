@@ -19,7 +19,7 @@ package org.teslasoft.assistant.preferences
 /**
  * Which job a model picker's saved models belong to. Chat, the Summarizer,
  * the Memory Scanner (the Memory Assistant's analysis model) and the Memory
- * Context Helper (conversation_recall_plan.md M.4) keep separate
+ * Context Helper (conversation_recall_plan.md M.4), and image generation keep separate
  * Favorites, Recent lists, favorite providers and per-model settings: they are
  * different duties, so nothing chosen for one appears in or changes another.
  */
@@ -27,15 +27,17 @@ enum class ModelPickerScope {
     CHAT,
     SUMMARIZER,
     MEMORY_SCANNER,
-    MEMORY_CONTEXT_HELPER;
+    MEMORY_CONTEXT_HELPER,
+    IMAGE_GENERATION;
 
-    /** True for a background job with one selected model of its own. */
-    val isDedicated: Boolean get() = this != CHAT
+    /** Text background jobs use DedicatedModelRouting; images have their own request path. */
+    val isDedicated: Boolean get() = this != CHAT && this != IMAGE_GENERATION
 
     /** The part of each storage file name that belongs to this job. */
     internal val filePrefix: String
         get() = when (this) {
             CHAT -> ""
+            IMAGE_GENERATION -> "image_generation_"
             SUMMARIZER -> "summarizer_"
             MEMORY_SCANNER -> "memory_scanner_"
             MEMORY_CONTEXT_HELPER -> "memory_context_helper_"

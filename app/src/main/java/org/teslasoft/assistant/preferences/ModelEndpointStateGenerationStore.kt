@@ -255,6 +255,7 @@ internal class ModelEndpointStateGenerationStore private constructor(
         summarizer = null,
         memoryScanner = null,
         memoryContextHelper = null,
+        imageGeneration = null,
         endpoints = data.endpoints
             .map { it.copy(rejectedTtsVoices = it.rejectedTtsVoices.distinct().sorted()) }
             .sortedBy { it.id },

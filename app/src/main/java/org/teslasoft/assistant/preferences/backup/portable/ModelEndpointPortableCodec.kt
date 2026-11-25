@@ -72,7 +72,9 @@ object ModelEndpointPortableCodec {
         /** The Memory Scanner's, the same way. */
         val memoryScanner: DedicatedModelsBackup.Snapshot? = null,
         /** The Memory Context Helper's, the same way. */
-        val memoryContextHelper: DedicatedModelsBackup.Snapshot? = null
+        val memoryContextHelper: DedicatedModelsBackup.Snapshot? = null,
+        /** Image generation keeps its favorites and Recent list apart from text models. */
+        val imageGeneration: DedicatedModelsBackup.Snapshot? = null
     )
 
     sealed class Result {
@@ -133,6 +135,7 @@ object ModelEndpointPortableCodec {
             .apply {
                 data.memoryContextHelper?.let { put(MEMORY_CONTEXT_HELPER_KEY, DedicatedModelsBackup.encode(it)) }
             }
+            .apply { data.imageGeneration?.let { put(IMAGE_GENERATION_KEY, DedicatedModelsBackup.encode(it)) } }
             .toString(2)
     }
 
@@ -217,13 +220,18 @@ object ModelEndpointPortableCodec {
                 DedicatedModelsBackup.parse(root.getJSONObject(MEMORY_CONTEXT_HELPER_KEY))
                     ?: return Result.Rejected("memory context helper models are malformed")
             } else null
+            val imageGeneration = if (root.has(IMAGE_GENERATION_KEY)) {
+                DedicatedModelsBackup.parse(root.getJSONObject(IMAGE_GENERATION_KEY))
+                    ?: return Result.Rejected("image generation models are malformed")
+            } else null
             val endpointIds = endpoints.mapTo(HashSet()) { e -> e.id }
             val data = Data(
                 endpoints, favorites,
                 recents?.let { RecentModelsBackup.forEndpoints(it, endpointIds) },
                 summarizer?.let { DedicatedModelsBackup.forEndpoints(it, endpointIds) },
                 memoryScanner?.let { DedicatedModelsBackup.forEndpoints(it, endpointIds) },
-                memoryContextHelper?.let { DedicatedModelsBackup.forEndpoints(it, endpointIds) }
+                memoryContextHelper?.let { DedicatedModelsBackup.forEndpoints(it, endpointIds) },
+                imageGeneration?.let { DedicatedModelsBackup.forEndpoints(it, endpointIds) }
             )
             validate(data)?.let { Result.Rejected(it) } ?: Result.Ok(data)
         } catch (_: Exception) {
@@ -315,8 +323,9 @@ object ModelEndpointPortableCodec {
     private const val SUMMARIZER_KEY = "summarizer_models"
     private const val MEMORY_SCANNER_KEY = "memory_scanner_models"
     private const val MEMORY_CONTEXT_HELPER_KEY = "memory_context_helper_models"
+    private const val IMAGE_GENERATION_KEY = "image_generation_models"
     private val OPTIONAL_ROOT_KEYS = setOf(
-        "recents", SUMMARIZER_KEY, MEMORY_SCANNER_KEY, MEMORY_CONTEXT_HELPER_KEY
+        "recents", SUMMARIZER_KEY, MEMORY_SCANNER_KEY, MEMORY_CONTEXT_HELPER_KEY, IMAGE_GENERATION_KEY
     )
     private val ENDPOINT_KEYS = setOf(
         "id", "label", "host", "chat_endpoint", "speech_endpoint", "auth_type", "model",
