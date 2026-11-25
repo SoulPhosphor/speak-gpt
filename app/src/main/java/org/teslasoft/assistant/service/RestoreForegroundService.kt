@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
 import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestoreCoordinator
 import java.io.File
@@ -81,7 +82,29 @@ class RestoreForegroundService : Service() {
         Thread(runnable, "restore-coordinator")
     }
 
+    /** What this run restores, for the time-limit log. Main thread. */
+    private var operation = DataSyncTimeoutLog.RestoreOperation.UNKNOWN
+    /** Android's time limit was reached for this run: logged once. */
+    private var timedOut = false
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * Android's background execution time limit for data-sync services
+     * (Android 15 and later). The service must stop within seconds or Android
+     * crashes the app. The restore is not cancelled: its worker may go on
+     * while Android lets the app run, and an incomplete restore is finished or
+     * rolled back by the existing recovery at the next launch.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        if (timedOut) return
+        timedOut = true
+        try {
+            Logger.logCrashDurable(applicationContext, "RestoreService", "warning", DataSyncTimeoutLog.restore(operation))
+        } catch (_: Throwable) { /* the stop below matters more than the log */ }
+        stopForegroundCompat()
+        stopSelf()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createChannel()
@@ -97,6 +120,9 @@ class RestoreForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        timedOut = false
+        operation = if (intent?.action == ACTION_UNIFIED_RESTORE) DataSyncTimeoutLog.RestoreOperation.UNIFIED_RESTORE
+        else DataSyncTimeoutLog.RestoreOperation.CHAT_RESTORE
         if (intent?.action == ACTION_UNIFIED_RESTORE) {
             worker.execute {
                 when (UnifiedPortableRestoreCoordinator.advance(applicationContext)) {

@@ -20,6 +20,8 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.imagegen.ImageGenerationEventLog
+import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.ui.activities.ChatActivity
 
@@ -89,7 +91,40 @@ class ImageGenerationForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
+    /** Android's time limit was reached for this run: logged once, and the keep-alive already released. */
+    private var timedOut = false
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * Android's background execution time limit for data-sync services
+     * (Android 15 and later). The service must stop within seconds or Android
+     * crashes the app. Only the keep-alive stops (notification, wake and Wi-Fi
+     * locks): no generation is cancelled, and each still reports how it ends.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        if (timedOut) return
+        timedOut = true
+        try {
+            val jobs = ImageGenerationJobRegistry.activeJobIds().map { (chatId, imageId) ->
+                DataSyncTimeoutLog.ImageJob(chatId, imageId)
+            }
+            Logger.log(
+                applicationContext,
+                ImageGenerationEventLog.ERROR_CHANNEL,
+                "ImageGenerationService",
+                "warning",
+                DataSyncTimeoutLog.imageGeneration(jobs)
+            )
+        } catch (_: Throwable) { /* the stop below matters more than the log */ }
+        synchronized(lifecycleLock) { if (readyService === this) readyService = null }
+        releaseLocks()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+            else @Suppress("DEPRECATION") stopForeground(true)
+        } catch (_: Exception) { /* already stopped */ }
+        stopSelf()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createChannelIfNeeded()
@@ -132,6 +167,7 @@ class ImageGenerationForegroundService : Service() {
             } else false
         }
         if (finishedBeforeStartup) return START_NOT_STICKY
+        timedOut = false
         acquireLocks()
         return START_NOT_STICKY
     }
