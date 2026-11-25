@@ -128,6 +128,23 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/row_summarizer_settings"
+                style="@style/Widget.App.Row.TitleOnly">
+                <ImageView
+                    style="@style/Widget.App.Row.Icon.Primary"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_notebook_pen" />
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_summarizer_compaction_settings" />
+                </LinearLayout>
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_summarizer_compaction_settings" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/row_alert_sounds"
                 style="@style/Widget.App.Row.TitleOnly">
 

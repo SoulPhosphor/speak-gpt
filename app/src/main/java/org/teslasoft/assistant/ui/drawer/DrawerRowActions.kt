@@ -1,6 +1,7 @@
 package org.teslasoft.assistant.ui.drawer
 
 import android.view.View
+import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -16,6 +17,7 @@ import org.teslasoft.assistant.ui.util.CompactActionPopup
 /** Identical folder/chat management actions in both folder destinations. */
 internal class DrawerRowActions(
     private val activity: FragmentActivity,
+    private val deleteCurrentChat: (String) -> Boolean = { false },
     private val refresh: () -> Unit
 ) {
     private val repository = ChatNavigationRepository.get(activity)
@@ -55,9 +57,12 @@ internal class DrawerRowActions(
                                 withContext(Dispatchers.Main) { refresh() }
                             }; true
                         }
-                        MENU_CHAT_MOVE -> { showMoveChooser(row); true }
+                        MENU_CHAT_MOVE -> { showMoveChooser(row.value.id); true }
                         MENU_CHAT_DELETE -> {
-                            ChatDeletionRequestCoordinator.requestChats(activity, setOf(row.value.id), onCommitted = refresh); true
+                            if (!deleteCurrentChat(row.value.id)) {
+                                ChatDeletionRequestCoordinator.requestChats(activity, setOf(row.value.id), onCommitted = refresh)
+                            }
+                            true
                         }
                         else -> false
                     }
@@ -75,19 +80,39 @@ internal class DrawerRowActions(
         save = { repository.renameFolder(row.value.id, it) }, onSaved = refresh
     )
 
-    private fun showMoveChooser(row: DrawerRow.Chat) {
+    fun showMoveChooser(chatId: String, onMoved: (String?) -> Unit = {}) {
         activity.lifecycleScope.launch {
             val snapshot = withContext(Dispatchers.IO) { repository.snapshot() }
-            if (snapshot !is ChatNavigationResult.Success) return@launch
+            if (activity.isFinishing || activity.isDestroyed) return@launch
+            if (snapshot !is ChatNavigationResult.Success) {
+                Toast.makeText(activity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            val chat = snapshot.value.allChats.firstOrNull { it.id == chatId } ?: return@launch
             val folders = snapshot.value.folders.map { it.folder }
             val labels = listOf(activity.getString(R.string.folder_none)) + folders.map { it.name }
-            val selected = folders.indexOfFirst { it.id == row.value.folderId } + 1
+            val selected = folders.indexOfFirst { it.id == chat.folderId } + 1
+            var moving = false
             MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
                 .setTitle(R.string.chat_move_to_folder)
                 .setSingleChoiceItems(labels.toTypedArray(), selected) { dialog, which ->
-                    activity.lifecycleScope.launch(Dispatchers.IO) {
-                        repository.moveChat(row.value.id, folders.getOrNull(which - 1)?.id)
-                        withContext(Dispatchers.Main) { dialog.dismiss(); refresh() }
+                    if (!moving) {
+                        moving = true
+                        val folder = folders.getOrNull(which - 1)
+                        activity.lifecycleScope.launch move@{
+                            val result = withContext(Dispatchers.IO) {
+                                repository.moveChat(chatId, folder?.id)
+                            }
+                            if (activity.isFinishing || activity.isDestroyed) return@move
+                            if (result is ChatNavigationResult.Success) {
+                                dialog.dismiss()
+                                refresh()
+                                onMoved(folder?.name)
+                            } else {
+                                moving = false
+                                Toast.makeText(activity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                            }
+                        }
                     }
                 }.setNegativeButton(R.string.btn_cancel, null).show()
         }

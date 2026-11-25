@@ -92,7 +92,7 @@
                         android:layout_marginStart="16dp"
                         android:layout_marginTop="20dp"
                         android:layout_marginEnd="16dp"
-                        android:weightSum="2"
+                        android:weightSum="1"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toBottomOf="@+id/constraintLayout">
@@ -107,7 +107,7 @@
                             android:background="@drawable/btn_accent_tonal"
                             android:paddingHorizontal="20dp"
                             android:paddingVertical="8dp"
-                            android:text="View source code"
+                            android:text="@string/about_view_source_code"
                             android:textColor="@color/on_blur_monotone"
                             android:textStyle="bold"
                             app:backgroundTint="@color/tint_on_blur_monotone"
@@ -117,28 +117,6 @@
                             app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintStart_toStartOf="parent"
                             app:layout_constraintTop_toTopOf="parent" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_feedback"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginHorizontal="8dp"
-                            android:layout_weight="1"
-                            android:background="@drawable/btn_accent_tonal"
-                            android:paddingHorizontal="20dp"
-                            android:paddingVertical="8dp"
-                            android:text="@string/about_send_feedback"
-                            android:textColor="@color/on_blur_monotone"
-                            android:textStyle="bold"
-                            app:backgroundTint="@color/tint_on_blur_monotone"
-                            app:icon="@drawable/ic_bug_report"
-                            app:iconPadding="12dp"
-                            app:iconTint="@color/on_blur_monotone"
-                            app:layout_constraintBottom_toBottomOf="parent"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toBottomOf="@+id/constraintLayout" />
 
                     </LinearLayout>
 

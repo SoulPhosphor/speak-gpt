@@ -61,7 +61,6 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
     private var rowModelRules: LinearLayout? = null
     private var rowModelCleanup: LinearLayout? = null
     private var switchAutoApplyModelRules: MaterialSwitch? = null
-    private var rowSummarizerSettings: LinearLayout? = null
     private var rowMemoryScannerToolApi: LinearLayout? = null
     private var rowEmbeddingModel: LinearLayout? = null
     private var rowMemoryContextHelperToolApi: LinearLayout? = null
@@ -101,7 +100,6 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
         rowModelRules = findViewById(R.id.row_model_rules)
         rowModelCleanup = findViewById(R.id.row_model_cleanup)
         switchAutoApplyModelRules = findViewById(R.id.switch_auto_apply_model_rules)
-        rowSummarizerSettings = findViewById(R.id.row_summarizer_settings)
         rowMemoryScannerToolApi = findViewById(R.id.row_memory_scanner_tool_api)
         rowEmbeddingModel = findViewById(R.id.row_embedding_model)
         rowMemoryContextHelperToolApi = findViewById(R.id.row_memory_context_helper_tool_api)
@@ -171,9 +169,6 @@ class AiSystemSettingsActivity : SettingsPageActivity() {
             preferences?.setAutoApplyModelRules(checked)
         }
 
-        rowSummarizerSettings?.setOnClickListener {
-            startActivity(Intent(this, SummarizerSettingsActivity::class.java))
-        }
     }
 
     /** Label of the profile currently in use, for the row subtitle. */

@@ -9,7 +9,9 @@
     <string name="menu_chat">Chat</string>
     <string name="menu_prompts">Prompts</string>
     <string name="about_version">"Version: "</string>
-    <string name="about_view_other_projects">View other projects</string>
+    <string name="about_view_other_projects">View Other Projects</string>
+    <string name="about_view_source_code">View Source Code</string>
+    <string name="about_action_unavailable">Unavailable</string>
     <string name="about_send_feedback">Feedback</string>
     <string name="about_terms">Terms</string>
     <string name="activation_begin">Let\'s begin</string>
@@ -3726,6 +3728,7 @@
          error titles and messages are the exact normative texts from the
          errors addendum and must not be reworded without owner approval.
          ================================================================== -->
+    <string name="title_summarizer_compaction_settings">Summarizer &amp; Compaction Settings</string>
     <string name="title_summarizer_settings">Summarizer Settings</string>
     <string name="title_summarizer_outline_compaction_settings">Summarizer, Outline &amp; Compaction Settings</string>
     <string name="tile_summarizer_settings_subtitle">Settings related to the summarizer feature.</string>
@@ -4327,6 +4330,8 @@
     <string name="folder_rename">Rename</string>
     <string name="folder_delete">Delete</string>
     <string name="chat_move_to_folder">Move to Folder</string>
+    <string name="chat_moved_to_folder">Moved to %1$s Folder</string>
+    <string name="chat_moved_out_of_folder">Moved out of folder</string>
     <string name="folder_none">No Folder</string>
     <string name="drawer_open">Open Drawer</string>
     <string name="drawer_close">Close Drawer</string>
