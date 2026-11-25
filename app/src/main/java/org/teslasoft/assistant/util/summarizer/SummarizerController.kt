@@ -334,6 +334,9 @@ class SummarizerController(
         if (manualCompactionRunning || outlineRunning || isRunning()) return
         cycleResult = SummaryCycleResult()
         this.storageUnavailable = storageUnavailable
+        // The record this cycle creates, so its own clean-up removes it however its state is masked.
+        val cycleRecord = arrayOfNulls<String>(1)
+        summaryRecordHolder = cycleRecord
         job = scope.launch {
             var advancedAny = false
             try {
@@ -374,6 +377,8 @@ class SummarizerController(
                         }
                     )
                 }
+                endRun(OperationKind.SUMMARIZING, cycleRecord[0])
+                if (summaryRecordHolder === cycleRecord) summaryRecordHolder = null
                 // A catch-up is complete only when nothing this run made was thrown away.
                 onFinished?.invoke(advancedAny && lastFailureCategory == null && result.discarded == 0 && !result.stoppedEarly)
             }
@@ -415,6 +420,7 @@ class SummarizerController(
                 0
             )
         )
+        val compactionRecord = runToken(OperationKind.COMPACTING)
         job = scope.launch {
             var committed = false
             try {
@@ -453,6 +459,7 @@ class SummarizerController(
                         }
                     )
                 }
+                endRun(OperationKind.COMPACTING, compactionRecord)
                 onFinished(committed)
             }
         }
@@ -487,6 +494,7 @@ class SummarizerController(
         setOperationState(
             OperationState.Running(OperationKind.OUTLINING, chatName, snapshot.entries.size, 0)
         )
+        val outlineRecord = runToken(OperationKind.OUTLINING)
         job = scope.launch {
             var committed = false
             try {
@@ -517,6 +525,7 @@ class SummarizerController(
                         }
                     )
                 }
+                endRun(OperationKind.OUTLINING, outlineRecord)
                 onFinished(committed)
             }
         }
@@ -1699,6 +1708,24 @@ class SummarizerController(
     /** The token the running operation of [kind] saves with its result. */
     private fun runToken(kind: OperationKind): String? = runTokens[kind]?.first
 
+    /** Where the running summary cycle keeps the record it created (see [runCycle]). */
+    private var summaryRecordHolder: Array<String?>? = null
+
+    /**
+     * A job's own clean-up: removes the record it created, whether or not its
+     * ending was published (another operation's state can mask it). A record
+     * a newer run of the same kind created is left alone.
+     */
+    private fun endRun(kind: OperationKind, token: String?) {
+        token ?: return
+        val held = runTokens[kind] ?: return
+        if (held.first != token) return
+        runTokens.remove(kind)
+        SummarizerRunRecords.ended(appContext, held.second, kind, token)
+        val current = chatIdProvider()
+        if (current != held.second) SummarizerRunRecords.ended(appContext, current, kind, token)
+    }
+
     private fun setOperationState(state: OperationState) {
         terminalClearJob?.cancel()
         val previous = operationState
@@ -1708,7 +1735,10 @@ class SummarizerController(
             // A new operation of this kind gets its record, whatever ran before it.
             if (!runTokens.containsKey(state.kind)) {
                 val chatId = chatIdProvider()
-                SummarizerRunRecords.started(appContext, chatId, state.kind)?.let { runTokens[state.kind] = it to chatId }
+                SummarizerRunRecords.started(appContext, chatId, state.kind)?.let { token ->
+                    runTokens[state.kind] = token to chatId
+                    if (state.kind == OperationKind.SUMMARIZING) summaryRecordHolder?.set(0, token)
+                }
             }
         } else if (kind != null) {
             // Every ending of an operation (success, failure, cancellation, a superseded result) removes its record.
