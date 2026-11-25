@@ -16,7 +16,6 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
@@ -26,7 +25,6 @@ import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -49,12 +47,6 @@ class ImageGenerationSettingsActivity : SettingsPageActivity() {
     private lateinit var endpoints: ApiEndpointPreferences
     private var metadataJob: Job? = null
     private var currentMetadata: ImageModelMetadata? = null
-    private val endpointLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) result.data?.getStringExtra("apiEndpointId")?.let {
-            preferences.selectImageGeneratorEndpoint(it)
-        }
-        refresh()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,9 +66,11 @@ class ImageGenerationSettingsActivity : SettingsPageActivity() {
         bindToggle(R.id.switch_ask_before_creating, preferences.getAskBeforeAiImages()) { preferences.setAskBeforeAiImages(it) }
         bindToggle(R.id.switch_delete_images_with_chat, preferences.getDeleteImagesWithChat()) { preferences.setDeleteImagesWithChat(it) }
         refreshAskBeforeVisibility()
-        findViewById<View>(R.id.row_image_service).setOnClickListener { openEndpointPicker() }
         findViewById<View>(R.id.row_image_model).setOnClickListener { openModelChooser() }
         findViewById<View>(R.id.image_settings_retry).setOnClickListener { refresh() }
+        supportFragmentManager.setFragmentResultListener(
+            AdvancedModelSelectorDialogFragment.IMAGE_SELECTION_RESULT, this
+        ) { _, _ -> refresh() }
         refresh()
     }
 
@@ -98,9 +92,6 @@ class ImageGenerationSettingsActivity : SettingsPageActivity() {
         val endpointId = preferences.getImageGeneratorEndpointId()
         val modelId = preferences.getImageGeneratorModel()
         val endpoint = endpoints.getApiEndpoint(this, endpointId)
-        findViewById<TextView>(R.id.text_image_service_value).text =
-            endpoints.getApiEndpointsList(this).firstOrNull { it.id == endpointId }?.label
-                ?: getString(R.string.label_endpoint_none)
         findViewById<TextView>(R.id.text_image_model_value).text = modelId.ifBlank { getString(R.string.label_endpoint_none) }
         val options = findViewById<LinearLayout>(R.id.image_model_options)
         val status = findViewById<TextView>(R.id.image_settings_status)
@@ -271,15 +262,11 @@ class ImageGenerationSettingsActivity : SettingsPageActivity() {
         parent.addView(row)
     }
 
-    private fun openEndpointPicker() = endpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
-
     private fun openModelChooser() {
         currentFocus?.clearFocus()
-        val endpointId = preferences.getImageGeneratorEndpointId()
-        if (endpointId.isBlank()) { openEndpointPicker(); return }
-        val dialog = AdvancedModelSelectorDialogFragment.newInstance(preferences.getImageGeneratorModel(), "", endpointId, imageModels = true)
-        dialog.setModelSelectedListener { model -> preferences.setImageGeneratorModel(model); refresh() }
-        dialog.show(supportFragmentManager, "ImageGeneratorModelSelector")
+        AdvancedModelSelectorDialogFragment.newImageModelPickerInstance(
+            preferences.getImageGeneratorModel(), preferences.getImageGeneratorEndpointId()
+        ).show(supportFragmentManager, "ImageGeneratorModelSelector")
     }
 
     override fun onPause() { currentFocus?.clearFocus(); super.onPause() }

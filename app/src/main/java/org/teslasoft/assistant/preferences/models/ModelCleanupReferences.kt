@@ -59,7 +59,9 @@ object ModelCleanupReferencesLoader {
         // Every job's favorites and Recent list (chat, Summarizer, Memory
         // Scanner): a model that is gone is gone for all of them.
         val favorites = try {
-            ModelPickerScope.entries.flatMap { FavoriteModelsPreferences.getPreferences(context, it).getFavoriteModels() }
+            ModelPickerScope.entries
+                .filter { it != ModelPickerScope.IMAGE_GENERATION }
+                .flatMap { FavoriteModelsPreferences.getPreferences(context, it).getFavoriteModels() }
                 .mapNotNull { item ->
                     val endpointId = item["endpointId"].orEmpty()
                     val modelId = item["modelId"].orEmpty()
@@ -75,7 +77,9 @@ object ModelCleanupReferencesLoader {
         val recentTargets = try {
             val endpointIds = ApiEndpointPreferences.getApiEndpointPreferences(context)
                 .getApiEndpointsList(context).map { it.id }.toSet()
-            ModelPickerScope.entries.flatMap { RecentModelsPreferences(context, it).models() }
+            ModelPickerScope.entries
+                .filter { it != ModelPickerScope.IMAGE_GENERATION }
+                .flatMap { RecentModelsPreferences(context, it).models() }
                 .filter { it.endpointId in endpointIds }
                 .map { ModelIdentity(it.endpointId, it.modelId) }.toSet()
         } catch (_: Exception) {

@@ -881,7 +881,8 @@ object UnifiedPortableRestore {
                     recents = null,
                     summarizer = DedicatedModelsBackup.withoutHistory(current.summarizer),
                     memoryScanner = DedicatedModelsBackup.withoutHistory(current.memoryScanner),
-                    memoryContextHelper = DedicatedModelsBackup.withoutHistory(current.memoryContextHelper)
+                    memoryContextHelper = DedicatedModelsBackup.withoutHistory(current.memoryContextHelper),
+                    imageGeneration = DedicatedModelsBackup.withoutHistory(current.imageGeneration)
                 )))
             current
         } else null

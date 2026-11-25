@@ -3606,9 +3606,22 @@
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_weight">1</item>
     </style>
-    <style name="Widget.App.ImageGeneration.Input" parent="Widget.App.Field.Box">
+    <style name="Widget.App.ImageGeneration.InputRow" parent="Widget.App.ImageGeneration.Options">
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:baselineAligned">false</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.InputFrame" parent="Widget.App.Field.Box">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:padding">0dp</item>
+    </style>
+    <style name="Widget.App.ImageGeneration.Input" parent="Widget.App.Field.Box">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:background">@null</item>
+        <item name="android:backgroundTint">@null</item>
+        <item name="backgroundTint">@null</item>
         <item name="android:minLines">1</item>
         <item name="android:maxLines">1</item>
         <item name="android:inputType">text</item>

@@ -112,6 +112,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         private const val STATE_CATALOG_PROFILE = "catalogProfile"
         private const val STATE_ROUTING_MODEL = "routingModel"
         private const val STATE_ROUTING_ENDPOINT = "routingEndpoint"
+        const val IMAGE_SELECTION_RESULT = "imageModelPickerSelection"
         const val CHAT_SELECTION_RESULT = "chatModelPickerSelection"
         const val SELECTED_MODEL = "modelId"
         const val SELECTED_ENDPOINT = "endpointId"
@@ -123,6 +124,13 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         fun newChatModelPickerInstance(name: String, chatId: String) =
             newInstance(name, chatId).apply {
                 requireArguments().putBoolean(ARG_CHAT_MODEL_PICKER, true)
+            }
+
+        /** Image generation uses the shared tabs with its own saved lists. */
+        fun newImageModelPickerInstance(currentModel: String, endpointId: String) =
+            newInstance(currentModel, "", endpointId, imageModels = true).apply {
+                requireArguments().putBoolean(ARG_CHAT_MODEL_PICKER, true)
+                requireArguments().putString(ARG_SCOPE, ModelPickerScope.IMAGE_GENERATION.name)
             }
 
         /**
@@ -238,7 +246,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     /** Model rules and the provider screen choose a model only; provider
      *  choices on the rows would have no effect there. */
     private val showsProviderControls: Boolean
-        get() = !modelRulePicker && !providerScreenPicker
+        get() = !modelRulePicker && !providerScreenPicker && !imageMode
     private val scope: ModelPickerScope
         get() = ModelPickerScope.from(requireArguments().getString(ARG_SCOPE))
     /** Select Summarizer / Memory Scanner Model (the Favorites / Recent /
@@ -498,6 +506,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         } else if (providerScreenPicker) {
             parentFragmentManager.setFragmentResult(
                 PROVIDER_SCREEN_SELECTION_RESULT,
+                bundleOf(SELECTED_MODEL to model, SELECTED_ENDPOINT to endpointId)
+            )
+        } else if (imageMode && chatPicker) {
+            org.teslasoft.assistant.imagegen.ImageModelPickerSelection.select(
+                requireNotNull(preferences), RecentModelsPreferences(requireContext(), scope), endpointId, model
+            )
+            parentFragmentManager.setFragmentResult(
+                IMAGE_SELECTION_RESULT,
                 bundleOf(SELECTED_MODEL to model, SELECTED_ENDPOINT to endpointId)
             )
         } else if (dedicatedPicker) {
@@ -938,12 +954,12 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         currentChatModel = requireArguments().getString(ARG_CURRENT_CHAT_MODEL).orEmpty()
         selectorTitle?.text = getString(
             when {
+                imageMode -> R.string.label_select_image_model
                 dedicatedPicker && scope == ModelPickerScope.SUMMARIZER -> R.string.summarizer_model_picker_title
                 dedicatedPicker && scope == ModelPickerScope.MEMORY_CONTEXT_HELPER ->
                     R.string.memory_context_helper_model_picker_title
                 dedicatedPicker -> R.string.memory_scanner_model_picker_title
                 chatPicker -> R.string.model_picker_title
-                imageMode -> R.string.label_select_image_model
                 else -> R.string.label_select_ai_model
             }
         )
@@ -1083,6 +1099,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     private fun configureSavedModelAdapter(context: Context, chatId: String) {
         val selectedModel = when {
+            imageMode -> preferences?.getImageGeneratorModel().orEmpty()
             providerScreenPicker -> requireArguments().getString("name").orEmpty()
             dedicatedPicker -> DedicatedModelRouting.of(scope).modelId(context)
             else -> preferences?.getModel().orEmpty()
@@ -1091,7 +1108,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             context,
             chatId,
             ModelIdentity(resolvedEndpointId, selectedModel),
-            ModelCleanupReportStore.get(context).load().unavailable,
+            if (imageMode) emptySet() else ModelCleanupReportStore.get(context).load().unavailable,
             onSelect = { row, source ->
                 val target = row.identity
                 val choice = if (source == SavedModelPickerAdapter.Source.RECENT) {
@@ -1149,7 +1166,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 showProviderError(error.message, endpointLabel = endpoint.label.ifBlank { endpoint.host })
             },
             onCatalogReceived = ::refreshChatCatalogCapabilities,
-            rawCatalog = rawModelCatalog
+            rawCatalog = rawModelCatalog,
+            imageModels = imageMode
         )
         list.setItemsCanFocus(true)
         list.setOnScrollListener(object : AbsListView.OnScrollListener {
