@@ -33,8 +33,24 @@ object SummarizerRunRecords {
         fun remove(key: String)
     }
 
-    /** What was still unfinished, for the report; [key] is its record, removed by [reported]. */
-    data class Interrupted(val chatId: String, val kind: SummarizerController.OperationKind, val key: String = "$chatId|${kind.name}")
+    /**
+     * What was still unfinished, for the report; [key] and [token] identify
+     * its record, which [reported] removes only while it is still that one.
+     */
+    data class Interrupted(
+        val chatId: String,
+        val kind: SummarizerController.OperationKind,
+        val key: String = "$chatId|${kind.name}",
+        val token: String? = null
+    )
+
+    /** Every read-and-change of the records is one step, so a newer run's record is never removed for an older one. */
+    private val lock = Any()
+
+    /** Removes [key] only while it still holds [expected]. */
+    private fun removeIfUnchanged(store: Store, key: String, expected: String?) = synchronized(lock) {
+        if (store.all()[key] == expected) store.remove(key)
+    }
 
     /** This process; records written by it are never reported by it. */
     val session: String = UUID.randomUUID().toString()
@@ -52,7 +68,7 @@ object SummarizerRunRecords {
         if (chatId.isBlank()) return null
         val token = UUID.randomUUID().toString()
         return try {
-            store(context).put(key(chatId, kind), record(token, session, 0))
+            synchronized(lock) { store(context).put(key(chatId, kind), record(token, session, 0)) }
             token
         } catch (_: Exception) {
             null
@@ -65,9 +81,11 @@ object SummarizerRunRecords {
         try {
             val store = store(context)
             val k = key(chatId, SummarizerController.OperationKind.SUMMARIZING)
-            val current = store.all()[k]?.let(::parse) ?: return
-            if (current.token != token) return
-            store.put(k, record(token, current.session, current.started + 1))
+            synchronized(lock) {
+                val current = store.all()[k]?.let(::parse) ?: return
+                if (current.token != token) return
+                store.put(k, record(token, current.session, current.started + 1))
+            }
         } catch (_: Exception) { }
     }
 
@@ -77,7 +95,7 @@ object SummarizerRunRecords {
         try {
             val store = store(context)
             val k = key(chatId, kind)
-            if (store.all()[k]?.let(::parse)?.token == token) store.remove(k)
+            synchronized(lock) { if (store.all()[k]?.let(::parse)?.token == token) store.remove(k) }
         } catch (_: Exception) { }
     }
 
@@ -86,10 +104,12 @@ object SummarizerRunRecords {
         if (oldChatId.isBlank() || newChatId.isBlank() || oldChatId == newChatId) return
         try {
             val store = store(context)
-            store.all().forEach { (k, v) ->
-                if (k.substringBeforeLast('|') == oldChatId) {
-                    store.put("$newChatId|${k.substringAfterLast('|')}", v)
-                    store.remove(k)
+            synchronized(lock) {
+                store.all().forEach { (k, v) ->
+                    if (k.substringBeforeLast('|') == oldChatId) {
+                        store.put("$newChatId|${k.substringAfterLast('|')}", v)
+                        store.remove(k)
+                    }
                 }
             }
         } catch (_: Exception) { }
@@ -116,35 +136,44 @@ object SummarizerRunRecords {
         val store = try { store(context) } catch (_: Exception) { return emptyList() }
         val records = try { store.all() } catch (_: Exception) { return emptyList() }
         val earlier = records.mapNotNull { (k, v) ->
-            val parsed = parse(v) ?: return@mapNotNull k to null
-            if (parsed.session == session) null else k to parsed
+            val parsed = parse(v) ?: return@mapNotNull Triple(k, v, null)
+            if (parsed.session == session) null else Triple(k, v, parsed)
         }
         if (earlier.isEmpty()) return emptyList()
         val live = liveChats() ?: return emptyList()
         val out = ArrayList<Interrupted>()
-        for ((k, record) in earlier) {
+        for ((k, raw, record) in earlier) {
             val chatId = k.substringBeforeLast('|')
             val kind = runCatching { SummarizerController.OperationKind.valueOf(k.substringAfterLast('|')) }.getOrNull()
             if (record == null || kind == null) {
                 // Not a record this version can read: nothing to report.
-                runCatching { store.remove(k) }
+                runCatching { removeIfUnchanged(store, k, raw) }
                 continue
             }
             val mark = if (chatId in live) {
                 (try { savedMark(chatId, kind) } catch (_: Exception) { null }) ?: continue
             } else ""
             if (!unfinished(kind, record, mark)) {
-                runCatching { store.remove(k) }
+                runCatching { removeIfUnchanged(store, k, raw) }
                 continue
             }
-            out += Interrupted(chatId, kind, k)
+            out += Interrupted(chatId, kind, k, record.token)
         }
         return out
     }
 
-    /** The interruption's report was written: its record goes, so it is never reported again. */
+    /**
+     * The interruption's report was written: its record goes, so it is never
+     * reported again. A newer run's record at the same key (the same chat and
+     * kind started again meanwhile) is left alone.
+     */
     fun reported(context: Context, interrupted: Interrupted) {
-        try { store(context).remove(interrupted.key) } catch (_: Exception) { }
+        try {
+            val store = store(context)
+            synchronized(lock) {
+                if (store.all()[interrupted.key]?.let(::parse)?.token == interrupted.token) store.remove(interrupted.key)
+            }
+        } catch (_: Exception) { }
     }
 
     /** Whether the run left unfinished work, from its record and the mark its last save wrote. */

@@ -105,7 +105,7 @@ class SummarizerRunRecordsTest {
 
     @Test fun anInterruptedCompactionIsReportedOnceAndRepeatedStartsReportNothing() {
         earlierSession("chat", OperationKind.COMPACTING, "t1")
-        assertEquals(listOf(SummarizerRunRecords.Interrupted("chat", OperationKind.COMPACTING)), takeAndReport())
+        assertEquals(listOf(SummarizerRunRecords.Interrupted("chat", OperationKind.COMPACTING, token = "t1")), takeAndReport())
         assertTrue(takeAndReport().isEmpty())
         assertTrue(takeAndReport().isEmpty())
     }
@@ -117,6 +117,16 @@ class SummarizerRunRecordsTest {
         assertEquals(1, take().size)
         assertEquals(1, takeAndReport().size)
         assertTrue(take().isEmpty())
+    }
+
+    @Test fun acknowledgingAnOldInterruptionNeverRemovesANewerRunsRecord() {
+        earlierSession("chat", OperationKind.COMPACTING, "old")
+        val interrupted = take().single()
+        // The same chat and kind start again while the old report is being written.
+        val newer = SummarizerRunRecords.started(context, "chat", OperationKind.COMPACTING)
+        SummarizerRunRecords.reported(context, interrupted)
+        assertEquals("the newer run keeps its record", newer, SummarizerRunRecords.parse(stored["chat|COMPACTING"]!!)?.token)
+        assertTrue("and it is this process's, so it is not reported", take().isEmpty())
     }
 
     @Test fun aChatWhoseSettingsAreLockedDecidesNothingUntilTheyCanBeRead() {
@@ -146,7 +156,7 @@ class SummarizerRunRecordsTest {
     @Test fun aSummaryIsReportedOnlyWhenASectionItStartedWasNeverSaved() {
         earlierSession("chat", OperationKind.SUMMARIZING, "s1", started = 2)
         marks["chat" to OperationKind.SUMMARIZING] = SummarizerRunRecords.summarySaved("s1", 1)
-        assertEquals(listOf(SummarizerRunRecords.Interrupted("chat", OperationKind.SUMMARIZING)), takeAndReport())
+        assertEquals(listOf(SummarizerRunRecords.Interrupted("chat", OperationKind.SUMMARIZING, token = "s1")), takeAndReport())
 
         // Every section it started was saved; it stopped before its clean-up.
         earlierSession("chat", OperationKind.SUMMARIZING, "s2", started = 2)
@@ -183,7 +193,7 @@ class SummarizerRunRecordsTest {
 
     @Test fun aDeletedChatsInterruptionIsStillReported() {
         earlierSession("gone", OperationKind.OUTLINING, "t1")
-        assertEquals(listOf(SummarizerRunRecords.Interrupted("gone", OperationKind.OUTLINING)), takeAndReport(live = setOf("chat")))
+        assertEquals(listOf(SummarizerRunRecords.Interrupted("gone", OperationKind.OUTLINING, token = "t1")), takeAndReport(live = setOf("chat")))
     }
 
     // --- What is written -----------------------------------------------------------
