@@ -46,6 +46,7 @@ class DataSyncTimeoutInstrumentedTest {
 
     @Test fun theSummarizerKeepAliveStopsInTimeLogsOnceAndCancelsNothing() {
         val before = Logger.getCrashLog(app)
+        shortenTheTimeLimit()
         // Started while a screen is visible, as the app does; then the app is left.
         ActivityScenario.launch(MemoryControlsActivity::class.java).use {
             instrumentation.runOnMainSync {
@@ -53,7 +54,6 @@ class DataSyncTimeoutInstrumentedTest {
             }
             waitFor("the Summarizer service runs") { running(SummarizerForegroundService::class.java) }
         }
-        shell("device_config put activity_manager data_sync_fgs_timeout_duration 4000")
 
         waitFor("Android's time limit stops it", 60_000) { !running(SummarizerForegroundService::class.java) }
         val added = Logger.getCrashLog(app).removePrefix(before)
@@ -65,19 +65,30 @@ class DataSyncTimeoutInstrumentedTest {
 
     @Test fun theImageGenerationKeepAliveStopsInTimeLogsOnceAndCancelsNothing() {
         val before = Logger.getImageGenErrorsLog(app)
+        shortenTheTimeLimit()
         ActivityScenario.launch(MemoryControlsActivity::class.java).use {
             var started = false
             instrumentation.runOnMainSync { started = ImageGenerationForegroundService.begin(app, CHAT_ID) }
             assertTrue(started)
             waitFor("the image generation service runs") { running(ImageGenerationForegroundService::class.java) }
         }
-        shell("device_config put activity_manager data_sync_fgs_timeout_duration 4000")
 
         waitFor("Android's time limit stops it", 60_000) { !running(ImageGenerationForegroundService::class.java) }
         val added = Logger.getImageGenErrorsLog(app).removePrefix(before)
         assertEquals("logged once", 1, Regex("Image Generation Service: Android's background execution time limit was reached").findAll(added).count())
         assertTrue(added, added.contains("[ImageGenerationService] [WARNING]"))
         assertTrue(added, added.contains("Image generation was not explicitly cancelled"))
+    }
+
+    /**
+     * Android schedules the time-limit callback when a service starts, so the
+     * shortened limit is set, and confirmed stored, before either service starts.
+     */
+    private fun shortenTheTimeLimit() {
+        shell("device_config put activity_manager data_sync_fgs_timeout_duration 4000")
+        waitFor("Android stores the shortened limit") {
+            shellOutput("device_config get activity_manager data_sync_fgs_timeout_duration").trim() == "4000"
+        }
     }
 
     private fun running(service: Class<*>): Boolean {
@@ -97,9 +108,14 @@ class DataSyncTimeoutInstrumentedTest {
     }
 
     private fun shell(command: String) {
+        shellOutput(command)
+    }
+
+    private fun shellOutput(command: String): String {
         val output: ParcelFileDescriptor = instrumentation.uiAutomation.executeShellCommand(command)
-        FileInputStream(output.fileDescriptor).use { it.readBytes() }
+        val text = FileInputStream(output.fileDescriptor).use { String(it.readBytes()) }
         output.close()
+        return text
     }
 
     private companion object {
