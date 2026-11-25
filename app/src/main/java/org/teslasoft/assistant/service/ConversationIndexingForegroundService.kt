@@ -18,12 +18,17 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingContent
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingRule
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingStep
 import org.teslasoft.assistant.conversation.index.BackgroundStopReason
+import org.teslasoft.assistant.conversation.index.ConversationIndexErrorLog
 import org.teslasoft.assistant.conversation.index.ConversationIndexRuntime
+import org.teslasoft.assistant.conversation.index.IndexingDisplay
+import org.teslasoft.assistant.conversation.index.IndexingLogText
+import org.teslasoft.assistant.conversation.index.IndexingNotificationAccess
 
 /**
  * Conversation indexing after the app is closed (memory development plan
@@ -48,6 +53,8 @@ class ConversationIndexingForegroundService : Service() {
         private const val NOTIFICATION_ID = 9951
         private const val PAUSED_NOTIFICATION_ID = 9952
         private const val UPDATE_MILLIS = 10_000L
+        /** How often an ordinary update is checked, so the service does not outlast its work. */
+        private const val UPDATING_MILLIS = 2_000L
         private const val WAKE_LOCK_TAG = "PhosphorShines:ConversationIndexing"
         /** Renewed at every update (an update can wait behind a long rebuild); a service that stops updating lets the phone sleep within this time. */
         private const val WAKE_LOCK_MILLIS = 10 * 60 * 1000L
@@ -87,6 +94,18 @@ class ConversationIndexingForegroundService : Service() {
         fun requestStop(reason: BackgroundStopReason) {
             val service = running
             if (service != null) service.stop(reason) else stopWanted = reason
+        }
+
+        /** Whether the app's and the channel's notifications are on (Owner, 2026-11-25). */
+        fun notificationAccess(context: Context): IndexingNotificationAccess = try {
+            val app = context.applicationContext
+            val enabled = NotificationManagerCompat.from(app).areNotificationsEnabled()
+            val channelNone = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                app.getSystemService(NotificationManager::class.java)?.getNotificationChannel(CHANNEL_ID)
+                    ?.importance == NotificationManager.IMPORTANCE_NONE
+            IndexingNotificationAccess.of(enabled, channelNone)
+        } catch (_: Exception) {
+            IndexingNotificationAccess.ALLOWED
         }
 
         /** The approved notice that Android's limit paused indexing until the app is opened. */
@@ -147,6 +166,12 @@ class ConversationIndexingForegroundService : Service() {
     private var run = 0
     private var shown: BackgroundIndexingContent? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    /** A catch-up ran during this run, so its end is the catch-up's. Index's thread. */
+    @Volatile private var hadCatchUp = false
+    /** The vector request count when this run started: only a failure after it can stall the run. */
+    @Volatile private var requestsAtStart = 0L
+    /** The wake lock's failure was written for this run. */
+    private var wakeLockFailureWritten = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -173,6 +198,9 @@ class ConversationIndexingForegroundService : Service() {
         stopped = false
         run++
         shown = first
+        hadCatchUp = false
+        wakeLockFailureWritten = false
+        requestsAtStart = ConversationIndexRuntime.vectorRequestCount()
         running = this
         AppBackgroundIndexing.controller(this).serviceStarted()
         val wanted = stopWanted
@@ -211,12 +239,23 @@ class ConversationIndexingForegroundService : Service() {
             progress.refresh()
             val controller = AppBackgroundIndexing.controller(this)
             val thisRun = run
+            val app = applicationContext
             ConversationIndexRuntime.onIndexThread {
                 val step = try {
-                    stepForTest?.invoke() ?: BackgroundIndexingRule.next(
-                        progress.display.value, progress.conditions(), progress.isPaused, controller.appVisible,
-                        progress.isStalled, controller.continuedByService
-                    )
+                    stepForTest?.invoke() ?: run {
+                        val display = progress.display.value
+                        if (display is IndexingDisplay.Running) hadCatchUp = true
+                        val pending = AppBackgroundIndexing.waitingWork(app)
+                        BackgroundIndexingRule.next(
+                            display, progress.conditions(), progress.isPaused, controller.appVisible,
+                            progress.isStalled || (display !is IndexingDisplay.Running && !pending &&
+                                ConversationIndexRuntime.updateStalledSince(requestsAtStart)),
+                            controller.continuedByService,
+                            pendingWork = pending,
+                            notificationsAllowed = notificationAccess(app) == IndexingNotificationAccess.ALLOWED,
+                            hadCatchUp = hadCatchUp
+                        )
+                    }
                 } catch (e: Exception) {
                     handler.post { if (thisRun == run) fail(e) }
                     return@onIndexThread
@@ -241,7 +280,11 @@ class ConversationIndexingForegroundService : Service() {
                         // The indexing matters more than the notification's number.
                     }
                 }
-                handler.postDelayed(update, updateMillis)
+                // An ordinary update is checked more often, so the service ends soon after its work does.
+                handler.postDelayed(
+                    update,
+                    if (step.content == BackgroundIndexingContent.Updating) minOf(updateMillis, UPDATING_MILLIS) else updateMillis
+                )
             }
         }
     }
@@ -261,6 +304,7 @@ class ConversationIndexingForegroundService : Service() {
     /** Ends this run; a newer start asked for meanwhile keeps the service. */
     private fun end() {
         stopped = true
+        ConversationIndexRuntime.writeSummary(applicationContext, IndexingLogText.SummaryScope.SERVICE_RUN)
         if (running === this) running = null
         handler.removeCallbacks(update)
         releaseWakeLock()
@@ -277,7 +321,8 @@ class ConversationIndexingForegroundService : Service() {
             (BackgroundIndexingRule.next(
                 progress.display.value, progress.conditions(), progress.isPaused, appVisible = false,
                 stalled = progress.isStalled,
-                continued = AppBackgroundIndexing.controller(this).continuedByService
+                continued = AppBackgroundIndexing.controller(this).continuedByService,
+                pendingWork = AppBackgroundIndexing.waitingWork(this)
             ) as? BackgroundIndexingStep.Show)?.content
         }
     } catch (_: Exception) {
@@ -295,9 +340,18 @@ class ConversationIndexingForegroundService : Service() {
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            // A catch-up or rebuild shows at once. An ordinary update uses Android's usual behaviour,
+            // which may hold the notification back while the work is short (Owner, 2026-11-25); the
+            // indexing itself is never delayed for it.
+            .setForegroundServiceBehavior(
+                if (content == BackgroundIndexingContent.Updating) NotificationCompat.FOREGROUND_SERVICE_DEFAULT
+                else NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE
+            )
         when (content) {
             null -> Unit
+            BackgroundIndexingContent.Updating -> builder
+                .setContentText(getString(R.string.conversation_indexing_notification_updating))
+                .setProgress(0, 0, true)
             BackgroundIndexingContent.Counting -> builder
                 .setContentText(getString(R.string.conversation_indexing_counting))
                 .setProgress(0, 0, true)
@@ -319,7 +373,16 @@ class ConversationIndexingForegroundService : Service() {
                 .apply { setReferenceCounted(false) }
                 .also { wakeLock = it }
             lock.acquire(WAKE_LOCK_MILLIS)
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            // Indexing goes on while the screen is on; written once per run.
+            if (!wakeLockFailureWritten) {
+                wakeLockFailureWritten = true
+                ConversationIndexRuntime.logSink(this).error(
+                    "error", IndexingLogText.wakeLockFailed(ConversationIndexErrorLog.cause(e)), e,
+                    ConversationIndexRuntime.stateForLog(this)
+                )
+            }
+        }
     }
 
     private fun releaseWakeLock() {

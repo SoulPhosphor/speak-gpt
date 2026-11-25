@@ -2402,6 +2402,57 @@ class Preferences internal constructor(
         putGlobalBoolean("system_logging", enabled, false)
     }
 
+    // --- Conversation indexing logs (Owner, 2026-11-25) ---------------------
+    // Keys and defaults live in IndexingLogSettings, which indexing reads directly.
+
+    fun getIndexingErrorDetails(): Boolean = getGlobalBoolean(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.ERROR_DETAILS,
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.ERROR_DETAILS_DEFAULT
+    )
+
+    fun setIndexingErrorDetails(enabled: Boolean) = putGlobalBoolean(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.ERROR_DETAILS, enabled,
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.ERROR_DETAILS_DEFAULT
+    )
+
+    fun getIndexingActivityLogging(): Boolean = getGlobalBoolean(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.ACTIVITY,
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.ACTIVITY_DEFAULT
+    )
+
+    fun setIndexingActivityLogging(enabled: Boolean) = putGlobalBoolean(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.ACTIVITY, enabled,
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.ACTIVITY_DEFAULT
+    )
+
+    fun getIndexingDetailedDiagnostics(): Boolean = getGlobalBoolean(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.DETAILED,
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.DETAILED_DEFAULT
+    )
+
+    fun setIndexingDetailedDiagnostics(enabled: Boolean) = putGlobalBoolean(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.DETAILED, enabled,
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.DETAILED_DEFAULT
+    )
+
+    fun getIndexingLogMaxEntries(): Int = coerceLogMaxEntries(getGlobalInt(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.MAX_ENTRIES, LOG_DEFAULT_MAX_ENTRIES
+    ))
+
+    fun setIndexingLogMaxEntries(value: Int) = putGlobalInt(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.MAX_ENTRIES,
+        coerceLogMaxEntries(value), LOG_DEFAULT_MAX_ENTRIES
+    )
+
+    fun getIndexingLogMaxDays(): Int = coerceLogMaxDays(getGlobalInt(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.MAX_DAYS, LOG_DEFAULT_MAX_DAYS
+    ))
+
+    fun setIndexingLogMaxDays(value: Int) = putGlobalInt(
+        org.teslasoft.assistant.conversation.index.IndexingLogSettings.MAX_DAYS,
+        coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS
+    )
+
     fun getSystemLogMaxEntries() : Int {
         return coerceLogMaxEntries(getGlobalInt("system_log_max_entries", SYSTEM_LOG_DEFAULT_MAX_ENTRIES))
     }

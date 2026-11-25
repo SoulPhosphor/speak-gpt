@@ -172,6 +172,7 @@ class LogsActivity : SettingsPageActivity() {
         "image_gen" -> Logger.getImageGenLog(this)
         "tts_lifecycle" -> Logger.getTtsLifecycleLog(this)
         Logger.SYSTEM_LOG_TYPE -> Logger.getSystemLog(this)
+        Logger.INDEXING_LOG_TYPE -> Logger.getIndexingLog(this)
         else -> ""
     }
 
@@ -399,6 +400,7 @@ class LogsActivity : SettingsPageActivity() {
                         "image_gen" -> setHeader(R.string.title_image_gen_log)
                         "tts_lifecycle" -> setHeader(R.string.title_tts_lifecycle_log)
                         Logger.SYSTEM_LOG_TYPE -> setHeader(R.string.system_logs_title)
+                        Logger.INDEXING_LOG_TYPE -> setHeader(R.string.title_indexing_log)
                         else -> {
                             finish()
                             return@runOnUiThread
@@ -439,6 +441,7 @@ class LogsActivity : SettingsPageActivity() {
                                 "image_gen" -> Logger.clearImageGenLog(this)
                                 "tts_lifecycle" -> Logger.clearTtsLifecycleLog(this)
                                 Logger.SYSTEM_LOG_TYPE -> Logger.clearSystemLog(this)
+                                Logger.INDEXING_LOG_TYPE -> Logger.clearIndexingLog(this)
                             }
                             renderLog()
                         }

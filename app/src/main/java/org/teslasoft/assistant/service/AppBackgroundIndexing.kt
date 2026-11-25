@@ -9,11 +9,13 @@ import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingController
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingPlatform
 import org.teslasoft.assistant.conversation.index.BackgroundStopReason
-import org.teslasoft.assistant.conversation.index.ConversationIndexErrorLog
+import org.teslasoft.assistant.conversation.index.AppIndexingLogSink
+import org.teslasoft.assistant.conversation.index.IndexingLogSink
+import org.teslasoft.assistant.conversation.index.IndexingLogText
+import org.teslasoft.assistant.conversation.index.IndexingNotificationAccess
 import org.teslasoft.assistant.conversation.index.ConversationIndexRuntime
 import org.teslasoft.assistant.conversation.index.IndexingConditions
 import org.teslasoft.assistant.conversation.index.IndexingDisplay
@@ -39,12 +41,35 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
     /** Tests: what the leave decision reads instead of the app's indexing progress and conditions. */
     @Volatile internal var displayForTest: IndexingDisplay? = null
     @Volatile internal var conditionsForTest: IndexingConditions? = null
+    @Volatile internal var pendingForTest: Boolean? = null
     private var startedScreens = 0
 
     fun register(app: Application) {
         controller(app)
         app.registerActivityLifecycleCallbacks(this)
+        // A service run that never recorded its stop (the process ended while it ran) is written once.
+        guarded { previousRunEnded(app) }
     }
+
+    private const val RUN_MARK_STORE = "conversation_indexing_service"
+    private const val RUN_MARK_KEY = "service_run_going"
+
+    private fun runMarks(context: Context) = context.applicationContext.getSharedPreferences(RUN_MARK_STORE, Context.MODE_PRIVATE)
+
+    internal fun previousRunEnded(app: Context) {
+        val marks = runMarks(app)
+        if (!marks.getBoolean(RUN_MARK_KEY, false)) return
+        marks.edit().remove(RUN_MARK_KEY).commit()
+        sink(app).error("warning", IndexingLogText.PREVIOUS_SESSION_ENDED)
+    }
+
+    @Volatile private var sinkInstance: IndexingLogSink? = null
+    private fun sink(context: Context): IndexingLogSink =
+        sinkInstance ?: AppIndexingLogSink(context).also { sinkInstance = it }
+
+    /** A reply is still being written, or finished moments ago and its last save may still be on its way. */
+    private const val REPLY_GRACE_MILLIS = 15_000L
+    @Volatile private var replySeenAt = 0L
 
     fun controller(context: Context): BackgroundIndexingController =
         instance ?: synchronized(this) {
@@ -58,7 +83,10 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityStopped(activity: Activity) {
         if (startedScreens == 0) return
-        if (--startedScreens == 0 && !activity.isChangingConfigurations) guarded { controller(activity).appLeft() }
+        if (--startedScreens == 0 && !activity.isChangingConfigurations) {
+            guarded { ConversationIndexRuntime.writeSummary(activity, IndexingLogText.SummaryScope.APP_OPEN) }
+            guarded { controller(activity).appLeft() }
+        }
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
@@ -83,20 +111,18 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
 
         override fun userPaused(): Boolean = ConversationIndexRuntime.progressIfCreated()?.isPaused ?: false
 
-        override fun stalled(): Boolean = ConversationIndexRuntime.progressIfCreated()?.isStalled ?: false
+        override fun stalled(): Boolean = ConversationIndexRuntime.progressIfCreated()?.isStalled == true ||
+            ConversationIndexRuntime.updateStalledSince(serviceRunRequests)
 
         override fun stallFailure() = ConversationIndexRuntime.progressIfCreated()?.stallFailure
+            ?: ConversationIndexRuntime.vectorStopFailure()
 
-        override fun userWorkRunning(): Boolean = try {
-            val manager = app.getSystemService(ActivityManager::class.java)
-            // Lists only this app's own services.
-            @Suppress("DEPRECATION")
-            manager?.getRunningServices(Int.MAX_VALUE).orEmpty().any {
-                it.service.packageName == app.packageName && it.service.className in userWork
-            }
-        } catch (_: Exception) {
-            false
-        }
+        override fun userWorkRunning(): Boolean = runningServices(app).any { it in userWork }
+
+        override fun pendingWork(): Boolean = waitingWork(app)
+
+        override fun notificationsAllowed(): Boolean =
+            ConversationIndexingForegroundService.notificationAccess(app) == IndexingNotificationAccess.ALLOWED
 
         override fun startService() = ConversationIndexingForegroundService.start(app)
 
@@ -106,10 +132,56 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
 
         override fun clearStoppedNotice() = ConversationIndexingForegroundService.clearPausedNotice(app)
 
-        override fun logcat(message: String) {
-            try { Log.i(ConversationIndexErrorLog.TAG, message) } catch (_: Throwable) { }
-        }
+        override fun activityLog(message: String) = sink(app).activity(message)
 
-        override fun errorLog(message: String) = ConversationIndexRuntime.log(app, "error", message)
+        override fun detailedLog(message: String) = sink(app).detailed(message)
+
+        override fun errorLog(message: String, cause: Throwable?) =
+            sink(app).error("error", message, cause, ConversationIndexRuntime.stateForLog(app))
+
+        override fun warningLog(message: String) = sink(app).error("warning", message, null, ConversationIndexRuntime.stateForLog(app))
+
+        /** The vector request count when the latest service run started (updates stall only after it). */
+        @Volatile private var serviceRunRequests = Long.MAX_VALUE
+
+        override fun serviceRunMarked(running: Boolean) {
+            if (running) serviceRunRequests = ConversationIndexRuntime.vectorRequestCount()
+            try {
+                val edit = runMarks(app).edit()
+                if (running) edit.putBoolean(RUN_MARK_KEY, true) else edit.remove(RUN_MARK_KEY)
+                edit.commit()
+            } catch (_: Exception) { }
+        }
+    }
+
+    /** This app's running services, by class name. */
+    private fun runningServices(app: Context): List<String> = try {
+        val manager = app.getSystemService(ActivityManager::class.java)
+        // Lists only this app's own services.
+        @Suppress("DEPRECATION")
+        manager?.getRunningServices(Int.MAX_VALUE).orEmpty()
+            .filter { it.service.packageName == app.packageName }
+            .map { it.service.className }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    /**
+     * Whether indexing work waits or is going besides a catch-up (Owner,
+     * 2026-11-25): the coordinator's queues and updates, a waiting recovery,
+     * vector passes, and a reply still being written, which is followed for a
+     * short while after it ends so its last save is not missed. Bounded: a
+     * reply that never saves adds at most that short while.
+     */
+    fun waitingWork(context: Context): Boolean {
+        pendingForTest?.let { return it }
+        val app = context.applicationContext
+        if (ConversationIndexRuntime.hasPendingWork()) return true
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (GenerationForegroundService::class.java.name in runningServices(app)) {
+            replySeenAt = now
+            return true
+        }
+        return replySeenAt != 0L && now - replySeenAt < REPLY_GRACE_MILLIS
     }
 }

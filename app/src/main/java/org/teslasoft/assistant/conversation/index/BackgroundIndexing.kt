@@ -11,6 +11,8 @@ package org.teslasoft.assistant.conversation.index
  */
 enum class BackgroundStopReason(val text: String) {
     CATCH_UP_ENDED("the catch-up has no work left"),
+    UPDATES_DONE("the waiting updates are finished"),
+    NOTIFICATIONS_OFF("notifications are turned off"),
     USER_PAUSED("paused by the user"),
     SETTING_OFF("Index Conversations was turned off"),
     MODEL_UNAVAILABLE("the on-device search model is unavailable"),
@@ -40,6 +42,13 @@ sealed interface BackgroundIndexingContent {
 
     /** "42% done. Tap to open." with the bar filled to [percent]. */
     data class Percent(val percent: Int) : BackgroundIndexingContent
+
+    /**
+     * "Updating conversation index…" with a moving bar: ordinary updates that
+     * have no meaningful percentage (Owner, 2026-11-25). Android may hold its
+     * notification back for a short update; indexing is never delayed for that.
+     */
+    data object Updating : BackgroundIndexingContent
 }
 
 /** What the background service does next. */
@@ -49,10 +58,10 @@ sealed interface BackgroundIndexingStep {
 }
 
 enum class BackgroundStartDecision {
-    /** A catch-up with work left runs and is not paused: the service starts. */
+    /** Indexing work waits and is not paused: the service starts. */
     START,
 
-    /** Nothing to continue (no catch-up, paused, off, no model, a failed rebuild). */
+    /** Nothing to continue (no work waiting, paused, off, no model, a failed rebuild, notifications off). */
     NOT_NEEDED,
 
     /** Work the user started (image generation, restore, Summarizer, Memory Assistant analysis) runs: indexing waits for the app to open. */
@@ -68,9 +77,13 @@ enum class BackgroundStartDecision {
 object BackgroundIndexingRule {
 
     /**
-     * When the app leaves the screen: only an active, unpaused catch-up with
-     * work left (shown by the header icon), or a rebuild that is followed by
-     * one, is continued. The ordinary update of a changed chat is not.
+     * When the app leaves the screen, all legitimate waiting indexing work is
+     * continued by the service (Owner, 2026-11-25): a catch-up with work left,
+     * a rebuild or a waiting recovery, and [pendingWork] (a changed chat, an
+     * update part-way through, search vectors still to make, a reply still
+     * being written). Not while paused, off, without the model, after a failed
+     * rebuild, stalled, or with notifications turned off; work the user
+     * started comes first.
      */
     fun startDecision(
         display: IndexingDisplay,
@@ -78,16 +91,46 @@ object BackgroundIndexingRule {
         paused: Boolean,
         userWorkRunning: Boolean,
         /** A catch-up that cannot go on by itself is not continued: the service would stop at once. */
-        stalled: Boolean = false
+        stalled: Boolean = false,
+        pendingWork: Boolean = false,
+        /** Without a visible notification, indexing waits for the app (Owner, 2026-11-25). */
+        notificationsAllowed: Boolean = true
     ): BackgroundStartDecision {
         if (paused || stalled || !conditions.settingOn || conditions.recoveryFailed || conditions.modelUnavailable) {
             return BackgroundStartDecision.NOT_NEEDED
         }
-        val work = conditions.rebuilding || display is IndexingDisplay.Running
+        val work = conditions.rebuilding || display is IndexingDisplay.Running || pendingWork
         return when {
             !work -> BackgroundStartDecision.NOT_NEEDED
             userWorkRunning -> BackgroundStartDecision.YIELD
+            !notificationsAllowed -> BackgroundStartDecision.NOT_NEEDED
             else -> BackgroundStartDecision.START
+        }
+    }
+
+    /**
+     * Why waiting work was not continued when the app was left, for the
+     * Indexing Log; null when nothing waited or the service starts.
+     */
+    fun notContinuedReason(
+        display: IndexingDisplay,
+        conditions: IndexingConditions,
+        paused: Boolean,
+        userWorkRunning: Boolean,
+        stalled: Boolean,
+        pendingWork: Boolean,
+        notificationsAllowed: Boolean
+    ): String? {
+        val work = conditions.rebuilding || display is IndexingDisplay.Running || pendingWork
+        if (!work) return null
+        return when {
+            paused -> "paused"
+            !conditions.settingOn || conditions.recoveryFailed -> "turned off"
+            conditions.modelUnavailable -> "model unavailable"
+            stalled -> "stopped after an error"
+            userWorkRunning -> "work you started is running"
+            !notificationsAllowed -> "notifications are turned off"
+            else -> null
         }
     }
 
@@ -100,7 +143,13 @@ object BackgroundIndexingRule {
         /** The catch-up's last vector pass failed and nothing will start another by itself. */
         stalled: Boolean = false,
         /** Whether indexing is being continued by the service; false when a later leave decided against it. */
-        continued: Boolean = true
+        continued: Boolean = true,
+        /** Ordinary waiting work besides a catch-up ([startDecision]). */
+        pendingWork: Boolean = false,
+        /** Without a visible notification the service stops and indexing waits for the app. */
+        notificationsAllowed: Boolean = true,
+        /** A catch-up ran during this service run, so its end is reported as the catch-up's. */
+        hadCatchUp: Boolean = true
     ): BackgroundIndexingStep = when {
         appVisible -> BackgroundIndexingStep.Stop(BackgroundStopReason.APP_OPENED)
         // A service whose start arrived after indexing was closed never runs with nothing to show for it.
@@ -108,14 +157,17 @@ object BackgroundIndexingRule {
         paused -> BackgroundIndexingStep.Stop(BackgroundStopReason.USER_PAUSED)
         conditions.recoveryFailed -> BackgroundIndexingStep.Stop(BackgroundStopReason.REBUILD_FAILED)
         !conditions.settingOn -> BackgroundIndexingStep.Stop(BackgroundStopReason.SETTING_OFF)
+        !notificationsAllowed -> BackgroundIndexingStep.Stop(BackgroundStopReason.NOTIFICATIONS_OFF)
         conditions.rebuilding -> BackgroundIndexingStep.Show(BackgroundIndexingContent.Rebuilding)
         conditions.modelUnavailable -> BackgroundIndexingStep.Stop(BackgroundStopReason.MODEL_UNAVAILABLE)
-        // A catch-up that cannot go on by itself never keeps the service and the phone awake.
+        // Work that cannot go on by itself never keeps the service and the phone awake.
         stalled -> BackgroundIndexingStep.Stop(BackgroundStopReason.INDEXING_FAILED)
         display is IndexingDisplay.Running -> BackgroundIndexingStep.Show(
             display.numbers?.let { BackgroundIndexingContent.Percent(it.percent) } ?: BackgroundIndexingContent.Counting
         )
-        else -> BackgroundIndexingStep.Stop(BackgroundStopReason.CATCH_UP_ENDED)
+        pendingWork -> BackgroundIndexingStep.Show(BackgroundIndexingContent.Updating)
+        hadCatchUp -> BackgroundIndexingStep.Stop(BackgroundStopReason.CATCH_UP_ENDED)
+        else -> BackgroundIndexingStep.Stop(BackgroundStopReason.UPDATES_DONE)
     }
 
     /**
@@ -252,14 +304,26 @@ interface BackgroundIndexingPlatform {
     fun stallFailure(): VectorPassFailure? = null
     /** Whether a data-sync service the user started is running. */
     fun userWorkRunning(): Boolean
+    /** Ordinary waiting indexing work besides a catch-up ([BackgroundIndexingRule.startDecision]). */
+    fun pendingWork(): Boolean = false
+    /** Whether the indexing notification can be seen: the app's notifications and its channel are on. */
+    fun notificationsAllowed(): Boolean = true
     /** Asks Android to start the service; throws what Android throws. */
     fun startService()
     /** Asks a running or starting service to stop for [reason]. */
     fun stopService(reason: BackgroundStopReason)
     fun showStoppedNotice()
     fun clearStoppedNotice()
-    fun logcat(message: String)
-    fun errorLog(message: String)
+    /** Indexing Log, while Indexing Activity is on; never Logcat. */
+    fun activityLog(message: String)
+    /** Indexing Log, while Detailed Indexing Diagnostics is on. */
+    fun detailedLog(message: String) {}
+    /** Error Log, always: an actual failure. */
+    fun errorLog(message: String, cause: Throwable? = null)
+    /** Error Log, always: an Android limit that left work waiting, which is not an error. */
+    fun warningLog(message: String) {}
+    /** Remembers that a service run is going, so one that ends without a stop is found at the next start. */
+    fun serviceRunMarked(running: Boolean) {}
 }
 
 /**
@@ -295,15 +359,35 @@ class BackgroundIndexingController(
 
     /** The last screen of the app left (not a rotation). */
     fun appLeft() {
+        var notContinued: String? = null
+        var state = IndexingLogText.State.NOTHING
+        var paused = false
+        var userWork = false
         val decision = try {
-            BackgroundIndexingRule.startDecision(
-                platform.display(), platform.conditions(), platform.userPaused(), platform.userWorkRunning(),
-                platform.stalled()
+            val display = platform.display()
+            val conditions = platform.conditions()
+            paused = platform.userPaused()
+            userWork = platform.userWorkRunning()
+            val stalled = platform.stalled()
+            val pending = platform.pendingWork()
+            val notifications = platform.notificationsAllowed()
+            state = when {
+                conditions.rebuilding -> IndexingLogText.State.REBUILDING
+                display is IndexingDisplay.Running -> IndexingLogText.State.CATCH_UP
+                pending -> IndexingLogText.State.UPDATE
+                else -> IndexingLogText.State.NOTHING
+            }
+            notContinued = BackgroundIndexingRule.notContinuedReason(
+                display, conditions, paused, userWork, stalled, pending, notifications
             )
+            BackgroundIndexingRule.startDecision(display, conditions, paused, userWork, stalled, pending, notifications)
         } catch (e: Exception) {
             permit.closed(waiting = true)
             stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
             return
+        }
+        if (state != IndexingLogText.State.NOTHING) {
+            platform.detailedLog(IndexingLogText.leaveDecision(decision == BackgroundStartDecision.START, state, paused, userWork))
         }
         when (decision) {
             BackgroundStartDecision.START -> {
@@ -312,7 +396,8 @@ class BackgroundIndexingController(
             }
             // Work the user started comes first; nothing else to continue: indexing waits for the app.
             BackgroundStartDecision.YIELD, BackgroundStartDecision.NOT_NEEDED -> {
-                permit.closed(waiting = catchUpGoing())
+                permit.closed(waiting = workGoing())
+                notContinued?.let { platform.activityLog(IndexingLogText.notContinued(it)) }
                 // A start asked for on an earlier leave and not yet stopped ends with this leave's reason.
                 if (serviceActive) platform.stopService(notStartedReason(decision))
             }
@@ -321,9 +406,11 @@ class BackgroundIndexingController(
 
     private fun stallFailureSafely(): VectorPassFailure? = try { platform.stallFailure() } catch (_: Exception) { null }
 
-    /** Whether a catch-up is going, so the next opening must continue it whatever else happens meanwhile. */
-    private fun catchUpGoing(): Boolean = try {
-        platform.display() is IndexingDisplay.Running || platform.conditions().rebuilding
+    /** Whether indexing work is going or waits, so the next opening must continue it whatever else happens meanwhile. */
+    private fun workGoing(): Boolean = try {
+        // Work stopped by a failure still waits: the next opening asks for it again.
+        platform.display() is IndexingDisplay.Running || platform.conditions().rebuilding || platform.pendingWork() ||
+            platform.stalled()
     } catch (_: Exception) {
         true
     }
@@ -331,7 +418,8 @@ class BackgroundIndexingController(
     private fun notStartedReason(decision: BackgroundStartDecision): BackgroundStopReason =
         if (decision == BackgroundStartDecision.YIELD) BackgroundStopReason.USER_WORK_RUNNING
         else (BackgroundIndexingRule.next(
-            platform.display(), platform.conditions(), platform.userPaused(), appVisible = false, stalled = platform.stalled()
+            platform.display(), platform.conditions(), platform.userPaused(), appVisible = false, stalled = platform.stalled(),
+            pendingWork = platform.pendingWork(), notificationsAllowed = platform.notificationsAllowed()
         ) as? BackgroundIndexingStep.Stop)?.reason ?: BackgroundStopReason.CATCH_UP_ENDED
 
     /** Asks Android for the service; a refusal is handled at once. */
@@ -353,7 +441,8 @@ class BackgroundIndexingController(
 
     /** The service called startForeground successfully. */
     fun serviceStarted() {
-        platform.logcat(BackgroundIndexingLog.STARTED)
+        platform.serviceRunMarked(true)
+        platform.activityLog(BackgroundIndexingLog.STARTED)
     }
 
     /** Android refused the start, either when asked or in the service's own startForeground. */
@@ -361,47 +450,95 @@ class BackgroundIndexingController(
         serviceActive = false
         val reason = classify(e)
         lastStop = reason
-        val was = permit.closedUnlessForeground(waiting = catchUpGoing())
+        val was = permit.closedUnlessForeground(waiting = workGoing())
         if (reason == BackgroundStopReason.UNEXPECTED_FAILURE) {
             stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
+            if (was == BackgroundIndexingPermit.State.SERVICE) waitingForTheApp(showNotice = true)
             return
         }
-        // Opened again meanwhile, or a later leave decided not to continue: nothing to explain.
-        if (was != BackgroundIndexingPermit.State.SERVICE) return
-        platform.logcat(BackgroundIndexingLog.stopped(reason))
-        platform.showStoppedNotice()
+        // Opened again meanwhile, or a later leave decided not to continue: no work was interrupted.
+        if (was != BackgroundIndexingPermit.State.SERVICE) {
+            platform.activityLog(IndexingLogText.stoppedByAndroidLimitNoInterruption(reason))
+            return
+        }
+        // Work waits because of Android's limit: not an app error, but kept in the Error Log to explain it.
+        platform.warningLog(IndexingLogText.pausedByAndroidLimit(reason, ConversationIndexErrorLog.cause(e)))
+        waitingForTheApp(showNotice = true)
     }
 
     /** The service stopped for [reason]; an Android limit while the app is closed is explained. */
     fun serviceStopped(reason: BackgroundStopReason) {
         serviceActive = false
         lastStop = reason
+        platform.serviceRunMarked(false)
         // A run that ended normally: a failure seen again later is a new one.
         lastFailure = null
-        val was = permit.closedUnlessForeground(waiting = catchUpGoing())
-        platform.logcat(
-            if (reason == BackgroundStopReason.INDEXING_FAILED) BackgroundIndexingLog.processingStopped(stallFailureSafely())
-            else BackgroundIndexingLog.stopped(reason)
-        )
-        if (reason.isAndroidLimit && was == BackgroundIndexingPermit.State.SERVICE) platform.showStoppedNotice()
+        val was = permit.closedUnlessForeground(waiting = workGoing())
+        val interrupted = was == BackgroundIndexingPermit.State.SERVICE && workGoingSafely()
+        when {
+            reason == BackgroundStopReason.INDEXING_FAILED ->
+                platform.errorLog(BackgroundIndexingLog.processingStopped(stallFailureSafely()))
+            reason.isAndroidLimit && interrupted -> platform.warningLog(IndexingLogText.pausedByAndroidLimit(reason, null))
+            reason.isAndroidLimit -> platform.activityLog(IndexingLogText.stoppedByAndroidLimitNoInterruption(reason))
+            else -> platform.activityLog(BackgroundIndexingLog.stopped(reason))
+        }
+        if (reason.isAndroidLimit && was == BackgroundIndexingPermit.State.SERVICE) waitingForTheApp(showNotice = true)
+        else if (interrupted && reason != BackgroundStopReason.APP_OPENED) waitingForTheApp(showNotice = false)
     }
 
     /** The running service failed unexpectedly: indexing waits for the app to open. */
     fun serviceFailed(e: Throwable) {
         serviceActive = false
-        permit.closedUnlessForeground(waiting = catchUpGoing())
+        platform.serviceRunMarked(false)
+        val was = permit.closedUnlessForeground(waiting = workGoing())
         stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_STOPPED)
+        if (was == BackgroundIndexingPermit.State.SERVICE) waitingForTheApp(showNotice = true)
+    }
+
+    /** Work was left when the service ended: the next opening continues it. */
+    private fun waitingForTheApp(showNotice: Boolean) {
+        if (!workGoingSafely()) return
+        platform.activityLog(IndexingLogText.WAITING_FOR_APP)
+        if (showNotice) platform.showStoppedNotice()
+    }
+
+    private fun workGoingSafely(): Boolean = try {
+        platform.display() is IndexingDisplay.Running || platform.conditions().rebuilding || platform.pendingWork() ||
+            platform.stalled()
+    } catch (_: Exception) {
+        false
     }
 
     private fun stoppedUnexpectedly(e: Throwable, effect: String) {
         lastStop = BackgroundStopReason.UNEXPECTED_FAILURE
         val reason = if (effect == BackgroundIndexingLog.EFFECT_NOT_STARTED) BackgroundStopReason.UNEXPECTED_FAILURE_AT_START
         else BackgroundStopReason.UNEXPECTED_FAILURE
-        platform.logcat(BackgroundIndexingLog.stopped(reason))
+        platform.activityLog(BackgroundIndexingLog.stopped(reason))
         val cause = ConversationIndexErrorLog.cause(e)
         if (cause != lastFailure) {
             lastFailure = cause
-            platform.errorLog(BackgroundIndexingLog.failed(cause, effect, BackgroundIndexingLog.RETRY))
+            platform.errorLog(BackgroundIndexingLog.failed(cause, effect, BackgroundIndexingLog.RETRY), e)
+        }
+    }
+}
+
+/**
+ * Whether the indexing notification can be seen (Owner, 2026-11-25). Without
+ * it, background indexing waits for the app; indexing in the app is unchanged.
+ */
+enum class IndexingNotificationAccess {
+    ALLOWED,
+    /** The app's notifications are turned off (Android 13 and later: the permission is denied). */
+    APP_OFF,
+    /** Only the Indexing Conversations notifications are turned off. */
+    CHANNEL_OFF;
+
+    companion object {
+        /** [channelImportanceNone]: the channel exists and is set to none; a channel not made yet is allowed. */
+        fun of(appNotificationsEnabled: Boolean, channelImportanceNone: Boolean): IndexingNotificationAccess = when {
+            !appNotificationsEnabled -> APP_OFF
+            channelImportanceNone -> CHANNEL_OFF
+            else -> ALLOWED
         }
     }
 }

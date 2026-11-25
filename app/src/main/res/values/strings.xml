@@ -913,6 +913,14 @@
          Log Cabin row and viewer header) and its toggle subtext. -->
     <string name="system_logs_title">System Logs</string>
     <string name="system_logs_desc">Records the process lifecycle.</string>
+    <!-- Conversation indexing logs (Logging Preferences, Log Cabin; owner-approved, Nov 25 2026). -->
+    <string name="indexing_error_details_title">Indexing Error Details</string>
+    <string name="indexing_error_details_desc">Adds technical details, such as the chain of causes and the indexing state at the time, to conversation indexing failures in the Error Log. Failures are always recorded.</string>
+    <string name="indexing_activity_title">Indexing Activity</string>
+    <string name="indexing_activity_desc">Records when conversation indexing starts, stops, pauses, resumes, and finishes to the Indexing Log.</string>
+    <string name="indexing_detailed_title">Detailed Indexing Diagnostics</string>
+    <string name="indexing_detailed_desc">Records extra technical details about conversation indexing to the Indexing Log. Turn on only when troubleshooting.</string>
+    <string name="title_indexing_log">Indexing Log</string>
     <!-- Alert Sounds: row in Appearance & Behaviors and its screen header. -->
     <string name="alert_sounds_title">Alert Sounds</string>
     <string name="title_damaged_chat_files">Damaged Chat Files</string>
@@ -4760,6 +4768,9 @@
     <string name="conversation_index_stopped_text">The conversation index could not be rebuilt, so Index Conversations was turned off. Open RAG Active Memory Settings to try rebuilding the index again.</string>
     <string name="conversation_index_open_rag_settings">Open RAG Active Memory Settings</string>
     <string name="conversation_index_rebuilding">The conversation index is being rebuilt.</string>
+    <!-- Background continuation unavailable because notifications are off (owner-approved, Nov 25 2026). -->
+    <string name="conversation_index_notifications_app_off">Indexing continues only while the app is open because the app\'s notifications are turned off. Allow notifications for the app in Android settings to let indexing continue after the app is closed.</string>
+    <string name="conversation_index_notifications_channel_off">Indexing continues only while the app is open because Indexing Conversations notifications are turned off. Turn them on in Android settings to let indexing continue after the app is closed.</string>
     <!-- Indexing Conversations progress pop-up and header icon (G.16a;
          Owner, 2026-11-24, Step 12). -->
     <string name="conversation_indexing_title">Indexing Conversations</string>
@@ -4780,6 +4791,8 @@
          conversation_indexing_title; counting uses conversation_indexing_counting. -->
     <string name="conversation_indexing_notification_percent">%1$d%% done. Tap to open.</string>
     <string name="conversation_indexing_notification_rebuilding">Rebuilding conversation index…</string>
+    <!-- Ordinary updates with no meaningful percentage (owner-approved, Nov 25 2026). -->
+    <string name="conversation_indexing_notification_updating">Updating conversation index…</string>
     <!-- Android's time limit or start restriction stopped indexing after the app was closed. -->
     <string name="conversation_indexing_notification_paused">Background indexing is paused. Open the app to continue. Finished work was saved.</string>
     <!-- Check Database Integrity: the conversation index's result line

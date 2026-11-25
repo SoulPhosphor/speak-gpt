@@ -66,6 +66,7 @@ class LogCabinActivity : SettingsPageActivity() {
     private var rowResponseLifecycleLog: LinearLayout? = null
     private var rowImageGenErrorsLog: LinearLayout? = null
     private var rowImageGenLog: LinearLayout? = null
+    private var rowIndexingLog: LinearLayout? = null
     private var rowTtsLifecycleLog: LinearLayout? = null
     private var rowDamagedChatFiles: LinearLayout? = null
     private var rowSystemLog: LinearLayout? = null
@@ -98,6 +99,7 @@ class LogCabinActivity : SettingsPageActivity() {
         rowResponseLifecycleLog = findViewById(R.id.row_response_lifecycle_log)
         rowImageGenErrorsLog = findViewById(R.id.row_image_gen_errors_log)
         rowImageGenLog = findViewById(R.id.row_image_gen_log)
+        rowIndexingLog = findViewById(R.id.row_indexing_log)
         rowTtsLifecycleLog = findViewById(R.id.row_tts_lifecycle_log)
         rowDamagedChatFiles = findViewById(R.id.row_damaged_chat_files)
         rowSystemLog = findViewById(R.id.row_system_log)
@@ -158,6 +160,9 @@ class LogCabinActivity : SettingsPageActivity() {
         }
         rowImageGenLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "image_gen").putExtra("chatId", chatId))
+        }
+        rowIndexingLog?.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", Logger.INDEXING_LOG_TYPE).putExtra("chatId", chatId))
         }
         rowTtsLifecycleLog?.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "tts_lifecycle").putExtra("chatId", chatId))
