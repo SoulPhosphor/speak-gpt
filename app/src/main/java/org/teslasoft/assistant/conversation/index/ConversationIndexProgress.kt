@@ -235,6 +235,10 @@ class IndexProgressTracker(
      */
     @Volatile var vectorRequests: () -> Long = { 0L }
     @Volatile var vectorsStoppedOnFailureAt: () -> Long = { IndexVectorPasses.NOT_STOPPED }
+    @Volatile var vectorsStopFailure: () -> VectorPassFailure? = { null }
+
+    /** What stopped a stalled catch-up, when [isStalled]; for the background service's log. */
+    val stallFailure: VectorPassFailure? get() = if (isStalled) vectorsStopFailure() else null
     /** Whether chats still wait to be counted or compared; each asks for vectors once it is. Set once by the runtime. */
     @Volatile var chatsQueued: () -> Boolean = { false }
     /** The vector request count when the catch-up handed over its last chat. */

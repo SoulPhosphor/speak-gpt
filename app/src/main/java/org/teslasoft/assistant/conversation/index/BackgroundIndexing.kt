@@ -17,7 +17,7 @@ enum class BackgroundStopReason(val text: String) {
     REBUILD_FAILED("the conversation index could not be rebuilt"),
     APP_OPENED("the app was opened"),
     NOT_CONTINUED("indexing is not being continued after the app was closed"),
-    INDEXING_FAILED("indexing could not go on after a failure; it continues when the app is opened"),
+    INDEXING_FAILED("an error stopped processing"),
     USER_WORK_RUNNING("work the user started is running; indexing continues when the app is opened"),
     TIME_LIMIT("Android's time limit for background data work was reached"),
     TIME_USED_UP_AT_START("Android did not allow it to start: the time limit for background data work is used up"),
@@ -143,6 +143,18 @@ object BackgroundIndexingLog {
     fun stopped(reason: BackgroundStopReason) =
         "Conversation indexing background service stopped: ${reason.text}. Completed progress retained."
 
+    /**
+     * The stop when indexing cannot go on in this session (Owner, 2026-11-25):
+     * the stage and the actual cause; the unfinished work is kept and continued
+     * the next time the app is opened, unless indexing is paused or turned off.
+     */
+    fun processingStopped(failure: VectorPassFailure?) =
+        "Conversation Indexing: Processing stopped after an error it cannot recover from in this session, " +
+            "while ${failure?.stage?.text ?: "making search vectors"}. " +
+            "Cause: ${failure?.cause ?: "not recorded"}. " +
+            "The unfinished work is kept and continues the next time the app is opened, " +
+            "unless indexing is paused or turned off."
+
     fun failed(cause: String, effect: String, retry: String) =
         "Conversation indexing background service failed: $cause. Effect: $effect. Retry: $retry."
 
@@ -236,6 +248,8 @@ interface BackgroundIndexingPlatform {
     fun userPaused(): Boolean
     /** Whether the catch-up cannot go on by itself ([IndexProgressTracker.isStalled]). */
     fun stalled(): Boolean = false
+    /** What stopped a stalled catch-up ([IndexProgressTracker.stallFailure]). */
+    fun stallFailure(): VectorPassFailure? = null
     /** Whether a data-sync service the user started is running. */
     fun userWorkRunning(): Boolean
     /** Asks Android to start the service; throws what Android throws. */
@@ -305,6 +319,8 @@ class BackgroundIndexingController(
         }
     }
 
+    private fun stallFailureSafely(): VectorPassFailure? = try { platform.stallFailure() } catch (_: Exception) { null }
+
     /** Whether a catch-up is going, so the next opening must continue it whatever else happens meanwhile. */
     private fun catchUpGoing(): Boolean = try {
         platform.display() is IndexingDisplay.Running || platform.conditions().rebuilding
@@ -363,7 +379,10 @@ class BackgroundIndexingController(
         // A run that ended normally: a failure seen again later is a new one.
         lastFailure = null
         val was = permit.closedUnlessForeground(waiting = catchUpGoing())
-        platform.logcat(BackgroundIndexingLog.stopped(reason))
+        platform.logcat(
+            if (reason == BackgroundStopReason.INDEXING_FAILED) BackgroundIndexingLog.processingStopped(stallFailureSafely())
+            else BackgroundIndexingLog.stopped(reason)
+        )
         if (reason.isAndroidLimit && was == BackgroundIndexingPermit.State.SERVICE) platform.showStoppedNotice()
     }
 

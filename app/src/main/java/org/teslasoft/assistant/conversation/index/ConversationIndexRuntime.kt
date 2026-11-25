@@ -116,6 +116,7 @@ object ConversationIndexRuntime {
         // A catch-up whose passes stopped on a failure, with none asked for, cannot end by itself (Step 13).
         progress(app).vectorRequests = { vectors.requestCount }
         progress(app).vectorsStoppedOnFailureAt = { vectors.stoppedOnFailureAt }
+        progress(app).vectorsStopFailure = { vectors.stopFailure }
         val coordinator = ConversationIndexCoordinator(
             source = source,
             storage = { ConversationIndexStore.get(app) },

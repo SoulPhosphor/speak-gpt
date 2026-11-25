@@ -513,6 +513,7 @@ class BackgroundIndexingTest {
         // As in the runtime: passes that stopped on a failure, with none asked for, leave the catch-up stalled.
         tracker.vectorRequests = { passes.requestCount }
         tracker.vectorsStoppedOnFailureAt = { passes.stoppedOnFailureAt }
+        tracker.vectorsStopFailure = { passes.stopFailure }
         coordinator = ConversationIndexCoordinator(
             source = chats,
             storage = { index },
@@ -545,6 +546,7 @@ class BackgroundIndexingTest {
             override fun conditions() = tracker.conditions()
             override fun userPaused() = tracker.isPaused
             override fun stalled() = tracker.isStalled
+            override fun stallFailure() = tracker.stallFailure
         }, permit)
     }
 
@@ -1091,6 +1093,80 @@ class BackgroundIndexingTest {
         passes.request()
         try { tasks.runAll() } catch (_: OutOfMemoryError) { }
         assertTrue("an Error stops the passes as a failure", passes.stoppedOnFailureAt != IndexVectorPasses.NOT_STOPPED)
+    }
+
+    @Test fun aStopAfterAnErrorNamesTheStageAndTheActualCauseAndKeepsTheWork() {
+        putChats(2)
+        leaveDuringTheCatchUp()
+        model.afterRead = { if (model.inputs.size == 2) model.failNext = true }
+        tasks.runAll()
+        model.afterRead = {}
+        val step = serviceStep() as BackgroundIndexingStep.Stop
+        assertEquals(BackgroundStopReason.INDEXING_FAILED, step.reason)
+        controller.serviceStopped(step.reason)
+        assertEquals(
+            "Conversation Indexing: Processing stopped after an error it cannot recover from in this session, " +
+                "while making search vectors. Cause: java.lang.IllegalStateException: the model could not run for now. " +
+                "The unfinished work is kept and continues the next time the app is opened, " +
+                "unless indexing is paused or turned off.",
+            platform.logcat.last()
+        )
+        assertTrue("an error is not an Android limit: no notice", "notice" !in platform.calls)
+    }
+
+    @Test fun aPauseOrTurningIndexingOffAfterAFailureIsNeverOverriddenByTheOpening() {
+        putChats(2)
+        leaveDuringTheCatchUp()
+        model.afterRead = { if (model.inputs.size == 2) model.failNext = true }
+        tasks.runAll()
+        model.afterRead = {}
+        controller.serviceStopped(BackgroundStopReason.INDEXING_FAILED)
+        // The user pauses on opening: nothing continues until Resume.
+        tracker.pause()
+        controller.appOpened()
+        tasks.runAll()
+        assertEquals("the pause is respected", 2, model.inputs.size)
+        tracker.resume()
+        coordinator.resumed()
+        tasks.runAll()
+        assertFinished(2)
+
+        // Turned off after a failure: the opening does not index either.
+        chats.put("c3", chat("c3"))
+        controller.appLeft()
+        settingOn = false
+        controller.appOpened()
+        coordinator.chatChanged("c3")
+        tasks.runAll()
+        assertEquals("turned off: nothing indexed", 6, model.inputs.size)
+    }
+
+    @Test fun workTheUserStartedChangesNothingWhileTheAppIsOpenOrTheServiceAlreadyRuns() {
+        putChats(3)
+        // In the foreground, running user work does not hold indexing back.
+        val busy = object : BackgroundIndexingPlatform by platform {
+            override fun display() = tracker.display.value
+            override fun conditions() = tracker.conditions()
+            override fun userPaused() = tracker.isPaused
+            override fun userWorkRunning() = true
+        }
+        val foreground = controllerFor(busy, permit)
+        foreground.appOpened()
+        coordinator.turnedOn()
+        // A few chats are compared while user work runs in the foreground.
+        while (index.rows.size < 3) check(tasks.runOne())
+        assertTrue("indexing runs in the app", permit.mayRun())
+        assertTrue(tracker.display.value is IndexingDisplay.Running)
+
+        // Left while no user work runs: the service continues; user work starting afterwards does not stop it.
+        controller.appLeft()
+        assertEquals("start", platform.calls.last())
+        controller.serviceStarted()
+        val withWork = controllerFor(busy, permit)
+        assertTrue("the service keeps going", serviceStep() is BackgroundIndexingStep.Show)
+        assertTrue(withWork.continuedByService)
+        tasks.runAll()
+        assertFinished(3)
     }
 
     @Test fun leavingWithAStalledCatchUpStartsNoServiceAndOpeningContinuesIt() {

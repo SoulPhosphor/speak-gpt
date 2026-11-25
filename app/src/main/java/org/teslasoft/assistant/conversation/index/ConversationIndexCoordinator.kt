@@ -550,6 +550,7 @@ class IndexVectorPasses(
     private var scheduled = false
     private var requests = 0L
     private var stopAt = NOT_STOPPED
+    private var stoppedBy: VectorPassFailure? = null
 
     /** Step 13: how many passes have been asked for so far. */
     val requestCount: Long get() = synchronized(lock) { requests }
@@ -562,11 +563,15 @@ class IndexVectorPasses(
      */
     val stoppedOnFailureAt: Long get() = synchronized(lock) { stopAt }
 
+    /** Step 13: what the failure that stopped the passes was, while [stoppedOnFailureAt] is set. */
+    val stopFailure: VectorPassFailure? get() = synchronized(lock) { if (stopAt == NOT_STOPPED) null else stoppedBy }
+
     fun request() {
         val start = synchronized(lock) {
             wanted = true
             requests++
             stopAt = NOT_STOPPED
+            stoppedBy = null
             if (scheduled) false else { scheduled = true; true }
         }
         if (start) schedule()
@@ -585,14 +590,33 @@ class IndexVectorPasses(
 
     private fun loop() {
         var failed = false
+        var failure: VectorPassFailure? = null
         try {
             while (takeWanted()) {
                 failed = false
+                failure = null
                 if (!isOn()) break
                 // Counted as failed until the pass returns normally, so an Error (out of memory) is a failure too.
                 failed = true
-                val outcome = try { runPass() } catch (_: Exception) { null }
+                failure = VectorPassFailure(VectorPassFailure.Stage.VECTORS, "it ended without returning")
+                val outcome = try {
+                    runPass()
+                } catch (e: Exception) {
+                    failure = VectorPassFailure(VectorPassFailure.Stage.VECTORS, ConversationIndexErrorLog.cause(e))
+                    null
+                } catch (t: Throwable) {
+                    failure = VectorPassFailure(VectorPassFailure.Stage.VECTORS, ConversationIndexErrorLog.cause(t))
+                    throw t
+                }
                 failed = outcome == null || outcome is PassageEmbeddingWorker.Outcome.Interrupted
+                when {
+                    outcome is PassageEmbeddingWorker.Outcome.Interrupted ->
+                        failure = VectorPassFailure(VectorPassFailure.Stage.VECTORS, ConversationIndexErrorLog.cause(outcome.cause))
+                    // A pass that could not start: the model or the index could not be prepared.
+                    outcome == null && failure?.cause == "it ended without returning" -> failure = VectorPassFailure(
+                        VectorPassFailure.Stage.PREPARING, "the on-device search model or the index could not be prepared"
+                    )
+                }
                 if (outcome == null) break
                 // A paused, interrupted or busy pass is not repeated now; the next request tries again.
                 if (outcome !is PassageEmbeddingWorker.Outcome.Finished) break
@@ -602,6 +626,7 @@ class IndexVectorPasses(
                 if (wanted) true else {
                     scheduled = false
                     stopAt = if (failed) requests else NOT_STOPPED
+                    stoppedBy = if (failed) failure else null
                     false
                 }
             }
@@ -611,5 +636,13 @@ class IndexVectorPasses(
 
     companion object {
         const val NOT_STOPPED = -1L
+    }
+}
+
+/** What stopped the vector passes (Step 13), for the background service's log. Holds no message content. */
+data class VectorPassFailure(val stage: Stage, val cause: String) {
+    enum class Stage(val text: String) {
+        PREPARING("preparing the on-device search model and the index"),
+        VECTORS("making search vectors")
     }
 }
