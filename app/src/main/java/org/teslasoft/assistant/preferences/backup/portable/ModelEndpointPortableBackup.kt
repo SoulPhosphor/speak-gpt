@@ -43,6 +43,10 @@ object ModelEndpointPortableBackup {
                 DedicatedModelsBackup.capture(appContext, ModelPickerScope.MEMORY_SCANNER),
                 stored.endpoints.mapTo(HashSet()) { it.id }
             ),
+            imageGeneration = DedicatedModelsBackup.forEndpoints(
+                DedicatedModelsBackup.capture(appContext, ModelPickerScope.IMAGE_GENERATION),
+                stored.endpoints.mapTo(HashSet()) { it.id }
+            ),
             memoryContextHelper = DedicatedModelsBackup.forEndpoints(
                 DedicatedModelsBackup.capture(appContext, ModelPickerScope.MEMORY_CONTEXT_HELPER),
                 stored.endpoints.mapTo(HashSet()) { it.id }

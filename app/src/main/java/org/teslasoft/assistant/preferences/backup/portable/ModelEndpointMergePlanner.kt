@@ -74,7 +74,8 @@ object ModelEndpointMergePlanner {
                 RecentModelsBackup.merge(current.recents, backup.recents),
                 DedicatedModelsBackup.merge(current.summarizer, backup.summarizer),
                 DedicatedModelsBackup.merge(current.memoryScanner, backup.memoryScanner),
-                DedicatedModelsBackup.merge(current.memoryContextHelper, backup.memoryContextHelper)
+                DedicatedModelsBackup.merge(current.memoryContextHelper, backup.memoryContextHelper),
+                DedicatedModelsBackup.merge(current.imageGeneration, backup.imageGeneration)
             ),
             Report(addedEndpoints, addedFavorites, identicalSkipped, conflicts)
         )

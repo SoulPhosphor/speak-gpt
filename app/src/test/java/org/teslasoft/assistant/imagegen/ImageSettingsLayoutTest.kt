@@ -18,13 +18,32 @@ class ImageSettingsLayoutTest {
     private fun children(element: Element): List<Element> = (0 until element.childNodes.length)
         .mapNotNull { element.childNodes.item(it) as? Element }
 
+    private val styles by lazy {
+        val relative = "src/main/res/values/themes.xml"
+        val file = listOf(File(relative), File("app/$relative")).first { it.exists() }
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file)
+        val nodes = document.getElementsByTagName("style")
+        (0 until nodes.length).map { nodes.item(it) as Element }.associateBy { it.getAttribute("name") }
+    }
+
+    private fun styleValue(name: String, attribute: String): String {
+        val style = styles[name] ?: return ""
+        return children(style).firstOrNull { it.getAttribute("name") == "android:$attribute" }?.textContent
+            ?: style.getAttribute("parent").takeIf { it.isNotBlank() }
+                ?.let { styleValue(it.removePrefix("@style/"), attribute) }.orEmpty()
+    }
+
+    private fun value(element: Element, attribute: String): String =
+        if (element.hasAttributeNS(android, attribute)) element.getAttributeNS(android, attribute)
+        else styleValue(element.getAttribute("style").removePrefix("@style/"), attribute)
+
     @Test fun everySettingKeepsTitleAndControlOppositeWithExistingSubtitleStyles() {
         for (name in listOf("dropdown", "number", "text", "boolean", "status")) {
             val row = layout(name)
             assertEquals("@style/Widget.App.ImageGeneration.SettingRow", row.getAttribute("style"))
             val content = children(row)
             val header = content.first()
-            assertEquals("horizontal", header.getAttributeNS(android, "orientation"))
+            assertEquals("horizontal", value(header, "orientation"))
             val controls = children(header)
             assertEquals("@+id/image_setting_label", controls.first().getAttributeNS(android, "id"))
             assertEquals("@style/Widget.App.ImageGeneration.Label", controls.first().getAttribute("style"))
@@ -32,6 +51,26 @@ class ImageSettingsLayoutTest {
             assertEquals(listOf("@+id/image_setting_previous", "@+id/image_setting_subtitle"),
                 content.drop(1).map { it.getAttributeNS(android, "id") })
             assertTrue(content.drop(1).all { it.getAttribute("style") == "@style/Widget.App.Row.Subtitle" })
+        }
+    }
+
+    @Test fun editableSettingsKeepTheOutlineOutsideTextScrollingAndInsideTheRow() {
+        for (name in listOf("number", "text")) {
+            val header = children(layout(name)).first()
+            assertEquals("center_vertical", value(header, "gravity"))
+            assertEquals("false", value(header, "baselineAligned"))
+            val frame = children(header).last()
+            assertEquals("FrameLayout", frame.tagName)
+            assertEquals("@drawable/bg_field_box", value(frame, "background"))
+            assertEquals("0dp", value(frame, "layout_marginTop"))
+            assertEquals("0dp", value(frame, "padding"))
+            val input = children(frame).single()
+            assertEquals("EditText", input.tagName)
+            assertEquals("@+id/image_setting_input", input.getAttributeNS(android, "id"))
+            assertEquals("@null", value(input, "background"))
+            assertEquals("0dp", value(input, "layout_marginTop"))
+            assertEquals("match_parent", value(input, "layout_width"))
+            assertEquals(styleValue("Widget.App.Field.Box", "padding"), value(input, "padding"))
         }
     }
 

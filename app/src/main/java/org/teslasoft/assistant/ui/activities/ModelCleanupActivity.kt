@@ -373,10 +373,12 @@ class ModelCleanupActivity : SettingsPageActivity() {
                     // Removed from every list that holds it (chat, Summarizer,
                     // Memory Scanner); counted once per model.
                     val removed = withContext(Dispatchers.IO) {
-                        val removedAny = ModelPickerScope.entries.sumOf { scope ->
-                            FavoriteModelsPreferences.getPreferences(this@ModelCleanupActivity, scope)
-                                .removeFavoriteModels(targets)
-                        }
+                        val removedAny = ModelPickerScope.entries
+                            .filter { it != ModelPickerScope.IMAGE_GENERATION }
+                            .sumOf { scope ->
+                                FavoriteModelsPreferences.getPreferences(this@ModelCleanupActivity, scope)
+                                    .removeFavoriteModels(targets)
+                            }
                         if (removedAny > 0) targets.size else 0
                     }
                     Toast.makeText(
@@ -428,10 +430,12 @@ class ModelCleanupActivity : SettingsPageActivity() {
                 if (scanning) return@setPositiveButton
                 lifecycleScope.launch {
                     val removed = withContext(Dispatchers.IO) {
-                        ModelPickerScope.entries.forEach { scope ->
-                            val recents = RecentModelsPreferences(this@ModelCleanupActivity, scope)
-                            targets.forEach(recents::remove)
-                        }
+                        ModelPickerScope.entries
+                            .filter { it != ModelPickerScope.IMAGE_GENERATION }
+                            .forEach { scope ->
+                                val recents = RecentModelsPreferences(this@ModelCleanupActivity, scope)
+                                targets.forEach(recents::remove)
+                            }
                         targets.size
                     }
                     Toast.makeText(

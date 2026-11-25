@@ -59,7 +59,7 @@ class AppAppearanceActivity : SettingsPageActivity() {
             recentModels.setLimit(limit)
             // One setting for every picker: the Summarizer's and Memory
             // Scanner's lists follow it.
-            org.teslasoft.assistant.preferences.ModelPickerScope.entries.filter { it.isDedicated }.forEach { scope ->
+            org.teslasoft.assistant.preferences.ModelPickerScope.entries.filter { it != org.teslasoft.assistant.preferences.ModelPickerScope.CHAT }.forEach { scope ->
                 runCatching {
                     org.teslasoft.assistant.preferences.RecentModelsPreferences(this, scope).trimToLimit()
                 }

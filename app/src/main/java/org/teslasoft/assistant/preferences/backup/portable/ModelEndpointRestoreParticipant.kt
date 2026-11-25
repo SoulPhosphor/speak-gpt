@@ -152,6 +152,9 @@ class ModelEndpointRestoreParticipant internal constructor(
             data.recents?.let { RecentModelsBackup.apply(appContext, it) }
             data.summarizer?.let { DedicatedModelsBackup.apply(appContext, it, ModelPickerScope.SUMMARIZER) }
             data.memoryScanner?.let { DedicatedModelsBackup.apply(appContext, it, ModelPickerScope.MEMORY_SCANNER) }
+            data.imageGeneration?.let {
+                DedicatedModelsBackup.apply(appContext, it, ModelPickerScope.IMAGE_GENERATION)
+            }
             data.memoryContextHelper?.let {
                 DedicatedModelsBackup.apply(appContext, it, ModelPickerScope.MEMORY_CONTEXT_HELPER)
             }
