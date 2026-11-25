@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
+import org.teslasoft.assistant.preferences.backup.portable.RestoreServiceStartFailure
 import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestoreCoordinator
 import java.io.File
 import java.util.concurrent.Executors
@@ -39,6 +40,13 @@ import java.util.concurrent.Executors
  * changed, so a lost broadcast (screen already gone) costs only the message.
  */
 class RestoreForegroundService : Service() {
+
+    /** Whether Android accepted the request to start the service. */
+    sealed interface StartResult {
+        data object Requested : StartResult
+        /** Android or the app refused the request; [error] is what was thrown. */
+        data class Refused(val error: Exception) : StartResult
+    }
 
     companion object {
         private const val CHANNEL_ID = "restore_operations"
@@ -64,16 +72,45 @@ class RestoreForegroundService : Service() {
             } catch (_: Exception) { /* caller shows the failure path if this throws */ }
         }
 
-        /** Advance the process-owned unified restore state machine. */
-        fun startUnified(context: Context): Boolean {
+        /**
+         * Advance the process-owned unified restore state machine. A refusal
+         * is returned, never swallowed: the caller cancels the restore when
+         * that is safe, records it and tells the user.
+         */
+        fun startUnified(context: Context): StartResult {
             val intent = Intent(context, RestoreForegroundService::class.java)
                 .setAction(ACTION_UNIFIED_RESTORE)
             return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
                 else context.startService(intent)
-                true
-            } catch (_: Exception) {
-                false
+                StartResult.Requested
+            } catch (e: Exception) {
+                StartResult.Refused(e)
+            }
+        }
+
+        /**
+         * The unified restore's service could not start (Owner, 2026-11-25):
+         * the restore is cancelled only when it has not begun applying, the
+         * failure goes to the Error Log, and the restore screen shows it.
+         */
+        fun unifiedStartFailed(context: Context, error: Exception): UnifiedPortableRestoreCoordinator.ServiceStartFailureResult {
+            val app = context.applicationContext
+            return UnifiedPortableRestoreCoordinator.cancelAfterServiceStartFailure(
+                RestoreServiceStartFailure.androidRefused(error)
+            ) { result ->
+                val text = when (result) {
+                    is UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.Cancelled ->
+                        RestoreServiceStartFailure.notStarted(error, result.phase)
+                    UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.StillApplying ->
+                        RestoreServiceStartFailure.stillApplying(error)
+                    // Nothing to cancel, but the failure is still recorded.
+                    UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.NoRestore ->
+                        RestoreServiceStartFailure.notStarted(error, null)
+                }
+                try {
+                    Logger.log(app, "crash", RestoreServiceStartFailure.TAG, "error", text)
+                } catch (_: Throwable) { /* the user still sees the failure */ }
             }
         }
     }
@@ -86,6 +123,8 @@ class RestoreForegroundService : Service() {
     private var operation = DataSyncTimeoutLog.RestoreOperation.UNKNOWN
     /** Android's time limit was reached for this run: logged once. */
     private var timedOut = false
+    /** Whether an earlier start already reached the foreground; cleared when the worker leaves it. */
+    @Volatile private var inForeground = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -112,13 +151,14 @@ class RestoreForegroundService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
             } else startForeground(NOTIFICATION_ID, notification())
-        } catch (_: Exception) {
-            if (intent?.action == ACTION_UNIFIED_RESTORE) {
-                UnifiedPortableRestoreCoordinator.cancel()
-            }
-            stopSelf()
+        } catch (e: Exception) {
+            if (intent?.action == ACTION_UNIFIED_RESTORE) unifiedStartFailed(this, e)
+            // A run already in the foreground keeps its protection; only a service that never
+            // reached the foreground is stopped.
+            if (!inForeground) stopSelf()
             return START_NOT_STICKY
         }
+        inForeground = true
 
         timedOut = false
         operation = if (intent?.action == ACTION_UNIFIED_RESTORE) DataSyncTimeoutLog.RestoreOperation.UNIFIED_RESTORE
@@ -190,6 +230,7 @@ class RestoreForegroundService : Service() {
 
     @Suppress("DEPRECATION")
     private fun stopForegroundCompat() {
+        inForeground = false
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
             else stopForeground(true)

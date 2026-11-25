@@ -111,7 +111,9 @@ class SummaryResummarizeWiringContractTest {
 
     @Test fun inFlightGuardStopsInsteadOfRestartingBeforeTheChangeDecision() {
         val controller = source("src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt")
-        assertTrue(controller.contains("!SummarySections.sourceStillCurrent(owned, context, latest)\n        ) return false"))
+        // A stale result still stops the run (returns false); it is also counted as discarded so the
+        // run is never reported as a success (Owner, 2026-11-25).
+        assertTrue(controller.contains("!SummarySections.sourceStillCurrent(owned, context, latest)\n        ) {\n            discardStale()\n            return false"))
         assertTrue(controller.contains("!SummarySections.canCommitReplacement(replacing, target)"))
         assertTrue(activity.contains("if (summarySourceChangePending || pendingRetryMessageId != null) return"))
         val answer = activity.substring(activity.indexOf("private fun saveResummarizeAnswer"), activity.indexOf("private fun showResummarizeDialog"))

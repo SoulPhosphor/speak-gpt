@@ -44,7 +44,8 @@ enum class SummarizerErrorCategory {
     SERVICE_ERROR,        // 2.11 AI Service Error
     RESPONSE_UNREADABLE,  // 2.12 Summary Response Unreadable
     SAVE_FAILED,          // 2.13 Summary Couldn't Be Saved
-    UNEXPECTED            // 2.14 Unexpected Summarizer Error
+    UNEXPECTED,           // 2.14 Unexpected Summarizer Error
+    INTERRUPTED           // Summarizer Interrupted: the app stopped while it ran (Owner, 2026-11-25)
 }
 
 /**
@@ -59,7 +60,9 @@ data class SummarizerErrorEntry(
     val count: Int,
     val profile: String,
     val model: String,
-    val detail: String?
+    val detail: String?,
+    /** For [SummarizerErrorCategory.INTERRUPTED]: the operation kind that was interrupted. */
+    val operation: String? = null
 ) {
     fun categoryEnum(): SummarizerErrorCategory? = try {
         SummarizerErrorCategory.valueOf(category)
