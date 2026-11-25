@@ -22,7 +22,8 @@ enum class BackgroundStopReason(val text: String) {
     TIME_LIMIT("Android's time limit for background data work was reached"),
     TIME_USED_UP_AT_START("Android did not allow it to start: the time limit for background data work is used up"),
     BACKGROUND_START_NOT_ALLOWED("Android did not allow it to start from the background"),
-    UNEXPECTED_FAILURE("an unexpected failure");
+    UNEXPECTED_FAILURE("an unexpected failure"),
+    UNEXPECTED_FAILURE_AT_START("an unexpected failure kept it from starting");
 
     /** Android's own limits, which the approved "Open the app to continue" notification explains. */
     val isAndroidLimit: Boolean
@@ -206,14 +207,16 @@ class BackgroundIndexingPermit {
 
     /**
      * The background service stopped or could not start: indexing waits, unless
-     * a screen opened meanwhile. True when the app is closed. [waiting] as for [closed].
+     * a screen opened meanwhile. Returns the state before, so a caller can tell
+     * whether the service was what let indexing run. [waiting] as for [closed].
      */
-    fun closedUnlessForeground(waiting: Boolean = false): Boolean = synchronized(lock) {
-        if (state == State.FOREGROUND) false else {
+    fun closedUnlessForeground(waiting: Boolean = false): State = synchronized(lock) {
+        val was = state
+        if (was != State.FOREGROUND) {
             state = State.CLOSED
             if (waiting) refused = true
-            true
         }
+        was
     }
 
     private fun moveTo(next: State) {
@@ -342,13 +345,13 @@ class BackgroundIndexingController(
         serviceActive = false
         val reason = classify(e)
         lastStop = reason
-        val closed = permit.closedUnlessForeground(waiting = catchUpGoing())
+        val was = permit.closedUnlessForeground(waiting = catchUpGoing())
         if (reason == BackgroundStopReason.UNEXPECTED_FAILURE) {
             stoppedUnexpectedly(e, BackgroundIndexingLog.EFFECT_NOT_STARTED)
             return
         }
-        // Opened again meanwhile: indexing simply continues in the app.
-        if (!closed) return
+        // Opened again meanwhile, or a later leave decided not to continue: nothing to explain.
+        if (was != BackgroundIndexingPermit.State.SERVICE) return
         platform.logcat(BackgroundIndexingLog.stopped(reason))
         platform.showStoppedNotice()
     }
@@ -359,9 +362,9 @@ class BackgroundIndexingController(
         lastStop = reason
         // A run that ended normally: a failure seen again later is a new one.
         lastFailure = null
-        val closed = permit.closedUnlessForeground(waiting = catchUpGoing())
+        val was = permit.closedUnlessForeground(waiting = catchUpGoing())
         platform.logcat(BackgroundIndexingLog.stopped(reason))
-        if (reason.isAndroidLimit && closed) platform.showStoppedNotice()
+        if (reason.isAndroidLimit && was == BackgroundIndexingPermit.State.SERVICE) platform.showStoppedNotice()
     }
 
     /** The running service failed unexpectedly: indexing waits for the app to open. */
@@ -373,7 +376,9 @@ class BackgroundIndexingController(
 
     private fun stoppedUnexpectedly(e: Throwable, effect: String) {
         lastStop = BackgroundStopReason.UNEXPECTED_FAILURE
-        platform.logcat(BackgroundIndexingLog.stopped(BackgroundStopReason.UNEXPECTED_FAILURE))
+        val reason = if (effect == BackgroundIndexingLog.EFFECT_NOT_STARTED) BackgroundStopReason.UNEXPECTED_FAILURE_AT_START
+        else BackgroundStopReason.UNEXPECTED_FAILURE
+        platform.logcat(BackgroundIndexingLog.stopped(reason))
         val cause = ConversationIndexErrorLog.cause(e)
         if (cause != lastFailure) {
             lastFailure = cause

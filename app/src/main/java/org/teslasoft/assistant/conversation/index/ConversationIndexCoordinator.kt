@@ -102,6 +102,13 @@ class ConversationIndexCoordinator(
     private val toCount = ArrayDeque<String>()
     private val staleRetries = HashMap<String, Int>()
     private val drainScheduled = AtomicBoolean(false)
+    /**
+     * Chats deleted or renamed away whose removal from the index has not run
+     * yet (Step 13): an update of one of them stopped by the closing is never
+     * put back. Guarded by [lock]; each leaves when its removal has run.
+     */
+    private val removed = HashSet<String>()
+
     /** A catch-up asked for while indexing could not run (Step 13). Read and written on the index's thread only. */
     private var catchUpWaiting = false
     /** A recovery asked for while indexing could not run, and whether the user asked for it; index's thread only. */
@@ -111,6 +118,7 @@ class ConversationIndexCoordinator(
     fun chatChanged(chatId: String) {
         if (chatId.isBlank()) return
         synchronized(lock) {
+            removed.remove(chatId)
             changed.remove(chatId)
             changed[chatId] = clock()
         }
@@ -122,22 +130,28 @@ class ConversationIndexCoordinator(
         val ids = chatIds.filter { it.isNotBlank() }.toSet()
         if (ids.isEmpty()) return
         synchronized(lock) {
+            removed.addAll(ids)
             ids.forEach { changed.remove(it) }
             catchUp.removeAll(ids)
         }
-        runner.run(0) { ids.forEach { id -> guarded(id) { maintenance().deleteChat(id) } } }
+        runner.run(0) {
+            ids.forEach { id -> guarded(id) { maintenance().deleteChat(id) } }
+            synchronized(lock) { removed.removeAll(ids) }
+        }
     }
 
     /** A rename changed the chat's ID: its entries move to the new ID and are checked again (G.5a rule 9). */
     fun chatMoved(fromChatId: String, toChatId: String) {
         if (fromChatId.isBlank() || toChatId.isBlank() || fromChatId == toChatId) return
         synchronized(lock) {
+            removed.add(fromChatId)
             changed.remove(fromChatId)
             catchUp.remove(fromChatId)
         }
         runner.run(0) {
             val moved = guarded(fromChatId) { maintenance().moveChat(fromChatId, toChatId) }
             if (!moved) guarded(fromChatId) { maintenance().deleteChat(fromChatId) }
+            synchronized(lock) { removed.remove(fromChatId) }
             chatChanged(toChatId)
         }
     }
@@ -224,6 +238,9 @@ class ConversationIndexCoordinator(
     fun resumed() {
         runner.run(0) { catchUpAll() }
     }
+
+    /** Step 13: whether chats wait to be counted or compared, each of which asks for vectors once it is. */
+    fun hasQueuedWork(): Boolean = synchronized(lock) { changed.isNotEmpty() || catchUp.isNotEmpty() || toCount.isNotEmpty() }
 
     /**
      * Indexing may run again (Step 13): a catch-up that waited starts now;
@@ -456,6 +473,8 @@ class ConversationIndexCoordinator(
     /** Puts a chat whose update the closing stopped back at the front of its queue. */
     private fun requeue(chatId: String, catchingUp: Boolean) {
         synchronized(lock) {
+            // Deleted or renamed away meanwhile: its removal runs next and nothing of it comes back.
+            if (chatId in removed) return
             if (catchingUp) {
                 if (chatId !in catchUp) catchUp.addFirst(chatId)
             } else if (chatId !in changed) {
@@ -570,6 +589,8 @@ class IndexVectorPasses(
             while (takeWanted()) {
                 failed = false
                 if (!isOn()) break
+                // Counted as failed until the pass returns normally, so an Error (out of memory) is a failure too.
+                failed = true
                 val outcome = try { runPass() } catch (_: Exception) { null }
                 failed = outcome == null || outcome is PassageEmbeddingWorker.Outcome.Interrupted
                 if (outcome == null) break

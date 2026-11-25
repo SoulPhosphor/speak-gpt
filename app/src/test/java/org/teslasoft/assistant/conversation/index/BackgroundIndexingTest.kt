@@ -127,10 +127,11 @@ class BackgroundIndexingTest {
         assertEquals("work was refused, so it is continued", 1, continued)
         permit.service()
         assertEquals("foreground to service: it never stopped", 1, continued)
-        assertTrue("the app is closed", permit.closedUnlessForeground())
+        assertEquals("the app is closed", BackgroundIndexingPermit.State.SERVICE, permit.closedUnlessForeground())
         permit.foreground()
         assertEquals("nothing was refused meanwhile: nothing to continue", 1, continued)
-        assertFalse("a stop arriving after the app opened changes nothing", permit.closedUnlessForeground())
+        assertEquals("a stop arriving after the app opened changes nothing",
+            BackgroundIndexingPermit.State.FOREGROUND, permit.closedUnlessForeground())
         assertTrue(permit.mayRun())
         permit.closed()
         assertFalse(permit.mayRun())
@@ -273,7 +274,8 @@ class BackgroundIndexingTest {
             platform.errors.single()
         )
         assertFalse("the approved notice is for Android's limits only", "notice" in platform.calls)
-        assertEquals(3, platform.logcat.count { it == BackgroundIndexingLog.stopped(BackgroundStopReason.UNEXPECTED_FAILURE) })
+        assertEquals("it never started, and the line says so",
+            3, platform.logcat.count { it == BackgroundIndexingLog.stopped(BackgroundStopReason.UNEXPECTED_FAILURE_AT_START) })
 
         // A start that works does not end the ongoing failure: the same failure is still not written again.
         platform.refuseWith = null
@@ -369,8 +371,11 @@ class BackgroundIndexingTest {
             chats[chatId] = messages
             versions[chatId] = (versions[chatId] ?: 0) + 1
         }
+        /** Deleted chats, which the app's chat storage reads as authoritatively empty rather than unavailable. */
+        val deleted = HashSet<String>()
         override fun read(chatId: String): IndexChatSource.Read {
             reads.add(chatId)
+            if (chatId in deleted) return IndexChatSource.Read.Messages(chatVersion(chatId), 0L, emptyList())
             val stored = chats[chatId] ?: return IndexChatSource.Read.Unavailable
             return IndexChatSource.Read.Messages(chatVersion(chatId), 0L, stored)
         }
@@ -530,6 +535,8 @@ class BackgroundIndexingTest {
             mayRun = ::mayRun,
             clock = { tasks.now }
         )
+        // As in the runtime: a chat still queued asks for another pass, so the catch-up is not stalled.
+        tracker.chatsQueued = coordinator::hasQueuedWork
         permit.setOnMayRunAgain { coordinator.mayRunAgain() }
         tracker.publish()
         platform = Platform()
@@ -1017,6 +1024,73 @@ class BackgroundIndexingTest {
         controller.serviceStarted()
         controller.serviceFailed(IllegalStateException("the progress could not be read"))
         assertEquals("written again after a run that ended normally", 2, platform.errors.size)
+    }
+
+    @Test fun aChatDeletedWhileItsUpdateIsStoppedByTheClosingNeverComesBack() {
+        chats.put("long", (1..6).flatMap { listOf(user("long-u$it", "Question $it"), reply("long-a$it", "Answer $it")) })
+        putChats(1)
+        leaveDuringTheCatchUp()
+        // The user deletes the chat being cut, and Android's time limit arrives before the update's next check.
+        whileCutting = { text ->
+            if ("Question 2" in text && controller.serviceActive) {
+                chats.chats.remove("long")
+                chats.deleted.add("long")
+                coordinator.chatsDeleted(listOf("long"))
+                controller.serviceStopped(BackgroundStopReason.TIME_LIMIT)
+            }
+        }
+        tasks.runAll()
+        whileCutting = {}
+        controller.appOpened()
+        tasks.runAll()
+        assertTrue("nothing of the deleted chat is left", index.rows.none { it.chatId == "long" })
+        assertFalse("no entry is made for it again", "long" in index.states)
+        assertTrue(allMade())
+        assertNothingReadTwice()
+    }
+
+    @Test fun aChatStillQueuedAfterTheHandOverIsNotAStall() {
+        putChats(2)
+        startCatchUpWithTheAppOpen()
+        // The hand-over's own pass fails, so the passes have stopped on a failure.
+        model.afterRead = { if (model.inputs.size == 2) model.failNext = true }
+        tasks.runAll()
+        model.afterRead = {}
+        assertTrue(tracker.isStalled)
+        // A message is saved; its chat waits out the quiet time and will ask for another pass.
+        chats.put("c1", chat("c1") + user("c1-u3", "Again c1"))
+        coordinator.chatChanged("c1")
+        assertFalse("the queued chat asks for another pass", tracker.isStalled)
+        controller.appLeft()
+        assertEquals("the service continues it", "start", platform.calls.last())
+        tasks.runAll()
+        assertTrue(allMade())
+        assertNothingReadTwice()
+    }
+
+    @Test fun aLateRefusalAfterTheUserPausedAndLeftShowsNoNotice() {
+        val platform = Platform().apply { display = IndexingDisplay.Running(numbers42) }
+        val permit = BackgroundIndexingPermit()
+        val controller = controllerFor(platform, permit)
+        controller.appOpened()
+        controller.appLeft()
+        // Reopened before the service started, paused, and left: indexing is not to continue.
+        controller.appOpened()
+        platform.paused = true
+        platform.display = IndexingDisplay.Paused(numbers42)
+        controller.appLeft()
+        // The earlier start is then refused by Android.
+        controller.startFailed(AndroidRefusal("Time limit already exhausted for foreground service type dataSync"))
+        assertFalse("the user paused it; Android did not", "notice" in platform.calls)
+        assertFalse(permit.mayRun())
+    }
+
+    @Test fun aPassEndingInAnErrorIsAFailure() {
+        val tasks = Tasks()
+        val passes = IndexVectorPasses(runPass = { throw OutOfMemoryError("model") }, runner = tasks)
+        passes.request()
+        try { tasks.runAll() } catch (_: OutOfMemoryError) { }
+        assertTrue("an Error stops the passes as a failure", passes.stoppedOnFailureAt != IndexVectorPasses.NOT_STOPPED)
     }
 
     @Test fun leavingWithAStalledCatchUpStartsNoServiceAndOpeningContinuesIt() {

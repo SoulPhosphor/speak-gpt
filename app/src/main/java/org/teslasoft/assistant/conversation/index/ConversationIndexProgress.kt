@@ -235,6 +235,8 @@ class IndexProgressTracker(
      */
     @Volatile var vectorRequests: () -> Long = { 0L }
     @Volatile var vectorsStoppedOnFailureAt: () -> Long = { IndexVectorPasses.NOT_STOPPED }
+    /** Whether chats still wait to be counted or compared; each asks for vectors once it is. Set once by the runtime. */
+    @Volatile var chatsQueued: () -> Boolean = { false }
     /** The vector request count when the catch-up handed over its last chat. */
     private var drainedAtRequest = 0L
     private val pending = LinkedHashSet<String>()
@@ -257,7 +259,8 @@ class IndexProgressTracker(
         get() {
             val drainedAt = synchronized(lock) { if (catchingUp && drained) drainedAtRequest else return false }
             // Only a stop by a pass asked for after the hand-over counts: the hand-over always asks for one.
-            return vectorsStoppedOnFailureAt() > drainedAt
+            // A chat still queued asks for another pass once it is handled.
+            return vectorsStoppedOnFailureAt() > drainedAt && !chatsQueued()
         }
 
     /** The Step 11 conditions the display is worked out from. */

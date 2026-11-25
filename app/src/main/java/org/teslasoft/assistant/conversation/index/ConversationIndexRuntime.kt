@@ -116,7 +116,7 @@ object ConversationIndexRuntime {
         // A catch-up whose passes stopped on a failure, with none asked for, cannot end by itself (Step 13).
         progress(app).vectorRequests = { vectors.requestCount }
         progress(app).vectorsStoppedOnFailureAt = { vectors.stoppedOnFailureAt }
-        return ConversationIndexCoordinator(
+        val coordinator = ConversationIndexCoordinator(
             source = source,
             storage = { ConversationIndexStore.get(app) },
             maintenance = { ConversationIndexStore.get(app) },
@@ -138,6 +138,8 @@ object ConversationIndexRuntime {
             progress = progress(app),
             mayRun = backgroundPermit::mayRun
         )
+        progress(app).chatsQueued = coordinator::hasQueuedWork
+        return coordinator
     }
 
     // --- The controls of RAG Active Memory Settings -----------------------
