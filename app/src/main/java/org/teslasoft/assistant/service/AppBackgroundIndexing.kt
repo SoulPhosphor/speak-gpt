@@ -12,7 +12,6 @@ import android.os.Bundle
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingController
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingPlatform
 import org.teslasoft.assistant.conversation.index.BackgroundStopReason
-import org.teslasoft.assistant.conversation.index.AppIndexingLogSink
 import org.teslasoft.assistant.conversation.index.IndexingLogSink
 import org.teslasoft.assistant.conversation.index.IndexingLogText
 import org.teslasoft.assistant.conversation.index.IndexingNotificationAccess
@@ -63,9 +62,8 @@ object AppBackgroundIndexing : Application.ActivityLifecycleCallbacks {
         sink(app).error("warning", IndexingLogText.PREVIOUS_SESSION_ENDED)
     }
 
-    @Volatile private var sinkInstance: IndexingLogSink? = null
-    private fun sink(context: Context): IndexingLogSink =
-        sinkInstance ?: AppIndexingLogSink(context).also { sinkInstance = it }
+    /** The runtime's one sink, so every Indexing Log write shares its lock. */
+    private fun sink(context: Context): IndexingLogSink = ConversationIndexRuntime.logSink(context)
 
     /** A reply is still being written, or finished moments ago and its last save may still be on its way. */
     private const val REPLY_GRACE_MILLIS = 15_000L

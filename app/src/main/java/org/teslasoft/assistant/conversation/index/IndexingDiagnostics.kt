@@ -215,7 +215,6 @@ interface IndexingLogSink {
 /** The app's sink: the Error Log ("crash") and the Indexing Log ("indexing") of the Log Cabin. */
 class AppIndexingLogSink(context: Context) : IndexingLogSink {
     private val app = context.applicationContext
-    private val lock = Any()
 
     override fun error(level: String, message: String, cause: Throwable?, state: String?) {
         val text = if (IndexingLogSettings.errorDetails(app)) {
@@ -238,7 +237,12 @@ class AppIndexingLogSink(context: Context) : IndexingLogSink {
         // The Error Log shares the lock the rest of indexing writes it under.
         if (type == "crash") return ConversationIndexRuntime.log(app, level, message)
         try {
-            synchronized(lock) { Logger.log(app, type, ConversationIndexErrorLog.TAG, level, message) }
+            // One lock for the whole Indexing Log, whoever writes it: each write reads and replaces the log.
+            synchronized(INDEXING_LOG_LOCK) { Logger.log(app, type, ConversationIndexErrorLog.TAG, level, message) }
         } catch (_: Throwable) { }
+    }
+
+    private companion object {
+        val INDEXING_LOG_LOCK = Any()
     }
 }
