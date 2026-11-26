@@ -18,10 +18,11 @@ import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
  */
 class StoreRecallIndex(private val store: ConversationIndexStore) : RecallIndex {
 
-    private fun <T> read(block: () -> T): T {
-        if (ConversationIndexAccess.recovering) throw IllegalStateException("the conversation index is being recovered")
-        return ConversationIndexAccess.shared(block)
-    }
+    private class Reading<T>(val value: T)
+
+    private fun <T> read(block: () -> T): T =
+        ConversationIndexAccess.sharedIfFree { Reading(block()) }?.value
+            ?: throw IllegalStateException("the conversation index is being recovered")
 
     override fun passages(chatId: String): List<RecallPassage> = read {
         store.readableDatabase.rawQuery(

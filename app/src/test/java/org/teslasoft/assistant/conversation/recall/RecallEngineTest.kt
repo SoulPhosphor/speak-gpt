@@ -516,4 +516,15 @@ class RecallEngineTest {
         assertEquals(160, results.size)
         assertTrue(results.all { it == listOf("x") })
     }
+
+    @Test fun theHelpersStrongerMatchesNeverPushOutTheMessagesOwnResult() {
+        val chat = filler(Chat())
+        // Five exchanges the helper's query matches strongly; one the message itself matches by meaning only.
+        for (i in 0 until 5) chat.user("h$i", "helper subject $i").vector("h$i", at(0.95 - 0.01 * i, 5, axis = 4))
+        chat.user("own", "the message's own subject").vector("own", at(0.56))
+        val tuning = RecallTuning(exchangesPerMethod = 2)
+        val r = search(chat, request("something", RecallMode.API_AI, helper = "the helper's query", helperVector = H), tuning) as RecallResult.Found
+        assertEquals("own", r.exchanges.first().exchangeId)
+        assertEquals(RecallOrigin.OWN, r.exchanges.first().origin)
+    }
 }

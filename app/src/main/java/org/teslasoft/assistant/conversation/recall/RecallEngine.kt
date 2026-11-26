@@ -309,9 +309,14 @@ class RecallEngine(
         // with its strongest passage and a few supporting ones, so one long
         // exchange cannot fill the list with its own passages.
         val ownKinds = setOf(QueryKind.WHOLE, QueryKind.PIECE)
+        // The message's own searches and the helper's lower-priority query are
+        // bounded separately, so the helper's stronger matches can never push
+        // out an exchange the message found itself.
         val kept = HashSet<PassageEvidence>()
-        kept.addAll(boundedByExchange(evidence.filter { it.passedMeaning || it.passedCertain }) { it.similarity ?: 0.0 })
-        kept.addAll(boundedByExchange(evidence.filter { it.passedKeyword }) { it.keywordScore })
+        for (tier in evidence.partition { it.query in ownKinds }.toList()) {
+            kept.addAll(boundedByExchange(tier.filter { it.passedMeaning || it.passedCertain }) { it.similarity ?: 0.0 })
+            kept.addAll(boundedByExchange(tier.filter { it.passedKeyword }) { it.keywordScore })
+        }
 
         // Stages 5 and 6: one score per passage (its best search), grouped into exchanges.
         val bestPerPassage = kept.groupBy { it.passage.rowId }.mapValues { (_, list) ->
