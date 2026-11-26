@@ -505,4 +505,15 @@ class RecallEngineTest {
         RecallEngine(counting, chat.source, null).search(request(message, vector = null), RecallBudget.unlimited())
         assertTrue("looked up $lookups words", lookups <= RecallTuning().maxTermLookups)
     }
+
+    @Test fun twoSearchesAtOnceOnOneEngineKeepTheirOwnChecks() {
+        val a = filler(Chat("a")).user("x", "we chose cedar").vector("x", at(0.9))
+        val engine = RecallEngine(a.index, a.source, null)
+        val results = java.util.Collections.synchronizedList(ArrayList<List<String>>())
+        val threads = (1..8).map { Thread { repeat(20) { results.add(ids(engine.search(request("which wood").copy(chatId = "a"), RecallBudget.unlimited()))) } } }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+        assertEquals(160, results.size)
+        assertTrue(results.all { it == listOf("x") })
+    }
 }

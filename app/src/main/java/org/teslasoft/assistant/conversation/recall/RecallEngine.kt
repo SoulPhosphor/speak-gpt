@@ -116,9 +116,7 @@ class RecallEngine(
     private fun run(request: RecallRequest, budget: RecallBudget, started: Long): RecallResult {
         val chatId = request.chatId
         val read = fromChat { messages.read(chatId) } ?: return RecallResult.Skipped(SkipReason.CHAT_UNAVAILABLE, null)
-        snapshot = read
-        currentChecked = false
-        currentFingerprints = null
+        val recheck = Recheck(chatId, read)
         val stored = read.messages
         check(budget)
 
@@ -362,7 +360,7 @@ class RecallEngine(
                     continue
                 }
                 check(budget)
-                if (stillStored(copy.key, request.chatId, members)) kept = copy
+                if (recheck.stillStored(copy.key, members)) kept = copy
                 else excluded.add(Exclusion(copy.key, ExclusionReason.NO_LONGER_ELIGIBLE))
             }
             kept?.let { offered.add(toExchange(it, members.getValue(it.key))) }
@@ -388,7 +386,7 @@ class RecallEngine(
                 val reason = when {
                     rows.isEmpty() -> ExclusionReason.NO_LONGER_ELIGIBLE
                     else -> quickExclusion(id, request, members, inFull)
-                        ?: if (stillStored(id, request.chatId, members)) null else ExclusionReason.NO_LONGER_ELIGIBLE
+                        ?: if (recheck.stillStored(id, members)) null else ExclusionReason.NO_LONGER_ELIGIBLE
                 }
                 if (reason != null) {
                     carriedChecks.add(CarriedCheck(id, share, false, reason.name))
@@ -522,32 +520,28 @@ class RecallEngine(
      * exchange that was eligible is still there, still eligible, with the same
      * text. A message edited, hidden or deleted during the search fails it.
      */
-    private fun stillStored(key: String, chatId: String, members: Map<String, List<Stored>>): Boolean {
-        val now = current(chatId) ?: return false
-        return members[key].orEmpty().filter { it.eligible }.all { s -> now[s.message.messageId] == s.fingerprint }
-    }
-
-    private var snapshot: ChatSnapshot? = null
-    private var currentChecked = false
-    private var currentFingerprints: Map<String, String>? = null
-
     /**
-     * Each eligible message's fingerprint in the chat as stored at this moment
-     * (a repeated ID counts by its first eligible copy, as the index does), or
-     * null when the chat cannot be read now. Unchanged since the search began,
-     * the first read answers; changed, the chat is read once more.
+     * The chat as stored at the moment results are handed on, for one search:
+     * each eligible message's fingerprint (a repeated ID counts by its first
+     * eligible copy, as the index does), or null when the chat cannot be read
+     * now. Unchanged since the search began, the first read answers; changed,
+     * the chat is read once more. Kept per search, so searches running at the
+     * same time never share it.
      */
-    private fun current(chatId: String): Map<String, String>? {
-        if (currentChecked) return currentFingerprints
-        currentChecked = true
-        val first = snapshot ?: return null
-        val chat = if (!fromChat { messages.changedSince(chatId, first) }) first else fromChat { messages.read(chatId) }
-        currentFingerprints = chat?.messages?.let { list ->
-            val map = LinkedHashMap<String, String>()
-            for (m in list) if (IndexEligibility.isEligible(m) && m.messageId !in map) map[m.messageId] = IndexFingerprint.of(m.modelText)
-            map
+    private inner class Recheck(private val chatId: String, private val first: ChatSnapshot) {
+        private val fingerprints: Map<String, String>? by lazy {
+            val chat = if (!fromChat { messages.changedSince(chatId, first) }) first else fromChat { messages.read(chatId) }
+            chat?.messages?.let { list ->
+                val map = LinkedHashMap<String, String>()
+                for (m in list) if (IndexEligibility.isEligible(m) && m.messageId !in map) map[m.messageId] = IndexFingerprint.of(m.modelText)
+                map
+            }
         }
-        return currentFingerprints
+
+        fun stillStored(key: String, members: Map<String, List<Stored>>): Boolean {
+            val now = fingerprints ?: return false
+            return members[key].orEmpty().filter { it.eligible }.all { s -> now[s.message.messageId] == s.fingerprint }
+        }
     }
 
     /** Text and speaker order after whitespace normalisation; wording, numbers and names unchanged (stage 8). */
