@@ -1,0 +1,1285 @@
+{
+ "format_version": 1,
+ "about": "Additions to the frozen Step 6 set for Step 14 (conversation_recall_plan.md G.16 Step 6 review additions and the Step 14 speaker-title evaluation). Every conversation is invented. Expected answers were written before any retrieval ran and are never changed to improve a result. 'speaker_name' and 'recorded_scope' are synthetic test annotations standing in for the name and permanent identity IDs a chat stores on each message when it is written; they are not taken from any real chat. 'identities' lists each permanent identity with the name it has now ('former_names' are names it had when older messages were written). 'names' on a question lists the identity names the question mentions. In follow_ups, 'helper_query' is a synthetic stand-in for the API AI helper's query, written by hand; no model wrote it.",
+ "identities": [
+  {
+   "id": "comp-juniper",
+   "kind": "companion",
+   "current_name": "Juniper"
+  },
+  {
+   "id": "glamour-ivy",
+   "kind": "glamour",
+   "current_name": "Ivy"
+  },
+  {
+   "id": "glamour-mara",
+   "kind": "glamour",
+   "current_name": "Mara"
+  },
+  {
+   "id": "comp-sol",
+   "kind": "companion",
+   "current_name": "Solace",
+   "former_names": [
+    "Sol"
+   ]
+  },
+  {
+   "id": "comp-finn",
+   "kind": "companion",
+   "current_name": "Finn"
+  },
+  {
+   "id": "char-finn-ranger",
+   "kind": "roleplay_character",
+   "current_name": "Finn"
+  },
+  {
+   "id": "char-rook",
+   "kind": "roleplay_character",
+   "current_name": "Captain Rook"
+  },
+  {
+   "id": "comp-narrator",
+   "kind": "companion",
+   "current_name": "Narrator"
+  }
+ ],
+ "chats": [
+  {
+   "id": "chat-kitchen-remodel",
+   "scope": {
+    "type": "project",
+    "id": "project-kitchen-remodel",
+    "name": "Kitchen Remodel"
+   },
+   "messages": [
+    {
+     "id": "502a810a-4e46-592f-ab71-395f0d813344",
+     "author": "user",
+     "text": "We're finally remodeling the kitchen this summer. The island is the centerpiece and I want help thinking through every decision.",
+     "time": "2026-06-01T17:01:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "7c7aeeaf-9c1f-58a5-8bd6-b20dbc2b2d86",
+     "author": "ai",
+     "text": "Happy to help. The big decisions are layout, countertops, cabinets, flooring, lighting and appliances, roughly in that order, because each one constrains the next.",
+     "time": "2026-06-01T17:02:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "dad9b9a0-5c79-598d-8c61-4479075ba586",
+     "author": "user",
+     "text": "Tell me everything about quartz countertops for the island and the perimeter. I want the full picture before I decide.",
+     "time": "2026-06-02T19:02:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "5350fd56-dc57-5d56-9678-5be2b7538ccd",
+     "author": "ai",
+     "text": "Quartz countertops are engineered from crushed quartz bound with resin, so a quartz countertop is non-porous and never needs sealing. A quartz countertop resists stains from coffee, wine and turmeric far better than marble, which is why quartz is popular for busy kitchens. The weak point of a quartz countertop is heat: a hot pan set straight on quartz can scorch the resin, so trivets stay next to the stove.\n\nQuartz countertop slabs come in about 2 and 3 centimeter thicknesses; for an island a 3 centimeter quartz slab looks more substantial. Installed quartz countertops usually cost between 60 and 100 dollars per square foot here, including fabrication of the quartz and the sink cut-out. Because quartz is heavy, the cabinets under a quartz countertop need to be level and sturdy, and an overhang of more than 30 centimeters needs support brackets.\n\nSeams in a quartz countertop are less visible with solid colors; heavily veined quartz shows the seam where two slabs of quartz meet. Cleaning a quartz countertop is easy with mild soap; harsh bleach or oven cleaner can dull the quartz surface over time. Edge profiles for quartz countertops include eased, bevelled and mitred edges; a mitred quartz edge makes the slab look thicker.\n\nOutdoor sunlight can fade some quartz countertops, so a quartz counter right under the skylight may change color slowly over the years. Each quartz countertops are engineered from crushed quartz bound with resin, so a quartz countertop is non-porous and never needs sealing. Again, a quartz countertop resists stains from coffee, wine and turmeric far better than marble, which is why quartz is popular for busy kitchens.\n\nThe weak point of a quartz countertop is heat: a hot pan set straight on quartz can scorch the resin, so trivets stay next to the stove. Each quartz countertop slabs come in about 2 and 3 centimeter thicknesses; for an island a 3 centimeter quartz slab looks more substantial. Installed quartz countertops usually cost between 60 and 100 dollars per square foot here, including fabrication of the quartz and the sink cut-out.\n\nBecause quartz is heavy, the cabinets under a quartz countertop need to be level and sturdy, and an overhang of more than 30 centimeters needs support brackets. Seams in a quartz countertop are less visible with solid colors; heavily veined quartz shows the seam where two slabs of quartz meet. Cleaning a quartz countertop is easy with mild soap; harsh bleach or oven cleaner can dull the quartz surface over time.\n\nEdge profiles for quartz countertops include eased, bevelled and mitred edges; a mitred quartz edge makes the slab look thicker. Outdoor sunlight can fade some quartz countertops, so a quartz counter right under the skylight may change color slowly over the years. Each quartz countertops are engineered from crushed quartz bound with resin, so a quartz countertop is non-porous and never needs sealing.\n\nAgain, a quartz countertop resists stains from coffee, wine and turmeric far better than marble, which is why quartz is popular for busy kitchens. The weak point of a quartz countertop is heat: a hot pan set straight on quartz can scorch the resin, so trivets stay next to the stove. Each quartz countertop slabs come in about 2 and 3 centimeter thicknesses; for an island a 3 centimeter quartz slab looks more substantial.\n\nInstalled quartz countertops usually cost between 60 and 100 dollars per square foot here, including fabrication of the quartz and the sink cut-out. Because quartz is heavy, the cabinets under a quartz countertop need to be level and sturdy, and an overhang of more than 30 centimeters needs support brackets. Seams in a quartz countertop are less visible with solid colors; heavily veined quartz shows the seam where two slabs of quartz meet.\n\nCleaning a quartz countertop is easy with mild soap; harsh bleach or oven cleaner can dull the quartz surface over time. Edge profiles for quartz countertops include eased, bevelled and mitred edges; a mitred quartz edge makes the slab look thicker. Outdoor sunlight can fade some quartz countertops, so a quartz counter right under the skylight may change color slowly over the years.",
+     "time": "2026-06-02T19:03:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "cfa7fbd5-87de-5be9-8c89-f574fd9df0d7",
+     "author": "user",
+     "text": "What paint color would work for the lower cabinets if the walls stay white?",
+     "time": "2026-06-03T21:03:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "745fac18-8227-5108-ac8d-8ad3994b5b8d",
+     "author": "ai",
+     "text": "A deep green such as a muted forest green or a soft navy works well under white walls. Sample both on a cabinet door in the morning and evening light before deciding.",
+     "time": "2026-06-03T21:04:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "5e3cfcc3-60ea-5060-8692-e51882a9e405",
+     "author": "user",
+     "text": "Remind me to measure the window above the sink before we order the faucet.",
+     "time": "2026-06-04T23:04:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "9bc3762f-e92b-5bf9-9d9c-e7fad4f3f9a8",
+     "author": "ai",
+     "text": "Noted: measure the window above the sink before ordering the faucet, so the tall spout clears the sill.",
+     "time": "2026-06-04T23:05:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "e868a68f-cb01-5310-ae9c-90f81d410a7a",
+     "author": "user",
+     "text": "I emailed the contractor about the electrical permit for the island outlets and I'm still waiting to hear back. It's been a week with no reply.",
+     "time": "2026-06-06T01:05:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "ad68550f-b7b3-5852-afac-2602ec05e7ce",
+     "author": "ai",
+     "text": "A week is not unusual for permit questions. If there's no reply by Friday, a short follow-up call is reasonable; the permit has to be in place before the island wiring starts.",
+     "time": "2026-06-06T01:06:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "6247f6ed-fa66-5a49-85c7-5c90b8803c97",
+     "author": "user",
+     "text": "Should the island have pendant lights or recessed lights?",
+     "time": "2026-06-07T03:06:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "78f98e3b-330f-5ae7-a21e-b6da22ee5507",
+     "author": "ai",
+     "text": "Two or three pendants over the island give focused light and a visual anchor, with recessed lights for the rest of the room. Hang pendants about 75 centimeters above the counter.",
+     "time": "2026-06-07T03:07:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "4e23eff4-8d4b-5722-9728-d6d799f0b0de",
+     "author": "user",
+     "text": "What flooring holds up best in a kitchen with two dogs?",
+     "time": "2026-06-08T05:07:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "7e118c44-936e-56a7-aef2-3820353c01bb",
+     "author": "ai",
+     "text": "Porcelain tile or a good luxury vinyl plank both handle claws and water well. Vinyl is warmer and quieter underfoot; tile lasts longer but is hard on dropped glasses.",
+     "time": "2026-06-08T05:08:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "588e6684-9ef5-5358-88d7-6c74db9c285e",
+     "author": "user",
+     "text": "Remind me to measure the window above the sink before we order the faucet.",
+     "time": "2026-06-09T07:08:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "0ef5db14-d46d-5cc7-bfb6-f1d064529f94",
+     "author": "ai",
+     "text": "Noted: measure the window above the sink before ordering the faucet, so the tall spout clears the sill.",
+     "time": "2026-06-09T07:09:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "fc3a515e-3ef0-50a5-a2f0-78bab115acd1",
+     "author": "user",
+     "text": "Do I need a separate circuit for the induction cooktop?",
+     "time": "2026-06-10T09:09:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "6c2fcd36-7fe7-5dd2-9963-4e57e9e46d55",
+     "author": "ai",
+     "text": "Yes. An induction cooktop normally needs its own 40 or 50 amp 240 volt circuit. Check the cooktop's installation sheet and have the electrician confirm the panel has room.",
+     "time": "2026-06-10T09:10:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "513c34bc-46fa-5648-88b2-e502a93baae2",
+     "author": "user",
+     "text": "The contractor finally replied about the electrical permit: it was approved on Friday and the island outlets can go in next week.",
+     "time": "2026-06-11T11:10:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "d7ca2e92-c59a-5010-ad55-da5ca29b03e9",
+     "author": "ai",
+     "text": "Great news. With the permit approved, the electrician can rough in the island outlets next week, before the cabinets arrive.",
+     "time": "2026-06-11T11:11:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "c1c3a1a3-2fb5-5267-a9f9-b5f83bc62292",
+     "author": "user",
+     "text": "Actually, forget quartz. We're going with butcher block for the island countertop and keeping laminate on the perimeter to save money.",
+     "time": "2026-06-12T13:11:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "68de6cdc-495a-5b00-9b71-2e7d18dfa503",
+     "author": "ai",
+     "text": "Got it: a butcher block island countertop and laminate on the perimeter. Butcher block needs oiling every few weeks at first, and the sink stays on the laminate side.",
+     "time": "2026-06-12T13:12:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "c9c98960-12c4-5f4e-8e62-f32037fbadfb",
+     "author": "user",
+     "text": "What handles would suit shaker style cabinet doors?",
+     "time": "2026-06-13T15:12:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "b515b1de-0393-58fb-890b-3f824615f941",
+     "author": "ai",
+     "text": "Simple bar pulls or cup pulls in brushed brass or matte black suit shaker doors. Use pulls on drawers and knobs on doors for a classic look.",
+     "time": "2026-06-13T15:13:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    }
+   ]
+  },
+  {
+   "id": "chat-glamour-switch",
+   "scope": {
+    "type": "companion",
+    "id": "comp-juniper",
+    "name": "Juniper"
+   },
+   "messages": [
+    {
+     "id": "785889d2-79ff-5074-9517-cf8fa5a8e7d0",
+     "author": "user",
+     "text": "Hi Juniper. I signed up for a Thursday evening pottery class at the community center. First session is next week.",
+     "time": "2026-07-01T18:01:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ivy",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "c697c9fd-44d7-5cd3-a4c4-24c58e2bedb7",
+     "author": "ai",
+     "text": "That sounds lovely. Pottery is a good way to slow down after work. Are you starting on the wheel or with hand building?",
+     "time": "2026-07-01T18:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Juniper",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "c07bb116-aaf3-5f1b-86b5-deacfb8980a9",
+     "author": "user",
+     "text": "The wheel. The teacher said we'll make a small vase first and pick a glaze at the end of the month.",
+     "time": "2026-07-02T20:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ivy",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "8dd00dcb-d371-50a4-b230-135c50b0c379",
+     "author": "ai",
+     "text": "A small vase is a classic first project. Keep the walls even and don't worry if the first few collapse; everyone's do.",
+     "time": "2026-07-02T20:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Juniper",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "08a2cf21-a433-52f9-b36c-1a8e05a68dac",
+     "author": "user",
+     "text": "I picked the glaze for my vase today: a speckled celadon green. It goes on pale and comes out of the kiln glossy.",
+     "time": "2026-07-03T22:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ivy",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "d2dc0864-72c2-55a3-8554-79e86d82e4bf",
+     "author": "ai",
+     "text": "Speckled celadon on a first vase will look beautiful. The speckles come from iron in the clay showing through the glaze.",
+     "time": "2026-07-03T22:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Juniper",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "ee3bb45c-c387-5687-813c-4f7553417e7a",
+     "author": "user",
+     "text": "The vase came out of the kiln with a crack along the base, but the teacher says I can still use it for dried flowers.",
+     "time": "2026-07-05T00:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ivy",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "b64e4371-f7e5-59a2-beb5-816ddc99b8f2",
+     "author": "ai",
+     "text": "A crack at the base usually means it dried unevenly. Dried flowers are a perfect use, and the next one will dry slower under plastic.",
+     "time": "2026-07-05T00:05:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Juniper",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "03461f13-b6f1-5b15-bd60-f7ecd92ff509",
+     "author": "user",
+     "text": "Different topic. I'm going on a three day sailing trip along the coast with my cousin next month. I've never sailed overnight.",
+     "time": "2026-07-06T02:05:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Mara",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-mara"
+     }
+    },
+    {
+     "id": "5c2a9b2d-a044-51c2-a531-a239bd63ac71",
+     "author": "ai",
+     "text": "An overnight sail is a big step. Pack layers, a headlamp and seasickness tablets, and ask the skipper to show you the reefing lines on the first day.",
+     "time": "2026-07-06T02:06:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Juniper",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-mara"
+     }
+    },
+    {
+     "id": "357e4e69-6dfa-510e-8aad-2cb04d9f6517",
+     "author": "user",
+     "text": "The sailing trip is set: we leave from Gull Harbor on the 14th and anchor in Seal Cove the first night.",
+     "time": "2026-07-07T04:06:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Mara",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-mara"
+     }
+    },
+    {
+     "id": "650d99b3-93b6-5eb0-bbc9-65dedd1da4d6",
+     "author": "ai",
+     "text": "Seal Cove is well sheltered from the west, so it's a calm first anchorage. Take a warm hat for the night watch.",
+     "time": "2026-07-07T04:07:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Juniper",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-mara"
+     }
+    },
+    {
+     "id": "51c4ce66-4de4-5871-884e-79bab6617b18",
+     "author": "user",
+     "text": "My cousin wants me to take the first night watch on the sailing trip, from midnight to three. I'm a little nervous.",
+     "time": "2026-07-08T06:07:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Mara",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-mara"
+     }
+    },
+    {
+     "id": "e69acd9c-f58c-51c9-8c59-e86276d71b86",
+     "author": "ai",
+     "text": "Midnight to three is a quiet watch. Check the anchor alarm, keep a thermos of tea, and wake your cousin if the wind shifts.",
+     "time": "2026-07-08T06:08:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Juniper",
+     "recorded_scope": {
+      "companionId": "comp-juniper",
+      "userPersonaId": "glamour-mara"
+     }
+    }
+   ]
+  },
+  {
+   "id": "chat-renamed-companion",
+   "scope": {
+    "type": "companion",
+    "id": "comp-sol",
+    "name": "Solace"
+   },
+   "messages": [
+    {
+     "id": "823aff57-3db6-517a-90ee-90736082fcbc",
+     "author": "user",
+     "text": "Sol, I want a calmer morning routine. I keep grabbing my phone the second I wake up.",
+     "time": "2026-07-10T08:01:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Robin",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    },
+    {
+     "id": "53884fd1-f9be-57e9-91c9-a8c85766d4c5",
+     "author": "ai",
+     "text": "Try leaving the phone charging in the kitchen. Start with a glass of water and five minutes of stretching before you look at any screen.",
+     "time": "2026-07-10T08:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Sol",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    },
+    {
+     "id": "3deae027-a506-5a84-8aff-40c64a1c2fec",
+     "author": "user",
+     "text": "The phone in the kitchen trick worked for three days. What should I add next?",
+     "time": "2026-07-11T10:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Robin",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    },
+    {
+     "id": "6b87239b-574e-5e34-84e6-34ffdce066fa",
+     "author": "ai",
+     "text": "Add ten minutes of journaling with your coffee: one line about how you slept, one thing you're looking forward to, one worry to set aside.",
+     "time": "2026-07-11T10:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Sol",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    },
+    {
+     "id": "4e1f0314-634b-502f-a18c-f3e1c1a2c341",
+     "author": "user",
+     "text": "I bought a notebook for the journaling, a small green one with dotted pages.",
+     "time": "2026-07-12T12:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Robin",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    },
+    {
+     "id": "27ad7e71-5760-5e5b-a8db-cee9c2bdbe7d",
+     "author": "ai",
+     "text": "A small dotted notebook is ideal; it's easy to keep by the coffee maker. Date each page so you can look back after a month.",
+     "time": "2026-07-12T12:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Sol",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    },
+    {
+     "id": "fef5db2a-4f7d-5e89-bd5b-2e3e5035af08",
+     "author": "user",
+     "text": "Can you suggest an evening wind-down too? I fall asleep with the TV on.",
+     "time": "2026-07-13T14:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Robin",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    },
+    {
+     "id": "bfb5c8a6-67ca-5a68-bbe7-ae027a1d1490",
+     "author": "ai",
+     "text": "Turn the TV off at ten, dim the lights, and read something on paper for twenty minutes. A warm shower before bed also helps your body cool down for sleep.",
+     "time": "2026-07-13T14:05:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Sol",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    },
+    {
+     "id": "48ac8eb4-4b0a-5214-9d3b-7ac0f0da10b5",
+     "author": "user",
+     "text": "I've been doing the evening reading for a week. I'm on the second book of the lighthouse mystery series.",
+     "time": "2026-07-14T16:05:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Robin",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    },
+    {
+     "id": "9b780b93-9507-576d-abcd-1901000406d6",
+     "author": "ai",
+     "text": "That's a real habit now. Mysteries are good for winding down as long as you stop at the end of a chapter, not a cliffhanger.",
+     "time": "2026-07-14T16:06:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Sol",
+     "recorded_scope": {
+      "companionId": "comp-sol"
+     }
+    }
+   ]
+  },
+  {
+   "id": "chat-two-finns",
+   "scope": {
+    "type": "roleplay_world",
+    "id": "world-greyford",
+    "name": "Greyford"
+   },
+   "messages": [
+    {
+     "id": "33716a18-1f1d-5966-97f7-8ea5d3788dbc",
+     "author": "user",
+     "text": "Finn shoulders his pack and studies the swollen river. 'We cross at the old ford at dawn, while the water is lowest,' he tells the others.",
+     "time": "2026-08-01T20:01:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Finn",
+     "recorded_scope": {
+      "companionId": "comp-finn",
+      "worldId": "world-greyford",
+      "roleplayCharacterId": "char-finn-ranger",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "091169b9-4de4-5971-92b7-e7657aa22621",
+     "author": "ai",
+     "text": "Finn the boatman leans on his pole and laughs. 'The ford is gone since the spring floods, ranger. My ferry is the only way across, for two silver coins.'",
+     "time": "2026-08-01T20:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Finn",
+     "recorded_scope": {
+      "companionId": "comp-finn",
+      "worldId": "world-greyford",
+      "roleplayCharacterId": "char-finn-ranger",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "b9ef2ffd-592a-5ce0-a64e-9686498d44af",
+     "author": "user",
+     "text": "Finn the ranger counts out two silver coins. 'Fine. But we leave the horses with the miller and collect them on the way back.'",
+     "time": "2026-08-02T22:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Finn",
+     "recorded_scope": {
+      "companionId": "comp-finn",
+      "worldId": "world-greyford",
+      "roleplayCharacterId": "char-finn-ranger",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "7d7c6e1c-2c0c-5673-b8f6-164401582cc3",
+     "author": "ai",
+     "text": "The boatman pockets the coins. 'The miller's a cousin of mine. He'll feed them oats, not hay. Mind the lantern on the bow, it's the only light on the water.'",
+     "time": "2026-08-02T22:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Finn",
+     "recorded_scope": {
+      "companionId": "comp-finn",
+      "worldId": "world-greyford",
+      "roleplayCharacterId": "char-finn-ranger",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "d7b681e4-9c20-5c7c-9b41-3f433101086f",
+     "author": "user",
+     "text": "Halfway across, Finn the ranger spots shapes moving on the far bank. He draws his bow and whispers to the boatman to douse the lantern.",
+     "time": "2026-08-04T00:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Finn",
+     "recorded_scope": {
+      "companionId": "comp-finn",
+      "worldId": "world-greyford",
+      "roleplayCharacterId": "char-finn-ranger",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "522135b9-d389-54d5-a374-b043c60fa08a",
+     "author": "ai",
+     "text": "The boatman snuffs the lantern. 'Smugglers,' he breathes. 'They use the reed beds by the willow. Keep low and they'll take us for driftwood.'",
+     "time": "2026-08-04T00:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Finn",
+     "recorded_scope": {
+      "companionId": "comp-finn",
+      "worldId": "world-greyford",
+      "roleplayCharacterId": "char-finn-ranger",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "b324312f-1a72-5e1c-8189-36e26b88f1a3",
+     "author": "user",
+     "text": "Once ashore, Finn the ranger marks the smugglers' path with a white stone so the town guard can find it later.",
+     "time": "2026-08-05T02:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Finn",
+     "recorded_scope": {
+      "companionId": "comp-finn",
+      "worldId": "world-greyford",
+      "roleplayCharacterId": "char-finn-ranger",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "7f306e2e-9dc8-5db7-bb92-6f09b63633c1",
+     "author": "ai",
+     "text": "The boatman nods at the white stone. 'Clever. The guard captain owes me a favour. I'll tell her about the willow landing myself.'",
+     "time": "2026-08-05T02:05:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Finn",
+     "recorded_scope": {
+      "companionId": "comp-finn",
+      "worldId": "world-greyford",
+      "roleplayCharacterId": "char-finn-ranger",
+      "userPersonaId": "glamour-ivy"
+     }
+    }
+   ]
+  },
+  {
+   "id": "chat-roleplay-name",
+   "scope": {
+    "type": "roleplay_world",
+    "id": "world-saltmarrow-coast",
+    "name": "The Saltmarrow Coast"
+   },
+   "messages": [
+    {
+     "id": "fa10e4ce-4236-535e-9507-06ad282af94d",
+     "author": "user",
+     "text": "Captain Rook strides up to the harbor master's office. 'I need a berth for the Kestrel for three nights, and I'll pay in advance.'",
+     "time": "2026-08-10T21:01:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Captain Rook",
+     "recorded_scope": {
+      "companionId": "comp-narrator",
+      "worldId": "world-saltmarrow-coast",
+      "roleplayCharacterId": "char-rook",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "de8a1852-aac2-55cf-ad0b-267ee1c89383",
+     "author": "ai",
+     "text": "The harbor master squints at the ledger. 'Three nights at berth nine. And you'll promise me there's no powder in your hold this time, Captain.'",
+     "time": "2026-08-10T21:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Narrator",
+     "recorded_scope": {
+      "companionId": "comp-narrator",
+      "worldId": "world-saltmarrow-coast",
+      "roleplayCharacterId": "char-rook",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "b0f691cb-29e8-5098-971e-b4b3033cf563",
+     "author": "user",
+     "text": "Rook raises a hand. 'I promise the Kestrel carries only wool and salt. You can inspect the hold at dawn.'",
+     "time": "2026-08-11T23:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Captain Rook",
+     "recorded_scope": {
+      "companionId": "comp-narrator",
+      "worldId": "world-saltmarrow-coast",
+      "roleplayCharacterId": "char-rook",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "f0a759fc-36a8-5dc2-82b0-3abc0171f65d",
+     "author": "ai",
+     "text": "The harbor master grunts. 'Dawn, then. If I find so much as a pinch of powder, the Kestrel stays chained until the magistrate says otherwise.'",
+     "time": "2026-08-11T23:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Narrator",
+     "recorded_scope": {
+      "companionId": "comp-narrator",
+      "worldId": "world-saltmarrow-coast",
+      "roleplayCharacterId": "char-rook",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "e70f463c-2744-5d08-8bf1-12ea6d411a61",
+     "author": "user",
+     "text": "That night Rook meets the cartographer in the tavern and trades a bottle of rum for a chart of the northern shoals.",
+     "time": "2026-08-13T01:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Captain Rook",
+     "recorded_scope": {
+      "companionId": "comp-narrator",
+      "worldId": "world-saltmarrow-coast",
+      "roleplayCharacterId": "char-rook",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "80fc5de2-5ad6-5ead-8f39-5d94d8606616",
+     "author": "ai",
+     "text": "The cartographer unrolls the chart. 'The shoals shift every winter. Trust the soundings, not the drawing, past Grey Point.'",
+     "time": "2026-08-13T01:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Narrator",
+     "recorded_scope": {
+      "companionId": "comp-narrator",
+      "worldId": "world-saltmarrow-coast",
+      "roleplayCharacterId": "char-rook",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "364206c1-833f-5811-ad88-1c1a18a3ff3c",
+     "author": "user",
+     "text": "At dawn Rook opens the hatch for the harbor master and stands aside while she climbs down with a lantern.",
+     "time": "2026-08-14T03:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Captain Rook",
+     "recorded_scope": {
+      "companionId": "comp-narrator",
+      "worldId": "world-saltmarrow-coast",
+      "roleplayCharacterId": "char-rook",
+      "userPersonaId": "glamour-ivy"
+     }
+    },
+    {
+     "id": "f1054c70-0815-5182-a7e8-590a8571c3e5",
+     "author": "ai",
+     "text": "The harbor master finds only bales of wool and sacks of salt. 'Well. A man of his word,' she says, and stamps the Kestrel's papers.",
+     "time": "2026-08-14T03:05:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Narrator",
+     "recorded_scope": {
+      "companionId": "comp-narrator",
+      "worldId": "world-saltmarrow-coast",
+      "roleplayCharacterId": "char-rook",
+      "userPersonaId": "glamour-ivy"
+     }
+    }
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "id": "q-kitchen-correction",
+   "situation": "long_repetitive_then_correction",
+   "chat": "chat-kitchen-remodel",
+   "asked_at": "2026-07-01T12:00:00Z",
+   "message": "What countertop did we settle on for the island?",
+   "expect": [
+    "dad9b9a0-5c79-598d-8c61-4479075ba586",
+    "c1c3a1a3-2fb5-5267-a9f9-b5f83bc62292"
+   ],
+   "must_not": [
+    "cfa7fbd5-87de-5be9-8c89-f574fd9df0d7",
+    "4e23eff4-8d4b-5722-9728-d6d799f0b0de"
+   ],
+   "required": "c1c3a1a3-2fb5-5267-a9f9-b5f83bc62292"
+  },
+  {
+   "id": "q-kitchen-correction-2",
+   "situation": "long_repetitive_then_correction",
+   "chat": "chat-kitchen-remodel",
+   "asked_at": "2026-07-01T12:00:00Z",
+   "message": "Are we still doing quartz countertops?",
+   "expect": [
+    "dad9b9a0-5c79-598d-8c61-4479075ba586",
+    "c1c3a1a3-2fb5-5267-a9f9-b5f83bc62292"
+   ],
+   "must_not": [
+    "6247f6ed-fa66-5a49-85c7-5c90b8803c97"
+   ],
+   "required": "c1c3a1a3-2fb5-5267-a9f9-b5f83bc62292"
+  },
+  {
+   "id": "q-kitchen-permit",
+   "situation": "opposite_outcomes",
+   "chat": "chat-kitchen-remodel",
+   "asked_at": "2026-07-01T12:00:00Z",
+   "message": "Did the contractor ever get back to me about the electrical permit?",
+   "expect": [
+    "e868a68f-cb01-5310-ae9c-90f81d410a7a",
+    "513c34bc-46fa-5648-88b2-e502a93baae2"
+   ],
+   "must_not": [
+    "fc3a515e-3ef0-50a5-a2f0-78bab115acd1"
+   ]
+  },
+  {
+   "id": "q-kitchen-permit-2",
+   "situation": "opposite_outcomes",
+   "chat": "chat-kitchen-remodel",
+   "asked_at": "2026-07-01T12:00:00Z",
+   "message": "When was I waiting on the permit reply, and what did it say in the end?",
+   "expect": [
+    "e868a68f-cb01-5310-ae9c-90f81d410a7a",
+    "513c34bc-46fa-5648-88b2-e502a93baae2"
+   ],
+   "must_not": [
+    "6247f6ed-fa66-5a49-85c7-5c90b8803c97"
+   ]
+  },
+  {
+   "id": "q-kitchen-repeat",
+   "situation": "exact_repeat",
+   "chat": "chat-kitchen-remodel",
+   "asked_at": "2026-07-01T12:00:00Z",
+   "message": "What did I need to measure above the sink?",
+   "expect": [
+    "588e6684-9ef5-5358-88d7-6c74db9c285e"
+   ],
+   "must_not": [
+    "5e3cfcc3-60ea-5060-8692-e51882a9e405"
+   ],
+   "repeat_of": "5e3cfcc3-60ea-5060-8692-e51882a9e405"
+  },
+  {
+   "id": "q-kitchen-unrelated",
+   "situation": "nothing_relevant",
+   "chat": "chat-kitchen-remodel",
+   "asked_at": "2026-07-01T12:00:00Z",
+   "message": "Can you recommend a good audiobook for a long drive?",
+   "expect": [],
+   "must_not": [
+    "dad9b9a0-5c79-598d-8c61-4479075ba586",
+    "c1c3a1a3-2fb5-5267-a9f9-b5f83bc62292"
+   ]
+  },
+  {
+   "id": "q-gl-ivy-pottery",
+   "situation": "names_identity",
+   "chat": "chat-glamour-switch",
+   "asked_at": "2026-07-20T12:00:00Z",
+   "message": "What did Ivy say about the pottery class?",
+   "expect": [
+    "785889d2-79ff-5074-9517-cf8fa5a8e7d0",
+    "c07bb116-aaf3-5f1b-86b5-deacfb8980a9"
+   ],
+   "must_not": [
+    "03461f13-b6f1-5b15-bd60-f7ecd92ff509",
+    "357e4e69-6dfa-510e-8aad-2cb04d9f6517"
+   ],
+   "names": [
+    "Ivy"
+   ]
+  },
+  {
+   "id": "q-gl-mara-sailing",
+   "situation": "names_identity",
+   "chat": "chat-glamour-switch",
+   "asked_at": "2026-07-20T12:00:00Z",
+   "message": "What did Mara tell Juniper about the sailing trip?",
+   "expect": [
+    "03461f13-b6f1-5b15-bd60-f7ecd92ff509",
+    "357e4e69-6dfa-510e-8aad-2cb04d9f6517"
+   ],
+   "must_not": [
+    "785889d2-79ff-5074-9517-cf8fa5a8e7d0",
+    "08a2cf21-a433-52f9-b36c-1a8e05a68dac"
+   ],
+   "names": [
+    "Mara",
+    "Juniper"
+   ]
+  },
+  {
+   "id": "q-gl-glaze",
+   "situation": "topic_without_name",
+   "chat": "chat-glamour-switch",
+   "asked_at": "2026-07-20T12:00:00Z",
+   "message": "Which glaze did I choose for the vase?",
+   "expect": [
+    "08a2cf21-a433-52f9-b36c-1a8e05a68dac"
+   ],
+   "must_not": [
+    "357e4e69-6dfa-510e-8aad-2cb04d9f6517",
+    "51c4ce66-4de4-5871-884e-79bab6617b18"
+   ]
+  },
+  {
+   "id": "q-gl-watch",
+   "situation": "topic_without_name",
+   "chat": "chat-glamour-switch",
+   "asked_at": "2026-07-20T12:00:00Z",
+   "message": "What time is my night watch on the boat?",
+   "expect": [
+    "51c4ce66-4de4-5871-884e-79bab6617b18"
+   ],
+   "must_not": [
+    "c07bb116-aaf3-5f1b-86b5-deacfb8980a9",
+    "ee3bb45c-c387-5687-813c-4f7553417e7a"
+   ]
+  },
+  {
+   "id": "q-sol-current-name",
+   "situation": "names_identity",
+   "chat": "chat-renamed-companion",
+   "asked_at": "2026-08-01T12:00:00Z",
+   "message": "What did Solace suggest for my mornings?",
+   "expect": [
+    "823aff57-3db6-517a-90ee-90736082fcbc",
+    "3deae027-a506-5a84-8aff-40c64a1c2fec"
+   ],
+   "must_not": [
+    "fef5db2a-4f7d-5e89-bd5b-2e3e5035af08",
+    "48ac8eb4-4b0a-5214-9d3b-7ac0f0da10b5"
+   ],
+   "names": [
+    "Solace"
+   ]
+  },
+  {
+   "id": "q-sol-old-name",
+   "situation": "names_identity",
+   "chat": "chat-renamed-companion",
+   "asked_at": "2026-08-01T12:00:00Z",
+   "message": "What did Sol say about the evening wind-down?",
+   "expect": [
+    "fef5db2a-4f7d-5e89-bd5b-2e3e5035af08"
+   ],
+   "must_not": [
+    "823aff57-3db6-517a-90ee-90736082fcbc",
+    "4e1f0314-634b-502f-a18c-f3e1c1a2c341"
+   ],
+   "names": [
+    "Sol"
+   ]
+  },
+  {
+   "id": "q-sol-notebook",
+   "situation": "topic_without_name",
+   "chat": "chat-renamed-companion",
+   "asked_at": "2026-08-01T12:00:00Z",
+   "message": "What kind of notebook did I buy?",
+   "expect": [
+    "4e1f0314-634b-502f-a18c-f3e1c1a2c341"
+   ],
+   "must_not": [
+    "fef5db2a-4f7d-5e89-bd5b-2e3e5035af08",
+    "48ac8eb4-4b0a-5214-9d3b-7ac0f0da10b5"
+   ]
+  },
+  {
+   "id": "q-finn-ford",
+   "situation": "names_identity",
+   "chat": "chat-two-finns",
+   "asked_at": "2026-08-20T12:00:00Z",
+   "message": "Where did Finn want to cross the river?",
+   "expect": [
+    "33716a18-1f1d-5966-97f7-8ea5d3788dbc"
+   ],
+   "must_not": [
+    "b324312f-1a72-5e1c-8189-36e26b88f1a3"
+   ],
+   "names": [
+    "Finn"
+   ]
+  },
+  {
+   "id": "q-finn-boatman-fare",
+   "situation": "names_identity",
+   "chat": "chat-two-finns",
+   "asked_at": "2026-08-20T12:00:00Z",
+   "message": "How much did Finn the boatman charge?",
+   "expect": [
+    "33716a18-1f1d-5966-97f7-8ea5d3788dbc",
+    "b9ef2ffd-592a-5ce0-a64e-9686498d44af"
+   ],
+   "must_not": [
+    "b324312f-1a72-5e1c-8189-36e26b88f1a3"
+   ],
+   "names": [
+    "Finn"
+   ]
+  },
+  {
+   "id": "q-finn-stone",
+   "situation": "topic_without_name",
+   "chat": "chat-two-finns",
+   "asked_at": "2026-08-20T12:00:00Z",
+   "message": "How did we mark the smugglers' path?",
+   "expect": [
+    "b324312f-1a72-5e1c-8189-36e26b88f1a3"
+   ],
+   "must_not": [
+    "33716a18-1f1d-5966-97f7-8ea5d3788dbc",
+    "b9ef2ffd-592a-5ce0-a64e-9686498d44af"
+   ]
+  },
+  {
+   "id": "q-rook-promise",
+   "situation": "names_identity",
+   "chat": "chat-roleplay-name",
+   "asked_at": "2026-08-30T12:00:00Z",
+   "message": "What did Captain Rook promise the harbor master?",
+   "expect": [
+    "b0f691cb-29e8-5098-971e-b4b3033cf563"
+   ],
+   "must_not": [
+    "e70f463c-2744-5d08-8bf1-12ea6d411a61"
+   ],
+   "names": [
+    "Captain Rook"
+   ]
+  },
+  {
+   "id": "q-rook-ivy-promise",
+   "situation": "names_identity",
+   "chat": "chat-roleplay-name",
+   "asked_at": "2026-08-30T12:00:00Z",
+   "message": "What did Ivy promise about the cargo in the hold?",
+   "expect": [
+    "b0f691cb-29e8-5098-971e-b4b3033cf563"
+   ],
+   "must_not": [
+    "e70f463c-2744-5d08-8bf1-12ea6d411a61"
+   ],
+   "names": [
+    "Ivy"
+   ]
+  },
+  {
+   "id": "q-rook-shoals",
+   "situation": "topic_without_name",
+   "chat": "chat-roleplay-name",
+   "asked_at": "2026-08-30T12:00:00Z",
+   "message": "What did the cartographer say about the northern shoals?",
+   "expect": [
+    "e70f463c-2744-5d08-8bf1-12ea6d411a61"
+   ],
+   "must_not": [
+    "fa10e4ce-4236-535e-9507-06ad282af94d",
+    "b0f691cb-29e8-5098-971e-b4b3033cf563"
+   ]
+  }
+ ],
+ "follow_ups": [
+  {
+   "id": "fu-app-followup-coil",
+   "kind": "genuine",
+   "chat": "chat-recipe-box-app",
+   "asked_at": "2026-10-20T18:00:00Z",
+   "previous_message": "Which image loading library did we pick for the recipe photos?",
+   "message": "Why did we go with that one over the others?",
+   "expect": [
+    "4311e015-ef44-5f8e-ab56-9be1d5422276"
+   ],
+   "must_not": [
+    "93e16af6-2914-5a60-8cfa-1ad18464a412",
+    "0c08010d-f513-540f-be7c-3671d6a7f5be"
+   ],
+   "helper_query": "Why was Coil chosen as the image loading library for recipe photos instead of the alternatives?"
+  },
+  {
+   "id": "fu-app-followup-sync",
+   "kind": "genuine",
+   "chat": "chat-recipe-box-app",
+   "asked_at": "2026-10-20T18:00:00Z",
+   "previous_message": "What did we decide about offline use and syncing?",
+   "message": "And what happens when two phones change the same thing?",
+   "expect": [
+    "40a2a8ec-0da7-599e-8307-7c56667d3d8b"
+   ],
+   "must_not": [
+    "7c62f77d-3f7c-5ab4-8647-d64e0b466943"
+   ],
+   "helper_query": "What happens with offline syncing when two phones change the same recipe?"
+  },
+  {
+   "id": "fu-app-followup-theme",
+   "kind": "genuine",
+   "chat": "chat-recipe-box-app",
+   "asked_at": "2026-10-20T18:00:00Z",
+   "previous_message": "What background color did we choose for the dark theme?",
+   "message": "What contrast did you say it has to meet?",
+   "expect": [
+    "0f2793d1-8cba-5228-89ee-ef1bae31c570"
+   ],
+   "must_not": [
+    "70a48fe9-1ad9-5c71-a6aa-b8bc24ab604f"
+   ],
+   "helper_query": "What contrast requirement must the dark theme colors meet?"
+  },
+  {
+   "id": "fu-app-followup-conversion",
+   "kind": "genuine",
+   "chat": "chat-recipe-box-app",
+   "asked_at": "2026-10-20T18:00:00Z",
+   "previous_message": "Remind me how the unit conversion from cups to grams works.",
+   "message": "How does the rounding work for that?",
+   "expect": [
+    "c8beb2d8-3e35-57bb-8d36-f312a6272620"
+   ],
+   "must_not": [
+    "3658dcc7-81d9-5820-a791-99c4d72eacde"
+   ],
+   "helper_query": "How does rounding work in the unit conversion between cups and grams?"
+  },
+  {
+   "id": "fu-garden-tomato-why",
+   "kind": "genuine",
+   "chat": "chat-backyard-garden",
+   "asked_at": "2026-05-21T18:00:00Z",
+   "previous_message": "Which two tomato varieties did I decide to grow?",
+   "message": "Why those two?",
+   "expect": [
+    "bf0d4b43-ffa6-58b1-a5ae-c08df640cc7e"
+   ],
+   "must_not": [],
+   "helper_query": "Why did I choose Cherokee Purple and Sungold tomatoes?"
+  },
+  {
+   "id": "fu-garden-joke",
+   "kind": "independent",
+   "chat": "chat-backyard-garden",
+   "asked_at": "2026-05-21T18:00:00Z",
+   "previous_message": "Which two tomato varieties did I decide to grow?",
+   "message": "Tell me a joke about penguins.",
+   "expect": [],
+   "must_not": [
+    "bf0d4b43-ffa6-58b1-a5ae-c08df640cc7e"
+   ],
+   "helper_query": "A joke about penguins"
+  },
+  {
+   "id": "fu-app-podcast",
+   "kind": "independent",
+   "chat": "chat-recipe-box-app",
+   "asked_at": "2026-10-20T18:00:00Z",
+   "previous_message": "Which image loading library did we pick for the recipe photos?",
+   "message": "Can you recommend a good podcast for my commute?",
+   "expect": [],
+   "must_not": [
+    "4311e015-ef44-5f8e-ab56-9be1d5422276"
+   ],
+   "helper_query": "Podcast recommendations for a commute"
+  },
+  {
+   "id": "fu-app-calendar",
+   "kind": "independent",
+   "chat": "chat-recipe-box-app",
+   "asked_at": "2026-10-20T18:00:00Z",
+   "previous_message": "What did we decide about offline use and syncing?",
+   "message": "How do I sync my calendar with my car?",
+   "expect": [],
+   "must_not": [
+    "40a2a8ec-0da7-599e-8307-7c56667d3d8b"
+   ],
+   "helper_query": "How to sync a phone calendar with a car"
+  },
+  {
+   "id": "fu-trip-haiku",
+   "kind": "independent",
+   "chat": "chat-portugal-trip",
+   "asked_at": "2026-04-02T18:00:00Z",
+   "previous_message": "How were we taking the Alfa Pendular train to Porto?",
+   "message": "Write me a short haiku about rain.",
+   "expect": [],
+   "must_not": [
+    "616bb34a-79af-5bfb-a47c-5e73e84fbb0c"
+   ],
+   "helper_query": "A haiku about rain"
+  },
+  {
+   "id": "fu-mira-thanks",
+   "kind": "independent",
+   "chat": "chat-companion-mira",
+   "asked_at": "2026-10-12T19:00:00Z",
+   "previous_message": "What gift idea did I have for Nora's birthday?",
+   "message": "Okay, what's a good stretch for a stiff neck?",
+   "expect": [],
+   "must_not": [
+    "6ff135da-2b52-594c-a858-ca82672c93e0"
+   ],
+   "helper_query": "A good stretch for a stiff neck"
+  },
+  {
+   "id": "fu-kitchen-island-more",
+   "kind": "genuine",
+   "chat": "chat-kitchen-remodel",
+   "asked_at": "2026-07-01T12:00:00Z",
+   "previous_message": "What countertop did we settle on for the island?",
+   "message": "How often does it need oiling?",
+   "expect": [
+    "c1c3a1a3-2fb5-5267-a9f9-b5f83bc62292"
+   ],
+   "must_not": [
+    "fc3a515e-3ef0-50a5-a2f0-78bab115acd1"
+   ],
+   "helper_query": "How often does a butcher block island countertop need oiling?"
+  }
+ ]
+}

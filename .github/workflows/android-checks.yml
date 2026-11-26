@@ -237,6 +237,8 @@ jobs:
             org.teslasoft.assistant.conversation.index.ConversationIndexUpkeepInstrumentedTest \
             org.teslasoft.assistant.conversation.index.ConversationIndexSettingsInstrumentedTest \
             org.teslasoft.assistant.conversation.index.ConversationIndexProgressInstrumentedTest \
+            org.teslasoft.assistant.conversation.recall.StoreRecallIndexInstrumentedTest \
+            org.teslasoft.assistant.conversation.recall.RecallEvaluationInstrumentedTest \
             org.teslasoft.assistant.ui.conversationindex.ConversationIndexingIconInstrumentedTest \
             org.teslasoft.assistant.service.ConversationIndexingServiceInstrumentedTest \
             org.teslasoft.assistant.service.DataSyncTimeoutInstrumentedTest \
@@ -271,6 +273,15 @@ jobs:
             echo "- Instrumentation output: archived by this job"
             echo "- Recovery assertions: logical content, reference closure, integrity, journal cleanup"
           } >> "$GITHUB_STEP_SUMMARY"
+          # Conversation recall's Step 14 evaluation report, printed so it can be
+          # recorded in conversation_recall_baseline.md. Measurement only.
+          recall_report="$RUNNER_TEMP/recovery-results/recall-step14-report.json"
+          if [ -s "$recall_report" ]; then
+            echo "RECALL_STEP14_REPORT_BEGIN"
+            cat "$recall_report"
+            echo
+            echo "RECALL_STEP14_REPORT_END"
+          fi
           # Measured similarities for the carry-over evaluation set, printed
           # so they can be recorded as a fixture. Measurement only.
           for folder in recall_carryover_set recall_carryover_holdout; do

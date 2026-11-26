@@ -1,0 +1,891 @@
+{
+ "format_version": 1,
+ "about": "Independent check set for Step 14 (conversation_recall_plan.md G.16 Step 14), written after the first measurement and before any run of it. It is never used to choose a number; it only checks values chosen on the other sets. Every conversation is invented. 'speaker_name' and 'recorded_scope' are synthetic test annotations standing in for the stored name and permanent identity IDs; 'helper_query' is hand-written, no model wrote it.",
+ "identities": [
+  {
+   "id": "glamour-oak",
+   "kind": "glamour",
+   "current_name": "Oak"
+  },
+  {
+   "id": "glamour-lark",
+   "kind": "glamour",
+   "current_name": "Lark"
+  },
+  {
+   "id": "comp-pip",
+   "kind": "companion",
+   "current_name": "Piper",
+   "former_names": [
+    "Pip"
+   ]
+  },
+  {
+   "id": "comp-ash-innkeeper",
+   "kind": "companion",
+   "current_name": "Ash"
+  },
+  {
+   "id": "char-ash-cartographer",
+   "kind": "roleplay_character",
+   "current_name": "Ash"
+  }
+ ],
+ "chats": [
+  {
+   "id": "chat-holdout-bakery",
+   "scope": {
+    "type": "project",
+    "id": "project-bakery",
+    "name": "Market Bakery"
+   },
+   "messages": [
+    {
+     "id": "24662dc3-6755-5e16-86f1-f092bbb9a226",
+     "author": "user",
+     "text": "I'm opening a tiny bakery stall at the Saturday market in April. I need help planning the menu, pricing and the setup.",
+     "time": "2026-02-01T07:01:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "ea9b089b-15df-5fc0-98db-c7c0d57f4153",
+     "author": "ai",
+     "text": "Exciting. Start with five or six items you can bake reliably in one morning, price them from ingredient cost times three, and plan a table layout that keeps the cash box away from the front edge.",
+     "time": "2026-02-01T07:02:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "c3aa1331-5c2d-5641-912f-3e6e58677a56",
+     "author": "user",
+     "text": "Menu decision: sourdough loaves, cardamom buns, rye crackers and lemon drizzle slices. Four items to start.",
+     "time": "2026-02-02T13:02:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "5030c456-9937-5207-ba68-db3c5e8fa8da",
+     "author": "ai",
+     "text": "A focused menu. Cardamom buns sell well in the morning, and lemon drizzle keeps for two days if it doesn't sell.",
+     "time": "2026-02-02T13:03:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "afc8888c-b11e-5a30-9643-854a144f8efc",
+     "author": "user",
+     "text": "How often do I feed the sourdough starter if I bake only on Fridays?",
+     "time": "2026-02-03T19:03:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "7e51afbc-a527-546a-a8f9-2eecdf6ada09",
+     "author": "ai",
+     "text": "Keep the starter in the fridge during the week, feed it once on Sunday, and take it out Thursday morning for two feeds before the Friday bake.",
+     "time": "2026-02-03T19:04:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "83b4644d-7b87-5e5c-b789-526e25bde0f0",
+     "author": "user",
+     "text": "The market manager says the stall fee is 35 euros a day and I need my own canopy, minimum 3 by 3 meters.",
+     "time": "2026-02-05T01:04:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "282e3c2e-0722-5603-b25d-e9cfbced5bb7",
+     "author": "ai",
+     "text": "A 3 by 3 meter canopy with weights on each leg is standard. Budget the 35 euro fee into your pricing: about seven buns' worth of profit.",
+     "time": "2026-02-05T01:05:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "922e2510-1833-5c7d-82fe-321bed2d78c8",
+     "author": "user",
+     "text": "What should I charge for the cardamom buns?",
+     "time": "2026-02-06T07:05:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "052324a1-19b9-5d2e-a87e-0199a414aea2",
+     "author": "ai",
+     "text": "With ingredients at about 70 cents a bun, 3 euros each or two for 5.50 is reasonable for a market.",
+     "time": "2026-02-06T07:06:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "55265262-670e-502b-bcec-00aa781c4554",
+     "author": "user",
+     "text": "I found a secondhand deck oven for 900 euros from a closing cafe in Linden Street.",
+     "time": "2026-02-07T13:06:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "079ce1d0-cdb2-5102-8a70-49f8de93c9dd",
+     "author": "ai",
+     "text": "A deck oven is ideal for sourdough. Check the door seals and that the thermostat holds temperature before paying.",
+     "time": "2026-02-07T13:07:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "8c3b0837-1ad1-52a4-9f00-3c3b1a29b279",
+     "author": "user",
+     "text": "What labels do I legally need on the rye crackers?",
+     "time": "2026-02-08T19:07:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "ea8693a6-4d3c-53d6-b387-6bf759de3c8f",
+     "author": "ai",
+     "text": "List the ingredients in descending weight, highlight allergens such as rye, gluten and sesame, give a best-before date and your business name and address.",
+     "time": "2026-02-08T19:08:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "b77c511e-ea05-5514-9e9a-45fed4890371",
+     "author": "user",
+     "text": "Change of plan: I'm dropping the rye crackers. They take too long to roll. Replacing them with oat and honey cookies.",
+     "time": "2026-02-10T01:08:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "69bc2fca-0f9a-562a-a28c-3a5e1512162b",
+     "author": "ai",
+     "text": "Oat and honey cookies are faster and keep well. Remember honey is not an allergen, but oats need a gluten warning if they are not certified gluten free.",
+     "time": "2026-02-10T01:09:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "9e6431c0-00ba-5ca3-b081-8505ac8331a1",
+     "author": "user",
+     "text": "my sister wants to help on the first saturday shes good with people but terrible with money",
+     "time": "2026-02-11T07:09:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "33fb741c-666f-58e4-ad8c-8a11fe52e6a1",
+     "author": "ai",
+     "text": "Then give her the serving and talking, and you keep the cash box. A card reader also cuts down on handling change.",
+     "time": "2026-02-11T07:10:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "6323b2ba-8f47-5046-9e54-175ed60ce6ee",
+     "author": "user",
+     "text": "Which card reader works without a long contract?",
+     "time": "2026-02-12T13:10:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "ef27adda-0cab-59d4-8fd0-66673f5579b0",
+     "author": "ai",
+     "text": "Pay-as-you-go readers with a flat fee per transaction and no monthly charge are best for a weekly stall. Make sure it works offline and syncs later, since market Wi-Fi is unreliable.",
+     "time": "2026-02-12T13:11:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "012111e9-523b-564e-b6e1-e96d2e481cd2",
+     "author": "user",
+     "text": "The deck oven fell through. The cafe sold it to someone else, so I'm renting time in a shared commercial kitchen on Friday nights instead.",
+     "time": "2026-02-13T19:11:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "6e9cbb03-4cb4-5436-a5bb-26508194ec16",
+     "author": "ai",
+     "text": "A shared kitchen also solves the food safety inspection, since it is already certified. Book a regular Friday slot so you're not competing for oven space.",
+     "time": "2026-02-13T19:12:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "f058b82f-2a5f-5d5e-b2fa-23954d2cb6e6",
+     "author": "user",
+     "text": "How many sourdough loaves should I bake for the first market?",
+     "time": "2026-02-15T01:12:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    },
+    {
+     "id": "5b4dc9f8-e1e0-5551-b996-dbc1cf150b8e",
+     "author": "ai",
+     "text": "Start with 20 loaves. Note what sells out by eleven and adjust the next week; it's better to sell out than to take bread home.",
+     "time": "2026-02-15T01:13:00Z",
+     "visibility": "visible",
+     "status": "finished"
+    }
+   ]
+  },
+  {
+   "id": "chat-holdout-pip",
+   "scope": {
+    "type": "companion",
+    "id": "comp-pip",
+    "name": "Piper"
+   },
+   "messages": [
+    {
+     "id": "acd49649-8225-5ee0-8d43-43c8a874b110",
+     "author": "user",
+     "text": "Pip, I've started learning the fiddle. My teacher gave me a reel called The Silver Spear for this week.",
+     "time": "2026-06-01T19:01:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Oak",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "c0dff60a-900a-543a-9d61-76d98dbbca4e",
+     "author": "ai",
+     "text": "The Silver Spear is a lovely first reel. Practise it slowly with a metronome at 60 before you try it at speed.",
+     "time": "2026-06-01T19:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Pip",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "1d5bb71e-3022-522d-8010-a987ee62d04f",
+     "author": "user",
+     "text": "My bow keeps squeaking on the E string. Is it the rosin?",
+     "time": "2026-06-03T01:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Oak",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "8c7f55f7-d9d9-542d-9fe1-44f6d6e62deb",
+     "author": "ai",
+     "text": "Usually it's too little rosin or too much pressure near the fingerboard. Rosin the bow with a few long strokes and play a little closer to the bridge.",
+     "time": "2026-06-03T01:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Pip",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "352c089c-2c0e-58a2-9cf0-6a77d3a8ed2d",
+     "author": "user",
+     "text": "I played The Silver Spear all the way through at the session in the pub on Thursday. Nobody laughed!",
+     "time": "2026-06-04T07:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Oak",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "d2f44744-9d03-59ec-8acc-63deddd1b8f4",
+     "author": "ai",
+     "text": "That's a real milestone. Playing in a session is the hardest part; after the first time it gets easier.",
+     "time": "2026-06-04T07:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Pip",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "c0db000e-eb77-5e3b-ae92-6c9e1e5039ff",
+     "author": "user",
+     "text": "I'm switching my day job schedule to four long days so I have Fridays free for practice.",
+     "time": "2026-06-05T13:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Oak",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "75d9e69d-ae88-540c-b52b-76d5be9b410a",
+     "author": "ai",
+     "text": "Four long days can work if you protect your evenings. Use Friday mornings for practice while you're fresh.",
+     "time": "2026-06-05T13:05:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Pip",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "ebec4790-5647-57ed-8b1a-f1a602463634",
+     "author": "user",
+     "text": "New hobby too: I'm building a bat box for the garden from untreated larch boards.",
+     "time": "2026-06-06T19:05:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Lark",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-lark"
+     }
+    },
+    {
+     "id": "3dd50874-d52f-56b3-b2b9-feb58f73bd61",
+     "author": "ai",
+     "text": "Larch is a good choice since it's durable without treatment. Mount the bat box at least four meters high, facing south or southeast.",
+     "time": "2026-06-06T19:06:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Pip",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-lark"
+     }
+    },
+    {
+     "id": "d42d0dcc-8c4d-5731-b734-38dc5829dbe0",
+     "author": "user",
+     "text": "The bat box is up on the gable wall. Now I just wait for bats.",
+     "time": "2026-06-08T01:06:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Lark",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-lark"
+     }
+    },
+    {
+     "id": "37cbeb87-3a78-5ebe-97bd-f626bc6cbcaf",
+     "author": "ai",
+     "text": "It can take a season or more for bats to move in. Check for droppings below it at the end of summer.",
+     "time": "2026-06-08T01:07:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Pip",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-lark"
+     }
+    },
+    {
+     "id": "8bcc2113-fd27-52a4-9a56-af95065e13df",
+     "author": "user",
+     "text": "I saw two pipistrelles flying around the garden at dusk last night.",
+     "time": "2026-06-09T07:07:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Lark",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-lark"
+     }
+    },
+    {
+     "id": "6ca6831c-1275-5af0-b9ed-3354b4cb3ed4",
+     "author": "ai",
+     "text": "Pipistrelles are a great sign. They may be scouting the bat box already.",
+     "time": "2026-06-09T07:08:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Pip",
+     "recorded_scope": {
+      "companionId": "comp-pip",
+      "userPersonaId": "glamour-lark"
+     }
+    }
+   ]
+  },
+  {
+   "id": "chat-holdout-ashes",
+   "scope": {
+    "type": "roleplay_world",
+    "id": "world-hollow-pass",
+    "name": "Hollow Pass"
+   },
+   "messages": [
+    {
+     "id": "718734b8-53c2-50d3-900f-694eff3a00e9",
+     "author": "user",
+     "text": "Ash unrolls her half-finished map on the inn table. 'I need a guide over the Hollow Pass before the snow closes it.'",
+     "time": "2026-09-01T20:01:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ash",
+     "recorded_scope": {
+      "companionId": "comp-ash-innkeeper",
+      "worldId": "world-hollow-pass",
+      "roleplayCharacterId": "char-ash-cartographer",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "2fdc8604-8001-5996-a3a2-c3812879366e",
+     "author": "ai",
+     "text": "Ash the innkeeper wipes his hands on his apron. 'My nephew Corin knows the pass. He'll take you for a week's board and a copy of your map.'",
+     "time": "2026-09-01T20:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ash",
+     "recorded_scope": {
+      "companionId": "comp-ash-innkeeper",
+      "worldId": "world-hollow-pass",
+      "roleplayCharacterId": "char-ash-cartographer",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "baaaba04-4198-5f0a-88ea-1e000dbc03c2",
+     "author": "user",
+     "text": "Ash the cartographer agrees, and inks a small lantern symbol where the inn sits on the map.",
+     "time": "2026-09-03T02:02:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ash",
+     "recorded_scope": {
+      "companionId": "comp-ash-innkeeper",
+      "worldId": "world-hollow-pass",
+      "roleplayCharacterId": "char-ash-cartographer",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "75f44b5f-b478-5f2e-8ec5-75906eb37bd3",
+     "author": "ai",
+     "text": "The innkeeper chuckles at the lantern. 'Put a warning by the old bridge too. Half its planks are rotten.'",
+     "time": "2026-09-03T02:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ash",
+     "recorded_scope": {
+      "companionId": "comp-ash-innkeeper",
+      "worldId": "world-hollow-pass",
+      "roleplayCharacterId": "char-ash-cartographer",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "eb97a7a6-def8-5f10-b6a5-7ef853ffe750",
+     "author": "user",
+     "text": "On the second day, Ash finds a carved stone marker near the pass with a spiral and three lines. She copies it into her notebook.",
+     "time": "2026-09-04T08:03:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ash",
+     "recorded_scope": {
+      "companionId": "comp-ash-innkeeper",
+      "worldId": "world-hollow-pass",
+      "roleplayCharacterId": "char-ash-cartographer",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "945b67fd-dec2-5aeb-adc6-afa11e350705",
+     "author": "ai",
+     "text": "Corin goes pale at the spiral. 'That's the sign of the Hollow Folk. We camp below the ridge tonight, not on it.'",
+     "time": "2026-09-04T08:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ash",
+     "recorded_scope": {
+      "companionId": "comp-ash-innkeeper",
+      "worldId": "world-hollow-pass",
+      "roleplayCharacterId": "char-ash-cartographer",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "6cfa8f5f-f3e1-5cc2-831c-41376b88531c",
+     "author": "user",
+     "text": "Back at the inn, Ash pays the innkeeper in silver and gives Corin the finished copy of the map.",
+     "time": "2026-09-05T14:04:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ash",
+     "recorded_scope": {
+      "companionId": "comp-ash-innkeeper",
+      "worldId": "world-hollow-pass",
+      "roleplayCharacterId": "char-ash-cartographer",
+      "userPersonaId": "glamour-oak"
+     }
+    },
+    {
+     "id": "f771b3f4-fa34-5350-84fc-852d45769b44",
+     "author": "ai",
+     "text": "The innkeeper weighs the silver. 'Fair. And if the Hollow Folk ask, you never stayed here,' he says with a wink.",
+     "time": "2026-09-05T14:05:00Z",
+     "visibility": "visible",
+     "status": "finished",
+     "speaker_name": "Ash",
+     "recorded_scope": {
+      "companionId": "comp-ash-innkeeper",
+      "worldId": "world-hollow-pass",
+      "roleplayCharacterId": "char-ash-cartographer",
+      "userPersonaId": "glamour-oak"
+     }
+    }
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "id": "h-bakery-menu",
+   "situation": "exact_detail_far_back",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "message": "What four things did I put on the menu?",
+   "expect": [
+    "c3aa1331-5c2d-5641-912f-3e6e58677a56"
+   ],
+   "must_not": [
+    "922e2510-1833-5c7d-82fe-321bed2d78c8",
+    "8c3b0837-1ad1-52a4-9f00-3c3b1a29b279"
+   ]
+  },
+  {
+   "id": "h-bakery-starter",
+   "situation": "unusual_wording",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "message": "wat did u say bout feedin the starter if i only bake fridays",
+   "expect": [
+    "afc8888c-b11e-5a30-9643-854a144f8efc"
+   ],
+   "must_not": [
+    "f058b82f-2a5f-5d5e-b2fa-23954d2cb6e6"
+   ]
+  },
+  {
+   "id": "h-bakery-fee-dictated",
+   "situation": "unusual_wording",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "message": "okay so I'm standing in the parking lot trying to remember the numbers the market manager gave me how much was the stall fee per day and how big did the canopy need to be",
+   "expect": [
+    "83b4644d-7b87-5e5c-b789-526e25bde0f0"
+   ],
+   "must_not": [
+    "6323b2ba-8f47-5046-9e54-175ed60ce6ee"
+   ]
+  },
+  {
+   "id": "h-bakery-oven",
+   "situation": "decision_changed",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "message": "Are we still buying the deck oven from the cafe?",
+   "expect": [
+    "55265262-670e-502b-bcec-00aa781c4554",
+    "012111e9-523b-564e-b6e1-e96d2e481cd2"
+   ],
+   "must_not": [
+    "afc8888c-b11e-5a30-9643-854a144f8efc"
+   ],
+   "early": "55265262-670e-502b-bcec-00aa781c4554",
+   "later": "012111e9-523b-564e-b6e1-e96d2e481cd2"
+  },
+  {
+   "id": "h-bakery-crackers",
+   "situation": "decision_changed",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "message": "What labels do the crackers need?",
+   "expect": [
+    "8c3b0837-1ad1-52a4-9f00-3c3b1a29b279",
+    "b77c511e-ea05-5514-9e9a-45fed4890371"
+   ],
+   "must_not": [
+    "f058b82f-2a5f-5d5e-b2fa-23954d2cb6e6"
+   ],
+   "early": "8c3b0837-1ad1-52a4-9f00-3c3b1a29b279",
+   "later": "b77c511e-ea05-5514-9e9a-45fed4890371"
+  },
+  {
+   "id": "h-bakery-nothing",
+   "situation": "nothing_relevant",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "message": "What's the capital of Mongolia?",
+   "expect": [],
+   "must_not": [
+    "c3aa1331-5c2d-5641-912f-3e6e58677a56"
+   ]
+  },
+  {
+   "id": "h-bakery-nothing-2",
+   "situation": "nothing_relevant",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "message": "Can you help me write a birthday poem for my dad?",
+   "expect": [],
+   "must_not": [
+    "9e6431c0-00ba-5ca3-b081-8505ac8331a1"
+   ]
+  },
+  {
+   "id": "h-bakery-common-word",
+   "situation": "common_word_only",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "message": "What about the first one?",
+   "expect": [],
+   "must_not": [
+    "f058b82f-2a5f-5d5e-b2fa-23954d2cb6e6",
+    "9e6431c0-00ba-5ca3-b081-8505ac8331a1"
+   ]
+  },
+  {
+   "id": "h-bakery-price",
+   "situation": "exact_detail_far_back",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "message": "how much r the cardamom buns",
+   "expect": [
+    "922e2510-1833-5c7d-82fe-321bed2d78c8"
+   ],
+   "must_not": [
+    "c3aa1331-5c2d-5641-912f-3e6e58677a56"
+   ]
+  },
+  {
+   "id": "h-pip-oak-reel",
+   "situation": "names_identity",
+   "chat": "chat-holdout-pip",
+   "asked_at": "2026-06-30T12:00:00Z",
+   "message": "What reel did Oak learn first?",
+   "expect": [
+    "acd49649-8225-5ee0-8d43-43c8a874b110"
+   ],
+   "must_not": [
+    "ebec4790-5647-57ed-8b1a-f1a602463634"
+   ],
+   "names": [
+    "Oak"
+   ]
+  },
+  {
+   "id": "h-pip-lark-bats",
+   "situation": "names_identity",
+   "chat": "chat-holdout-pip",
+   "asked_at": "2026-06-30T12:00:00Z",
+   "message": "What did Lark build for the bats?",
+   "expect": [
+    "ebec4790-5647-57ed-8b1a-f1a602463634"
+   ],
+   "must_not": [
+    "acd49649-8225-5ee0-8d43-43c8a874b110"
+   ],
+   "names": [
+    "Lark"
+   ]
+  },
+  {
+   "id": "h-pip-old-name",
+   "situation": "names_identity",
+   "chat": "chat-holdout-pip",
+   "asked_at": "2026-06-30T12:00:00Z",
+   "message": "What did Pip say about the squeaky bow?",
+   "expect": [
+    "1d5bb71e-3022-522d-8010-a987ee62d04f"
+   ],
+   "must_not": [
+    "ebec4790-5647-57ed-8b1a-f1a602463634"
+   ],
+   "names": [
+    "Pip"
+   ]
+  },
+  {
+   "id": "h-pip-new-name",
+   "situation": "names_identity",
+   "chat": "chat-holdout-pip",
+   "asked_at": "2026-06-30T12:00:00Z",
+   "message": "Where did Piper tell me to mount the bat box?",
+   "expect": [
+    "ebec4790-5647-57ed-8b1a-f1a602463634"
+   ],
+   "must_not": [
+    "1d5bb71e-3022-522d-8010-a987ee62d04f"
+   ],
+   "names": [
+    "Piper"
+   ]
+  },
+  {
+   "id": "h-pip-topic",
+   "situation": "topic_without_name",
+   "chat": "chat-holdout-pip",
+   "asked_at": "2026-06-30T12:00:00Z",
+   "message": "Which bats did I see in the garden?",
+   "expect": [
+    "8bcc2113-fd27-52a4-9a56-af95065e13df"
+   ],
+   "must_not": [
+    "acd49649-8225-5ee0-8d43-43c8a874b110"
+   ]
+  },
+  {
+   "id": "h-ash-guide",
+   "situation": "names_identity",
+   "chat": "chat-holdout-ashes",
+   "asked_at": "2026-09-20T12:00:00Z",
+   "message": "Who did Ash say could guide us over the pass?",
+   "expect": [
+    "718734b8-53c2-50d3-900f-694eff3a00e9"
+   ],
+   "must_not": [
+    "6cfa8f5f-f3e1-5cc2-831c-41376b88531c"
+   ],
+   "names": [
+    "Ash"
+   ]
+  },
+  {
+   "id": "h-ash-marker",
+   "situation": "topic_without_name",
+   "chat": "chat-holdout-ashes",
+   "asked_at": "2026-09-20T12:00:00Z",
+   "message": "What was carved on the stone marker?",
+   "expect": [
+    "eb97a7a6-def8-5f10-b6a5-7ef853ffe750"
+   ],
+   "must_not": [
+    "718734b8-53c2-50d3-900f-694eff3a00e9"
+   ]
+  },
+  {
+   "id": "h-ash-nothing",
+   "situation": "nothing_relevant",
+   "chat": "chat-holdout-ashes",
+   "asked_at": "2026-09-20T12:00:00Z",
+   "message": "What's a good recipe for banana bread?",
+   "expect": [],
+   "must_not": [
+    "718734b8-53c2-50d3-900f-694eff3a00e9"
+   ]
+  }
+ ],
+ "follow_ups": [
+  {
+   "id": "hf-bakery-buns-why",
+   "kind": "genuine",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "previous_message": "What should I charge for the cardamom buns?",
+   "message": "and why that much?",
+   "expect": [
+    "922e2510-1833-5c7d-82fe-321bed2d78c8"
+   ],
+   "must_not": [],
+   "helper_query": "Why charge 3 euros for the cardamom buns?"
+  },
+  {
+   "id": "hf-bakery-reader",
+   "kind": "genuine",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "previous_message": "Which card reader works without a long contract?",
+   "message": "Does it work offline?",
+   "expect": [
+    "6323b2ba-8f47-5046-9e54-175ed60ce6ee"
+   ],
+   "must_not": [],
+   "helper_query": "Does the pay-as-you-go card reader work offline at the market?"
+  },
+  {
+   "id": "hf-pip-reel-tempo",
+   "kind": "genuine",
+   "chat": "chat-holdout-pip",
+   "asked_at": "2026-06-30T12:00:00Z",
+   "previous_message": "What reel did my teacher give me?",
+   "message": "What speed should I practise it at?",
+   "expect": [
+    "acd49649-8225-5ee0-8d43-43c8a874b110"
+   ],
+   "must_not": [],
+   "helper_query": "What metronome speed should I practise The Silver Spear reel at?"
+  },
+  {
+   "id": "hf-bakery-weather",
+   "kind": "independent",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "previous_message": "What should I charge for the cardamom buns?",
+   "message": "What's the weather going to be like tomorrow?",
+   "expect": [],
+   "must_not": [
+    "922e2510-1833-5c7d-82fe-321bed2d78c8"
+   ],
+   "helper_query": "Weather forecast for tomorrow"
+  },
+  {
+   "id": "hf-bakery-film",
+   "kind": "independent",
+   "chat": "chat-holdout-bakery",
+   "asked_at": "2026-03-15T09:00:00Z",
+   "previous_message": "How many sourdough loaves should I bake for the first market?",
+   "message": "Recommend me a film for tonight.",
+   "expect": [],
+   "must_not": [
+    "f058b82f-2a5f-5d5e-b2fa-23954d2cb6e6"
+   ],
+   "helper_query": "A film recommendation for tonight"
+  },
+  {
+   "id": "hf-pip-tax",
+   "kind": "independent",
+   "chat": "chat-holdout-pip",
+   "asked_at": "2026-06-30T12:00:00Z",
+   "previous_message": "What did I build for the bats?",
+   "message": "How do I file my taxes online?",
+   "expect": [],
+   "must_not": [
+    "ebec4790-5647-57ed-8b1a-f1a602463634"
+   ],
+   "helper_query": "How to file taxes online"
+  },
+  {
+   "id": "hf-ash-joke",
+   "kind": "independent",
+   "chat": "chat-holdout-ashes",
+   "asked_at": "2026-09-20T12:00:00Z",
+   "previous_message": "Who could guide us over the pass?",
+   "message": "Tell me something funny.",
+   "expect": [],
+   "must_not": [
+    "718734b8-53c2-50d3-900f-694eff3a00e9"
+   ],
+   "helper_query": "A funny joke"
+  }
+ ]
+}

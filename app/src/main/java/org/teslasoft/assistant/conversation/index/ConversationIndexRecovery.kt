@@ -32,6 +32,22 @@ object ConversationIndexAccess {
         }
     }
 
+    /**
+     * The shared side for a reader that must never wait (conversation recall
+     * while a message is being sent): null, without waiting, when a recovery
+     * holds the database or is waiting for it.
+     */
+    fun <T> sharedIfFree(block: () -> T): T? {
+        if (recovering || !lock.readLock().tryLock()) return null
+        try {
+            // A recovery that started waiting just before the lock was taken goes first.
+            if (recovering) return null
+            return block()
+        } finally {
+            lock.readLock().unlock()
+        }
+    }
+
     fun <T> exclusive(block: () -> T): T {
         recovering = true
         lock.writeLock().lock()
