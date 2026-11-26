@@ -51,6 +51,8 @@ class RecallEngineTest {
         /** Messages as the index saw them, when different from [messages] (an index that lags behind). */
         val indexedText = HashMap<String, String>()
         var otherModel = HashSet<String>()
+        /** Exchange IDs as the index recorded them, when the index has not caught up with the chat. */
+        val indexedExchange = HashMap<String, String>()
         var readable = true
         /** Runs when the engine asks whether the chat changed (just before handing results on). */
         var onRecheck: (() -> Unit)? = null
@@ -73,7 +75,7 @@ class RecallEngineTest {
                     val text = indexedText[m.messageId] ?: m.modelText
                     val eligible = !m.hiddenFromAi && (!m.isBot || MessageCompletionState.isComplete(m.completionState))
                     if (!eligible && m.messageId !in indexedText) return@mapIndexedNotNull null
-                    RecallPassage(i + 1L, m.messageId, 0, 0, text.length, exchange, Speaker.of(m.isBot),
+                    RecallPassage(i + 1L, m.messageId, 0, 0, text.length, indexedExchange[m.messageId] ?: exchange, Speaker.of(m.isBot),
                         if (m.isBot) "Companion" else "Human", m.timeMillis, i, IndexFingerprint.of(text),
                         if (m.messageId in otherModel) "other" else model, dims) to m.copy(modelText = text)
                 }
@@ -533,5 +535,16 @@ class RecallEngineTest {
         val helper = (1..120).joinToString(" ") { "helperword$it" }
         val withHelper = search(chat, request("Cherokee", RecallMode.API_AI, vector = null, helper = helper, helperVector = null)) as RecallResult.Found
         assertEquals(listOf("c"), withHelper.exchanges.map { it.exchangeId })
+    }
+
+    @Test fun aReplyWhoseUserMessageWasDeletedBelongsToThePreviousExchangeBeforeTheIndexCatchesUp() {
+        val chat = filler(Chat())
+            .user("q", "which wood for the beds").vector("q", at(0.1))
+            .ai("a", "we chose untreated cedar").vector("a", at(0.9))
+        // The user message "gone" that this reply answered was deleted; the index still files the reply under it.
+        chat.indexedExchange["a"] = "gone"
+        val r = search(chat, request("cedar")) as RecallResult.Found
+        assertEquals(listOf("q"), r.exchanges.map { it.exchangeId })
+        assertEquals(listOf("q", "a"), r.exchanges.single().messages.map { it.messageId })
     }
 }

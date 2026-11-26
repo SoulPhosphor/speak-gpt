@@ -137,10 +137,13 @@ class RecallEngine(
         // message is eligible now with the text it was indexed from.
         val indexed = fromIndex { index.passages(chatId) }
         check(budget)
+        // A passage's exchange is where its message sits in the chat now, not
+        // what the index recorded: a deleted user message moves its replies to
+        // the exchange before it before the index catches up.
         val usable = indexed.filter { p ->
             val now = eligibleNow[p.messageId]
             now != null && now.fingerprint == p.textFingerprint && p.messageId != request.currentMessageId
-        }
+        }.map { p -> p.copy(exchangeId = eligibleNow.getValue(p.messageId).exchangeKey) }
         val outdated = indexed.count { p -> eligibleNow[p.messageId]?.fingerprint != p.textFingerprint }
         // The identity filter (evaluation variant C) limits which passages may be
         // offered; the chat's typical similarity and word rarity are still
