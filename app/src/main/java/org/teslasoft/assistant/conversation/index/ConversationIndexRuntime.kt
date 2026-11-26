@@ -61,6 +61,95 @@ object ConversationIndexRuntime {
     /** The progress when something already created it; null otherwise, so asking creates nothing. */
     fun progressIfCreated(): IndexProgressTracker? = progressInstance
 
+    /** What indexing did since the last summary (Detailed Indexing Diagnostics). */
+    private val totals = IndexingTotals()
+
+    @Volatile private var sinkInstance: IndexingLogSink? = null
+
+    /** Indexing's Error Log and Indexing Log (Owner, 2026-11-25); never Logcat. */
+    fun logSink(context: Context): IndexingLogSink =
+        sinkInstance ?: synchronized(this) {
+            sinkInstance ?: AppIndexingLogSink(context.applicationContext).also { sinkInstance = it }
+        }
+
+    @Volatile private var vectorPasses: IndexVectorPasses? = null
+
+    /**
+     * Whether the coordinator or the vector passes have work waiting or going
+     * (Owner, 2026-11-25): what the background service continues besides a
+     * catch-up. False when nothing was created.
+     */
+    fun hasPendingWork(): Boolean =
+        instance?.hasPendingWork() == true || vectorPasses?.isBusy == true
+
+    /**
+     * Where a service run starts counting vector failures from. A pass
+     * already asked for or running is the run's own work, so its failure
+     * counts too: the starting point is then just before its request.
+     */
+    fun vectorStallBaseline(): Long {
+        val passes = vectorPasses ?: return 0L
+        return VectorStallBaseline.of(passes.requestCount, passes.isBusy)
+    }
+
+    /**
+     * An ordinary update that cannot go on by itself: its vector pass, asked
+     * for after [since], stopped on a failure and nothing else waits. The
+     * service then stops and names the failure rather than calling it done.
+     */
+    fun updateStalledSince(since: Long): Boolean {
+        val passes = vectorPasses ?: return false
+        val stopAt = passes.stoppedOnFailureAt
+        return stopAt != IndexVectorPasses.NOT_STOPPED && stopAt > since && instance?.hasPendingWork() != true
+    }
+
+    /** What stopped the vector passes, while they are stopped on a failure. */
+    fun vectorStopFailure(): VectorPassFailure? = vectorPasses?.stopFailure
+
+    /** The indexing state for Indexing Error Details; holds no conversation content. */
+    fun stateForLog(context: Context): String = try {
+        val app = context.applicationContext
+        val where = when (backgroundPermit.current) {
+            BackgroundIndexingPermit.State.FOREGROUND -> "app open"
+            BackgroundIndexingPermit.State.SERVICE -> "background service"
+            BackgroundIndexingPermit.State.CLOSED -> "app closed"
+        }
+        val model = EmbeddingModelStorage.activeModel(app)?.id ?: "none installed"
+        "$where; Index Conversations ${if (ConversationIndexSetting.isOn(app)) "on" else "off"}; " +
+            "paused ${if (progressInstance?.isPaused == true) "yes" else "no"}; " +
+            "rebuilding ${if (ConversationIndexConditions.rebuilding) "yes" else "no"}; model $model"
+    } catch (_: Exception) {
+        "not readable"
+    }
+
+    /**
+     * Detailed Indexing Diagnostics: one summary of what ran since the last
+     * one, when anything ran; on the index's thread, after the work before it.
+     */
+    fun writeSummary(context: Context, scope: IndexingLogText.SummaryScope) {
+        // Nothing ran when nothing was created; the index's thread is not started for a summary.
+        if (instance == null) return
+        val app = context.applicationContext
+        try {
+            onIndexThread {
+                val taken = totals.take() ?: return@onIndexThread
+                val sink = logSink(app)
+                if (!sink.detailedOn) return@onIndexThread
+                sink.detailed(IndexingLogText.summary(scope, taken, waitingVectors(app)))
+            }
+        } catch (_: Exception) { }
+    }
+
+    private fun waitingVectors(app: Context): Int? {
+        return try {
+            val model = EmbeddingModelStorage.activeModel(app) ?: return null
+            if (!ConversationIndexStore.exists(app)) return 0
+            ConversationIndexAccess.shared { ConversationIndexStore.get(app).waitingPassages(model.embeddingTag, model.dimensions) }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /** Runs [task] on the index's thread, after the work handed to it before (Step 13). */
     fun onIndexThread(task: () -> Unit) {
         IndexTaskRunner.on(executor).run(0, task)
@@ -89,12 +178,14 @@ object ConversationIndexRuntime {
     /** Pause in the progress pop-up: counting, comparing and vectors stop at their next safe point; finished work is kept. */
     fun pause(context: Context) {
         progress(context).pause()
+        logSink(context).activity(IndexingLogText.PAUSED)
     }
 
     /** Resume in the progress pop-up: the catch-up continues; finished work is not done again. */
     fun resume(context: Context) {
         val app = context.applicationContext
         progress(app).resume()
+        logSink(app).activity(IndexingLogText.RESUMED)
         coordinator(app).resumed()
     }
 
@@ -111,8 +202,10 @@ object ConversationIndexRuntime {
             runner = IndexTaskRunner.on(vectorExecutor),
             // A pass while paused only loads the model, so its availability is known, and stops at once.
             // While the app is closed without the background service nothing is loaded or read.
-            isOn = { isOn(app) && backgroundPermit.mayRun() }
+            isOn = { isOn(app) && backgroundPermit.mayRun() },
+            preparationFailure = { lastPreparationFailure }
         )
+        vectorPasses = vectors
         // A catch-up whose passes stopped on a failure, with none asked for, cannot end by itself (Step 13).
         progress(app).vectorRequests = { vectors.requestCount }
         progress(app).vectorsStoppedOnFailureAt = { vectors.stoppedOnFailureAt }
@@ -137,7 +230,14 @@ object ConversationIndexRuntime {
             recover = { requestedByUser -> recover(app, requestedByUser) },
             isPaused = { progress(app).isPaused },
             progress = progress(app),
-            mayRun = backgroundPermit::mayRun
+            mayRun = backgroundPermit::mayRun,
+            log = logSink(app),
+            totals = totals,
+            workContinued = {
+                if (backgroundPermit.current == BackgroundIndexingPermit.State.FOREGROUND) {
+                    logSink(app).activity(IndexingLogText.CONTINUED_ON_OPENING)
+                }
+            }
         )
         progress(app).chatsQueued = coordinator::hasQueuedWork
         return coordinator
@@ -155,6 +255,7 @@ object ConversationIndexRuntime {
         // Turning indexing on deliberately clears the user's pause (Owner, 2026-11-24, Step 12).
         progress(app).reset()
         ConversationIndexSetting.set(app, true)
+        logSink(app).activity(IndexingLogText.TURNED_ON)
         val failed = ConversationIndexConditions.recoveryFailed(app)
         if (failed || ConversationIndexConditions.recoveryPending(app)) {
             startRecovery(app, requestedByUser = failed)
@@ -173,6 +274,7 @@ object ConversationIndexRuntime {
     /** Index Conversations was turned off: indexing stops at the next safe point; the index is kept. */
     fun turnOff(context: Context) {
         ConversationIndexSetting.set(context.applicationContext, false)
+        logSink(context).activity(IndexingLogText.TURNED_OFF)
     }
 
     /**
@@ -191,6 +293,7 @@ object ConversationIndexRuntime {
         coordinator(app).deleteIndex(whenIndexExists = ConversationIndexStore.exists(app)) { failure ->
             val gone = (failure == null || (IndexFailures.isDamage(failure) && removeDamagedFiles(app))) &&
                 removeSetAside(app)
+            if (gone) logSink(app).activity(IndexingLogText.DELETED)
             onDone(gone)
         }
     }
@@ -353,9 +456,15 @@ object ConversationIndexRuntime {
             val worker = try {
                 PassageEmbeddingWorker.forInstalledModel(app, source)
             } catch (e: Exception) {
-                if (IndexFailures.isDamage(e)) damageFound(app, ConversationIndexErrorLog.cause(e))
+                if (IndexFailures.isDamage(e)) {
+                    damageFound(app, ConversationIndexErrorLog.cause(e))
+                } else {
+                    // Not damage, but no vector could be made: written once per cause, never silently.
+                    preparationFailed(app, e)
+                }
                 return@shared null
             }
+            lastPreparationFailure = null
             if (worker == null) {
                 events.modelUnavailable(null)
                 return@shared null
@@ -364,8 +473,16 @@ object ConversationIndexRuntime {
             ConversationIndexConditions.clearModelProblem(app)
             val catchUp = progress(app).vectorPassStarting()
             val outcome = worker.runPass { !isOn(app) || ConversationIndexAccess.recovering || !backgroundPermit.mayRun() }
+            outcomeCounts(outcome)?.let { totals.vectorPass(it.made, it.failed) }
             when (outcome) {
-                is PassageEmbeddingWorker.Outcome.Finished -> progress(app).vectorPassFinished(catchUp)
+                is PassageEmbeddingWorker.Outcome.Finished -> {
+                    val wasCatchingUp = progress(app).catchingUp()
+                    progress(app).vectorPassFinished(catchUp)
+                    if (wasCatchingUp && !progress(app).catchingUp()) {
+                        logSink(app).activity(IndexingLogText.CATCH_UP_FINISHED)
+                        writeSummary(app, IndexingLogText.SummaryScope.CATCH_UP)
+                    }
+                }
                 is PassageEmbeddingWorker.Outcome.Paused -> progress(app).vectorPassPaused()
                 else -> Unit
             }
@@ -378,6 +495,26 @@ object ConversationIndexRuntime {
             }
             outcome
         }
+    }
+
+    private fun outcomeCounts(outcome: PassageEmbeddingWorker.Outcome): PassageEmbeddingWorker.Counts? = when (outcome) {
+        is PassageEmbeddingWorker.Outcome.Finished -> outcome.counts
+        is PassageEmbeddingWorker.Outcome.Paused -> outcome.counts
+        is PassageEmbeddingWorker.Outcome.Cancelled -> outcome.counts
+        is PassageEmbeddingWorker.Outcome.Interrupted -> outcome.counts
+        else -> null
+    }
+
+    /** The cause of the last failure to prepare the model or the index, for the stop line; null after a pass that started. */
+    @Volatile private var lastPreparationFailure: String? = null
+
+    private fun preparationFailed(app: Context, e: Exception) {
+        val cause = ConversationIndexErrorLog.cause(e)
+        if (cause == lastPreparationFailure) return
+        lastPreparationFailure = cause
+        logSink(app).error(
+            "error", IndexingLogText.vectorPreparationFailed(cause, IndexingLogText.PREPARATION_RETRY), e, stateForLog(app)
+        )
     }
 
     @Volatile private var reporterInstance: ConversationIndexReporter? = null

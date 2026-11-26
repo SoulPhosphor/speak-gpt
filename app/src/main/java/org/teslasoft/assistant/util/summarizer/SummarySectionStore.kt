@@ -51,8 +51,8 @@ object SummarySectionStore {
         }
     }
 
-    fun save(prefs: Preferences, sections: List<SummarySections.Section>): Boolean = try {
-        prefs.commitSummarySections(SummarySections.toJson(sections))
+    fun save(prefs: Preferences, sections: List<SummarySections.Section>, runSaved: String? = null): Boolean = try {
+        prefs.commitSummarySections(SummarySections.toJson(sections), runSaved)
     } catch (e: Exception) {
         if (e is kotlinx.coroutines.CancellationException) throw e
         prefs.reportSummarizerStorageFailure("Summarizing: encode Summary Sections", e, sections.map { it.text })

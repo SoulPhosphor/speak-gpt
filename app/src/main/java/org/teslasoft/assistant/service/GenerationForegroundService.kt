@@ -70,6 +70,12 @@ class GenerationForegroundService : Service() {
         // Generations in flight. The service stops only when this drops to 0.
         private val activeGenerations = AtomicInteger(0)
 
+        /** Phases writing a reply's text (not reading one aloud), for background indexing. */
+        private val activeTextGenerations = AtomicInteger(0)
+
+        /** Whether a reply's text is being written now; reading a reply aloud is not. */
+        val isWritingReply: Boolean get() = activeTextGenerations.get() > 0
+
         @Volatile private var activeService: GenerationForegroundService? = null
         @Volatile private var lastKeepAliveFailure: String? = null
 
@@ -95,6 +101,7 @@ class GenerationForegroundService : Service() {
          */
         fun begin(context: Context, chatId: String?, chatName: String?, reading: Boolean = false): Boolean {
             activeGenerations.incrementAndGet()
+            if (!reading) activeTextGenerations.incrementAndGet()
             val intent = Intent(context, GenerationForegroundService::class.java).apply {
                 putExtra(EXTRA_CHAT_ID, chatId)
                 putExtra(EXTRA_CHAT_NAME, chatName)
@@ -121,12 +128,14 @@ class GenerationForegroundService : Service() {
                                 "generation continues without screen-off protection")
                 } catch (_: Throwable) { /* logging must never break generation */ }
                 activeGenerations.decrementAndGet()
+                if (!reading) activeTextGenerations.updateAndGet { (it - 1).coerceAtLeast(0) }
                 return false
             }
         }
 
-        /** Call when a generation finishes (success, error, or cancellation). */
-        fun end(context: Context) {
+        /** Call when a generation finishes (success, error, or cancellation); [reading] as passed to [begin]. */
+        fun end(context: Context, reading: Boolean = false) {
+            if (!reading) activeTextGenerations.updateAndGet { (it - 1).coerceAtLeast(0) }
             val remaining = activeGenerations.decrementAndGet()
             if (remaining <= 0) {
                 activeGenerations.set(0)

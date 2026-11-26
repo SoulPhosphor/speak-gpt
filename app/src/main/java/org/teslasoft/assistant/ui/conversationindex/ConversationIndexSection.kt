@@ -132,7 +132,10 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
         ConversationIndexSetting.isOn(activity) -> when (ConversationIndexConditions.modelProblem(activity)) {
             IndexModelProblem.REMOVED -> activity.getString(R.string.conversation_index_paused_model_removed)
             IndexModelProblem.CANNOT_LOAD -> activity.getString(R.string.conversation_index_paused_model_cannot_load)
-            null -> null
+            // Lowest priority (Owner, 2026-11-25): background continuation needs a visible notification.
+            null -> ConversationIndexNotificationLine.textRes(
+                org.teslasoft.assistant.service.ConversationIndexingForegroundService.notificationAccess(activity)
+            )?.let(activity::getString)
         }
         else -> null
     }
@@ -173,5 +176,14 @@ class ConversationIndexSection(private val activity: Activity, root: View) {
 
         /** Tests only: the last pop-up this section opened. */
         @Volatile var lastDialogForTest: androidx.appcompat.app.AlertDialog? = null
+    }
+}
+
+/** Which explanation the Conversation Index section shows for notifications that are off (Owner, 2026-11-25). */
+object ConversationIndexNotificationLine {
+    fun textRes(access: org.teslasoft.assistant.conversation.index.IndexingNotificationAccess): Int? = when (access) {
+        org.teslasoft.assistant.conversation.index.IndexingNotificationAccess.APP_OFF -> R.string.conversation_index_notifications_app_off
+        org.teslasoft.assistant.conversation.index.IndexingNotificationAccess.CHANNEL_OFF -> R.string.conversation_index_notifications_channel_off
+        org.teslasoft.assistant.conversation.index.IndexingNotificationAccess.ALLOWED -> null
     }
 }

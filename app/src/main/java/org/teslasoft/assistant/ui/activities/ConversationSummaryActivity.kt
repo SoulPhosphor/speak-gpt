@@ -309,16 +309,25 @@ class ConversationSummaryActivity : FragmentActivity(), ConversationPreviewSheet
                 textStatus?.setText(SummarizerOperationMessages.successRes(state.kind))
                 textReadOnly?.visibility = View.GONE
             }
-            state is SummarizerController.OperationState.Idle && wasLocked -> {
+            state is SummarizerController.OperationState.PartiallyUpdated -> {
+                // The saved sections stay; the explanation uses the read-only line beneath the status.
                 rowStatus?.visibility = View.VISIBLE
                 spinner?.visibility = View.GONE
-                textStatus?.setText(SummarizerOperationMessages.successRes(lastRunKind))
+                textStatus?.setText(R.string.summary_partially_updated)
+                textReadOnly?.setText(R.string.summary_partially_updated_detail)
+                textReadOnly?.visibility = View.VISIBLE
+            }
+            state is SummarizerController.OperationState.Idle && wasLocked -> {
+                // The run's own ending was not seen here, so nothing is claimed about how it went.
+                rowStatus?.visibility = View.GONE
                 textReadOnly?.visibility = View.GONE
             }
             state is SummarizerController.OperationState.Idle -> {
-                // Keep a success line already showing; nothing else to say.
-                if (spinner?.visibility == View.VISIBLE) rowStatus?.visibility = View.GONE
-                textReadOnly?.visibility = View.GONE
+                // Keep a success or partial line already showing; nothing else to say.
+                if (spinner?.visibility == View.VISIBLE) {
+                    rowStatus?.visibility = View.GONE
+                    textReadOnly?.visibility = View.GONE
+                }
             }
             else -> {
                 // Failed or cancelled: the error belongs to Summarizer Errors.

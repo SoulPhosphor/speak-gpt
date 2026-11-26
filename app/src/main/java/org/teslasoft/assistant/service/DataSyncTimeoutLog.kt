@@ -50,6 +50,17 @@ object DataSyncTimeoutLog {
             "Operation: ${operation.text}. Restore progress may be interrupted. " +
             "An incomplete restore will be handled by the existing recovery mechanism at the next app launch."
 
+    /**
+     * The Summarizer's keep-alive service could not start (Owner, 2026-11-25).
+     * The operation is not stopped by this; it may be stopped by Android once
+     * the app is closed, which the interruption report then covers.
+     */
+    fun summarizerStartFailed(operation: SummarizerOperation, cause: String): String =
+        "Summarizer Service: The keep-alive service could not start: $cause. " +
+            "Operation: ${operation.kind} for chat ${operation.chatId}. " +
+            "The operation continues without its notification. " +
+            "If the app is closed, Android may stop it before it finishes."
+
     /** Summarizer operation kinds as they read in the log. */
     fun summarizerKind(name: String): String = when (name) {
         "COMPACTING" -> "compaction"

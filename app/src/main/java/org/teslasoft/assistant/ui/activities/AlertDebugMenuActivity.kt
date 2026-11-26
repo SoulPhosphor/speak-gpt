@@ -23,6 +23,7 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.WindowInsets
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -94,6 +95,11 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
     private var switchKeyboardChatDebugging: MaterialSwitch? = null
     private var fieldTtsLifecycleMaxLogs: EditText? = null
     private var fieldTtsLifecycleMaxDays: EditText? = null
+    private var switchIndexingErrorDetails: MaterialSwitch? = null
+    private var switchIndexingActivity: MaterialSwitch? = null
+    private var switchIndexingDetailed: MaterialSwitch? = null
+    private var fieldIndexingLogMaxLogs: EditText? = null
+    private var fieldIndexingLogMaxDays: EditText? = null
     private var switchSystemLogging: MaterialSwitch? = null
     private var fieldSystemLogMaxLogs: EditText? = null
     private var fieldSystemLogMaxDays: EditText? = null
@@ -145,6 +151,11 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         switchKeyboardChatDebugging = findViewById(R.id.switch_keyboard_chat_debugging)
         fieldTtsLifecycleMaxLogs = findViewById(R.id.field_tts_lifecycle_max_logs)
         fieldTtsLifecycleMaxDays = findViewById(R.id.field_tts_lifecycle_max_days)
+        switchIndexingErrorDetails = findViewById(R.id.switch_indexing_error_details)
+        switchIndexingActivity = findViewById(R.id.switch_indexing_activity)
+        switchIndexingDetailed = findViewById(R.id.switch_indexing_detailed)
+        fieldIndexingLogMaxLogs = findViewById(R.id.field_indexing_log_max_logs)
+        fieldIndexingLogMaxDays = findViewById(R.id.field_indexing_log_max_days)
         switchSystemLogging = findViewById(R.id.switch_system_logging)
         fieldSystemLogMaxLogs = findViewById(R.id.field_system_log_max_logs)
         fieldSystemLogMaxDays = findViewById(R.id.field_system_log_max_days)
@@ -206,6 +217,13 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         switchKeyboardChatDebugging?.isChecked = p.getKeyboardChatInteractionDebugging()
         fieldTtsLifecycleMaxLogs?.setText(p.getTtsLifecycleLogMaxEntries().toString())
         fieldTtsLifecycleMaxDays?.setText(p.getTtsLifecycleLogMaxDays().toString())
+
+        switchIndexingErrorDetails?.isChecked = p.getIndexingErrorDetails()
+        switchIndexingActivity?.isChecked = p.getIndexingActivityLogging()
+        switchIndexingDetailed?.isChecked = p.getIndexingDetailedDiagnostics()
+        fieldIndexingLogMaxLogs?.setText(p.getIndexingLogMaxEntries().toString())
+        fieldIndexingLogMaxDays?.setText(p.getIndexingLogMaxDays().toString())
+        showIndexingLogRetention(p)
 
         switchSystemLogging?.isChecked = p.getSystemLogging()
         fieldSystemLogMaxLogs?.setText(p.getSystemLogMaxEntries().toString())
@@ -296,6 +314,27 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
         wireRetentionField(
             fieldTtsLifecycleMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
             { p.getTtsLifecycleLogMaxDays() }, { v -> p.setTtsLifecycleLogMaxDays(v) },
+            R.string.dialog_max_days_exceeded
+        )
+
+        // Conversation indexing logs (Owner, 2026-11-25).
+        switchIndexingErrorDetails?.setOnCheckedChangeListener { _, checked -> p.setIndexingErrorDetails(checked) }
+        switchIndexingActivity?.setOnCheckedChangeListener { _, checked ->
+            p.setIndexingActivityLogging(checked)
+            showIndexingLogRetention(p)
+        }
+        switchIndexingDetailed?.setOnCheckedChangeListener { _, checked ->
+            p.setIndexingDetailedDiagnostics(checked)
+            showIndexingLogRetention(p)
+        }
+        wireRetentionField(
+            fieldIndexingLogMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
+            { p.getIndexingLogMaxEntries() }, { v -> p.setIndexingLogMaxEntries(v) },
+            R.string.dialog_max_logs_exceeded
+        )
+        wireRetentionField(
+            fieldIndexingLogMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
+            { p.getIndexingLogMaxDays() }, { v -> p.setIndexingLogMaxDays(v) },
             R.string.dialog_max_days_exceeded
         )
 
@@ -461,4 +500,12 @@ class AlertDebugMenuActivity : SettingsPageActivity() {
             else -> false
         }
     }
+
+    /** The Indexing Log's retention rows sit beneath its switches and show while either is on (style guide, Number row). */
+    private fun showIndexingLogRetention(p: Preferences) {
+        val visible = if (p.getIndexingActivityLogging() || p.getIndexingDetailedDiagnostics()) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.row_indexing_log_max_logs)?.visibility = visible
+        findViewById<View>(R.id.row_indexing_log_max_days)?.visibility = visible
+    }
+
 }

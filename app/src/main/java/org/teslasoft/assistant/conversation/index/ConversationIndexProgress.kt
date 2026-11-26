@@ -139,6 +139,9 @@ interface IndexProgressEvents {
     /** The catch-up stopped before it finished: the model is unavailable, or the index was deleted. */
     fun catchUpStopped() {}
 
+    /** Whether a catch-up with work left is going (for the Indexing Log). */
+    fun catchingUp(): Boolean = false
+
     companion object {
         val NONE = object : IndexProgressEvents {}
     }
@@ -253,6 +256,8 @@ class IndexProgressTracker(
     val display: StateFlow<IndexingDisplay> = state
 
     val isPaused: Boolean get() = pause.paused
+
+    override fun catchingUp(): Boolean = synchronized(lock) { catchingUp }
 
     /**
      * Whether the catch-up cannot go on by itself (Step 13): every queued chat

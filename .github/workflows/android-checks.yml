@@ -242,6 +242,8 @@ jobs:
             org.teslasoft.assistant.ui.conversationindex.ConversationIndexingIconInstrumentedTest \
             org.teslasoft.assistant.service.ConversationIndexingServiceInstrumentedTest \
             org.teslasoft.assistant.service.DataSyncTimeoutInstrumentedTest \
+            org.teslasoft.assistant.service.RestoreServiceStartInstrumentedTest \
+            org.teslasoft.assistant.util.summarizer.SummarizerResultTrackingInstrumentedTest \
             org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporterImageValidationInstrumentedTest \
             org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecoveryInstrumentedTest \
             org.teslasoft.assistant.preferences.includes.PdfAttachmentStoreInstrumentedTest \

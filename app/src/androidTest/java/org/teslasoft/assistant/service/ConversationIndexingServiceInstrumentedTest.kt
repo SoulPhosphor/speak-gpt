@@ -23,7 +23,11 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingContent
 import org.teslasoft.assistant.conversation.index.BackgroundIndexingStep
 import org.teslasoft.assistant.conversation.index.BackgroundStopReason
+import org.teslasoft.assistant.conversation.index.BackgroundIndexingLog
 import org.teslasoft.assistant.conversation.index.ConversationIndexRuntime
+import org.teslasoft.assistant.conversation.index.IndexingLogSettings
+import org.teslasoft.assistant.conversation.index.IndexingLogText
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.conversation.index.IndexingConditions
 import org.teslasoft.assistant.conversation.index.IndexingDisplay
 import org.teslasoft.assistant.conversation.index.IndexingNumbers
@@ -125,6 +129,8 @@ class ConversationIndexingServiceInstrumentedTest {
         )
         assertTrue("no buttons", paused.notification.actions.isNullOrEmpty())
         assertNotNull(paused.notification.contentIntent)
+        // Owner, 2026-11-25: the limit left work waiting, so the Error Log explains it as a limit, not an error.
+        assertTrue(Logger.getCrashLog(app).contains(IndexingLogText.pausedByAndroidLimit(BackgroundStopReason.TIME_LIMIT, null)))
 
         // With the time used up and the app in the background, Android refuses the next start.
         onMain { controller.startService() }
@@ -155,6 +161,57 @@ class ConversationIndexingServiceInstrumentedTest {
             assertTrue("indexing runs again in the app", ConversationIndexRuntime.backgroundPermit.mayRun())
             assertNull(find(PAUSED_ID))
         }
+    }
+
+    @Test fun anOrdinaryUpdateShowsTheUpdateLineWithAndroidsUsualTimingAndLogsOnlyToTheAppsLogs() {
+        val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(IndexingLogSettings.ACTIVITY, true).commit()
+        Logger.clearIndexingLog(app)
+        val errorsBefore = Logger.getCrashLog(app)
+        try {
+            step = BackgroundIndexingStep.Show(BackgroundIndexingContent.Updating)
+            AppBackgroundIndexing.displayForTest = IndexingDisplay.Hidden
+            AppBackgroundIndexing.pendingForTest = true
+            startWhileVisibleThenLeave()
+            // Android may hold the notification back for a short update; here the service keeps running.
+            val updating = waitForIndexing { text(it) == "Updating conversation index…" }
+            assertEquals("Indexing Conversations", updating.notification.extras.getString(Notification.EXTRA_TITLE))
+            assertTrue("a moving bar", updating.notification.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE))
+            step = BackgroundIndexingStep.Stop(BackgroundStopReason.UPDATES_DONE)
+            waitFor("the service stops when the updates are done") { !onMain { ConversationIndexingForegroundService.isRunning } }
+            val log = Logger.getIndexingLog(app)
+            assertTrue(log.contains(BackgroundIndexingLog.STARTED))
+            assertTrue(log.contains(BackgroundIndexingLog.stopped(BackgroundStopReason.UPDATES_DONE)))
+            assertEquals("a normal stop is not an error", errorsBefore, Logger.getCrashLog(app))
+        } finally {
+            AppBackgroundIndexing.pendingForTest = null
+            prefs.edit().remove(IndexingLogSettings.ACTIVITY).commit()
+        }
+    }
+
+    @Test fun withIndexingActivityOffNothingRoutineIsWritten() {
+        app.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().remove(IndexingLogSettings.ACTIVITY).commit()
+        Logger.clearIndexingLog(app)
+        startWhileVisibleThenLeave()
+        step = BackgroundIndexingStep.Stop(BackgroundStopReason.CATCH_UP_ENDED)
+        waitFor("the service stops") { !onMain { ConversationIndexingForegroundService.isRunning } }
+        assertEquals("", Logger.getIndexingLog(app))
+    }
+
+    @Test fun aRunThatNeverRecordedItsStopIsReportedOnceAtTheNextStart() {
+        val marks = app.getSharedPreferences("conversation_indexing_service", Context.MODE_PRIVATE)
+        marks.edit().putBoolean("service_run_going", true).commit()
+        AppBackgroundIndexing.previousRunEnded(app)
+        AppBackgroundIndexing.previousRunEnded(app)
+        val log = Logger.getCrashLog(app)
+        assertEquals(1, log.split(IndexingLogText.PREVIOUS_SESSION_ENDED).size - 1 - countBefore)
+        assertFalse(marks.contains("service_run_going"))
+    }
+
+    private var countBefore = 0
+
+    @Before fun countPreviousReports() {
+        countBefore = Logger.getCrashLog(app).split(IndexingLogText.PREVIOUS_SESSION_ENDED).size - 1
     }
 
     // --- Helpers ---------------------------------------------------------------
