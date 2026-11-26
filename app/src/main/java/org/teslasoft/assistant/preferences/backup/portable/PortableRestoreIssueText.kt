@@ -100,7 +100,7 @@ object PortableRestoreIssueText {
             PortableChatRestorePlan.Reason.UNREFERENCED_FOLDER -> R.string.portable_chat_unreferenced_folder
             PortableChatRestorePlan.Reason.UNSUPPORTED_SETTING_TYPE -> R.string.portable_chat_unsupported_setting
             PortableChatRestorePlan.Reason.FORBIDDEN_CREDENTIAL -> R.string.portable_chat_forbidden_credential
-            null -> R.string.portable_restore_validation_failed
+            null -> R.string.portable_restore_reason_validation_failed
         })
 
     private fun failureReason(

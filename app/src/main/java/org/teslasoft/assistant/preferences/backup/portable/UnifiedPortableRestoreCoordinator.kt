@@ -9,7 +9,7 @@ import java.io.File
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.backup.ChatSetReplacementCoordinator
@@ -73,8 +73,10 @@ object UnifiedPortableRestoreCoordinator {
     sealed interface ServiceStartFailureResult {
         /** Cancelled before applying began: nothing was changed. */
         data class Cancelled(val phase: ProgressPhase?) : ServiceStartFailureResult
-        /** A restore is applying or restarting: it was not cancelled. */
-        data object StillApplying : ServiceStartFailureResult
+        /** A restoration worker is already running: it was not cancelled. */
+        data class StillRunning(val phase: ProgressPhase?) : ServiceStartFailureResult
+        /** A restore result already exists: its state and recovery information were preserved. */
+        data object TerminalPreserved : ServiceStartFailureResult
         /** No restore was active. */
         data object NoRestore : ServiceStartFailureResult
     }
@@ -91,6 +93,15 @@ object UnifiedPortableRestoreCoordinator {
     fun interface Observer { fun onStateChanged(state: State) }
 
     enum class AdvanceResult { WAITING_FOR_USER, TERMINAL, RESTART_REQUIRED, NO_WORK }
+
+    sealed interface BeginResult {
+        data object Started : BeginResult
+        data object AlreadyInProgress : BeginResult
+        data object ExistingResult : BeginResult
+        data class InvalidRequest(val reason: InvalidRequestReason) : BeginResult
+    }
+
+    enum class InvalidRequestReason { NO_CATEGORIES, BACKUP_UNAVAILABLE, TEMPORARY_FILES_UNAVAILABLE }
 
     private enum class Next { DECODE, PREFLIGHT, APPLY }
 
@@ -115,7 +126,7 @@ object UnifiedPortableRestoreCoordinator {
     )
 
     private val lock = Any()
-    private val advancing = AtomicBoolean(false)
+    private val advancing = AtomicReference<Any?>(null)
     private val recoveryWorker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "portable-restore-recovery")
     }
@@ -131,10 +142,36 @@ object UnifiedPortableRestoreCoordinator {
         inspection: PortablePackage.Inspection,
         unlock: UnlockMaterial,
         chatOptions: ChatMergePlanner.Options = ChatMergePlanner.Options()
-    ): Boolean = synchronized(lock) {
-        if (session != null || requested.isEmpty() || !packageFile.isFile || !decodeRoot.isDirectory) {
+    ): Boolean = beginDetailed(
+        packageFile, decodeRoot, requested, inspection, unlock, chatOptions
+    ) == BeginResult.Started
+
+    /** Returns the reason a prepared restore was refused while holding the coordinator lock. */
+    fun beginDetailed(
+        packageFile: File,
+        decodeRoot: File,
+        requested: List<PortableRestoreSelectionPlan.Selection>,
+        inspection: PortablePackage.Inspection,
+        unlock: UnlockMaterial,
+        chatOptions: ChatMergePlanner.Options = ChatMergePlanner.Options()
+    ): BeginResult = synchronized(lock) {
+        if (session != null) {
             wipe(unlock)
-            return@synchronized false
+            return@synchronized if (state is State.Terminal) {
+                BeginResult.ExistingResult
+            } else {
+                BeginResult.AlreadyInProgress
+            }
+        }
+        val invalid = when {
+            requested.isEmpty() -> InvalidRequestReason.NO_CATEGORIES
+            !packageFile.isFile -> InvalidRequestReason.BACKUP_UNAVAILABLE
+            !decodeRoot.isDirectory -> InvalidRequestReason.TEMPORARY_FILES_UNAVAILABLE
+            else -> null
+        }
+        if (invalid != null) {
+            wipe(unlock)
+            return@synchronized BeginResult.InvalidRequest(invalid)
         }
         session = Session(
             packageFile,
@@ -145,12 +182,14 @@ object UnifiedPortableRestoreCoordinator {
             chatOptions = chatOptions
         )
         publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.DECODING))
-        true
+        BeginResult.Started
     }
 
-    fun retryUnlock(unlock: UnlockMaterial): Boolean = synchronized(lock) {
+    fun retryUnlock(unlock: UnlockMaterial, expectedVersion: Long? = null): Boolean = synchronized(lock) {
         val current = session
-        if (current == null || state !is State.UnlockFailed) {
+        if (current == null || state !is State.UnlockFailed ||
+            (expectedVersion != null && state.version != expectedVersion)
+        ) {
             wipe(unlock)
             return@synchronized false
         }
@@ -160,10 +199,10 @@ object UnifiedPortableRestoreCoordinator {
         true
     }
 
-    fun restoreAvailableCategories(): Boolean = synchronized(lock) {
+    fun restoreAvailableCategories(expectedVersion: Long): Boolean = synchronized(lock) {
         val current = session ?: return@synchronized false
         val missing = current.missingResult ?: return@synchronized false
-        if (state !is State.MissingCategories) return@synchronized false
+        if (state !is State.MissingCategories || state.version != expectedVersion) return@synchronized false
         current.selected = PortableRestoreSelectionPlan.restoreAvailable(missing).selections
         current.missingResult = null
         current.next = Next.PREFLIGHT
@@ -173,11 +212,14 @@ object UnifiedPortableRestoreCoordinator {
 
     fun resolveFolder(
         sourceFolderId: String,
-        resolution: ChatMergePlanner.FolderResolution
+        resolution: ChatMergePlanner.FolderResolution,
+        expectedVersion: Long
     ): Boolean = synchronized(lock) {
         val current = session ?: return@synchronized false
         val pending = state as? State.FolderDecision ?: return@synchronized false
-        if (pending.collision.backupFolder.id != sourceFolderId) return@synchronized false
+        if (pending.version != expectedVersion ||
+            pending.collision.backupFolder.id != sourceFolderId
+        ) return@synchronized false
         current.folderResolutions[sourceFolderId] = resolution
         current.next = Next.PREFLIGHT
         publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.PREFLIGHT))
@@ -186,31 +228,37 @@ object UnifiedPortableRestoreCoordinator {
 
     fun resolveChat(
         chatId: String,
-        resolution: ChatMergePlanner.ChatResolution
+        resolution: ChatMergePlanner.ChatResolution,
+        expectedVersion: Long
     ): Boolean = synchronized(lock) {
         val current = session ?: return@synchronized false
         val pending = state as? State.ChatDecision ?: return@synchronized false
-        if (pending.collision.incoming.chatId != chatId) return@synchronized false
+        if (pending.version != expectedVersion ||
+            pending.collision.incoming.chatId != chatId
+        ) return@synchronized false
         current.chatResolutions[chatId] = resolution
         current.next = Next.PREFLIGHT
         publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.PREFLIGHT))
         true
     }
 
-    fun confirm(): Boolean = synchronized(lock) {
+    fun confirm(expectedVersion: Long): Boolean = synchronized(lock) {
         val current = session ?: return@synchronized false
-        if (state !is State.Confirmation || current.ready == null) return@synchronized false
+        if (state !is State.Confirmation || state.version != expectedVersion ||
+            current.ready == null
+        ) return@synchronized false
         current.next = Next.APPLY
         publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.APPLYING))
         true
     }
 
-    fun cancel(): Boolean {
+    fun cancel(expectedVersion: Long? = null): Boolean {
         val abandoned = synchronized(lock) {
             val current = session ?: return false
+            if (expectedVersion != null && state.version != expectedVersion) return false
             val phase = (state as? State.Progress)?.phase
             if (phase == ProgressPhase.RESTARTING ||
-                (phase == ProgressPhase.APPLYING && advancing.get())
+                (phase == ProgressPhase.APPLYING && advancing.get() != null)
             ) return false
             session = null
             publishLocked(State.Idle(nextVersionLocked()))
@@ -222,8 +270,8 @@ object UnifiedPortableRestoreCoordinator {
 
     /**
      * The restore's foreground service could not start (Owner, 2026-11-25).
-     * Cancels the restore only when [cancel] would: never while it applies or
-     * restarts, so "Nothing was changed" is shown only when it is true.
+     * Cancels only when no restoration worker is running and applying has not
+     * begun. A later service request can never tear down an existing run.
      * [record] runs with the result before the state is published, so the
      * Error Log entry precedes the message being shown.
      */
@@ -237,8 +285,9 @@ object UnifiedPortableRestoreCoordinator {
             val phase = (state as? State.Progress)?.phase
             val outcome = when {
                 current == null -> ServiceStartFailureResult.NoRestore
-                phase == ProgressPhase.RESTARTING ||
-                    (phase == ProgressPhase.APPLYING && advancing.get()) -> ServiceStartFailureResult.StillApplying
+                state is State.Terminal -> ServiceStartFailureResult.TerminalPreserved
+                phase == ProgressPhase.RESTARTING || advancing.get() != null ->
+                    ServiceStartFailureResult.StillRunning(phase)
                 else -> ServiceStartFailureResult.Cancelled(phase)
             }
             runCatching { record(outcome) }
@@ -334,36 +383,58 @@ object UnifiedPortableRestoreCoordinator {
 
     /** Called on the foreground service's single worker, never the main thread. */
     fun advance(context: Context): AdvanceResult {
-        if (!advancing.compareAndSet(false, true)) return AdvanceResult.NO_WORK
+        val workerToken = Any()
+        val started = synchronized(lock) {
+            state is State.Progress && advancing.compareAndSet(null, workerToken)
+        }
+        if (!started) return AdvanceResult.NO_WORK
         try {
             while (true) {
                 val next = synchronized(lock) { session?.next } ?: return AdvanceResult.NO_WORK
                 when (next) {
                     Next.DECODE -> when (decode(context.applicationContext)) {
                         Step.CONTINUE -> continue
-                        Step.WAIT -> return AdvanceResult.WAITING_FOR_USER
+                        Step.WAIT -> if (finishWaitingStep(workerToken)) {
+                            return AdvanceResult.WAITING_FOR_USER
+                        } else continue
                         Step.TERMINAL -> return AdvanceResult.TERMINAL
                         Step.RESTART -> return AdvanceResult.RESTART_REQUIRED
                     }
                     Next.PREFLIGHT -> when (preflight(context.applicationContext)) {
                         Step.CONTINUE -> continue
-                        Step.WAIT -> return AdvanceResult.WAITING_FOR_USER
+                        Step.WAIT -> if (finishWaitingStep(workerToken)) {
+                            return AdvanceResult.WAITING_FOR_USER
+                        } else continue
                         Step.TERMINAL -> return AdvanceResult.TERMINAL
                         Step.RESTART -> return AdvanceResult.RESTART_REQUIRED
                     }
                     Next.APPLY -> when (apply(context.applicationContext)) {
                         Step.CONTINUE -> continue
-                        Step.WAIT -> return AdvanceResult.WAITING_FOR_USER
+                        Step.WAIT -> if (finishWaitingStep(workerToken)) {
+                            return AdvanceResult.WAITING_FOR_USER
+                        } else continue
                         Step.TERMINAL -> return AdvanceResult.TERMINAL
                         Step.RESTART -> return AdvanceResult.RESTART_REQUIRED
                     }
                 }
             }
         } finally {
-            advancing.set(false)
+            advancing.compareAndSet(workerToken, null)
         }
         @Suppress("UNREACHABLE_CODE")
         return AdvanceResult.NO_WORK
+    }
+
+    /**
+     * Hands a waiting state to the screen without leaving a gap where a user
+     * decision can publish more work while the old worker is still marked as
+     * active. If the decision won the coordinator lock first, this worker
+     * keeps ownership and consumes that work itself.
+     */
+    private fun finishWaitingStep(workerToken: Any): Boolean = synchronized(lock) {
+        if (state is State.Progress) return@synchronized false
+        advancing.compareAndSet(workerToken, null)
+        true
     }
 
     private enum class Step { CONTINUE, WAIT, TERMINAL, RESTART }
