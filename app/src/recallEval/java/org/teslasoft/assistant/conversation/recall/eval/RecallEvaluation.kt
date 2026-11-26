@@ -52,8 +52,12 @@ interface RecallEvalBackend {
 class RecallEvaluation(
     private val fixtures: RecallFixtures,
     private val backend: RecallEvalBackend,
-    private val tuning: RecallTuning = RecallTuning()
+    private val tuning: RecallTuning = RecallTuning(),
+    /** Only these chats and their questions; null for every chat. */
+    private val onlyChats: Set<String>? = null
 ) {
+    private fun included(chat: String) = onlyChats == null || chat in onlyChats
+
     enum class Variant(val label: String, val titles: SpeakerTitlePolicy, val filter: Boolean) {
         A("A: Human/Companion", RecallFixtures.GENERIC, false),
         B("B: titles with recorded names", RecallFixtures.WITH_NAMES, false),
@@ -67,7 +71,7 @@ class RecallEvaluation(
     private val engine by lazy { RecallEngine(backend.recallIndex, backend.messages, null, tuning) }
 
     fun buildIndex() {
-        for (chat in fixtures.chats.values) {
+        for (chat in fixtures.chats.values.filter { included(it.id) }) {
             backend.index(indexId(RecallFixtures.GENERIC, chat.id), chat.messages, RecallFixtures.GENERIC)
             backend.index(indexId(RecallFixtures.WITH_NAMES, chat.id), chat.messages, RecallFixtures.WITH_NAMES)
         }
@@ -194,7 +198,7 @@ class RecallEvaluation(
     fun questions(): List<Scored> {
         val out = ArrayList<Scored>()
         for (variant in Variant.entries) {
-            for (q in fixtures.questions) {
+            for (q in fixtures.questions.filter { included(it.chat) }) {
                 val chat = fixtures.chats.getValue(q.chat)
                 val filter = if (variant.filter) fixtures.resolve(q.names).takeIf { it.isNotEmpty() } else null
                 val (req, readMillis) = request(indexId(variant.titles, q.chat), chat, q.message, q.askedAtMillis, filter = filter)
@@ -214,7 +218,7 @@ class RecallEvaluation(
     /** Follow-ups in chats without saved memories, under each context-assistance mode (variant A). */
     fun followUps(): List<Scored> {
         val out = ArrayList<Scored>()
-        for (f in fixtures.followUps) {
+        for (f in fixtures.followUps.filter { included(it.chat) }) {
             val chat = fixtures.chats.getValue(f.chat)
             val id = indexId(RecallFixtures.GENERIC, f.chat)
             val group = group(f.set, "follow_up_${f.kind}")
@@ -245,7 +249,7 @@ class RecallEvaluation(
     /** Recall's own time with the typed and hands-free allowances, reading the message with the real model each time. */
     fun timing(read: (String) -> Long): JSONArray {
         val rows = JSONArray()
-        for (q in fixtures.questions) {
+        for (q in fixtures.questions.filter { included(it.chat) }) {
             val chat = fixtures.chats.getValue(q.chat)
             val readMillis = read(q.message)
             val (req, _) = request(indexId(RecallFixtures.GENERIC, q.chat), chat, q.message, q.askedAtMillis)

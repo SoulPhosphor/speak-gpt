@@ -40,13 +40,18 @@ import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingTokenCounte
 import org.teslasoft.assistant.preferences.memory.librarian.OnnxEmbeddingModel
 
 /**
- * Step 14's recorded evaluation (memory development plan G.16 Step 14, "Done
- * when"): every conversation test chat is indexed through the real updater,
- * the real encrypted index and the real EmbeddingGemma model with Android's
- * ONNX Runtime, and every question is scored on its own. The report is
- * written to `recall-step14-report.json` in the app's external files folder,
- * which Android Checks collects. Quality is measured, not asserted (G.15: no
- * pass mark is invented in advance); only the rules that must always hold are
+ * Step 14's evaluation on Android (memory development plan G.16 Step 14):
+ * the chats in [CHATS] are indexed through the real updater, the real
+ * encrypted index and the real EmbeddingGemma model with Android's ONNX
+ * Runtime, and each of their questions is scored on its own, under every
+ * speaker-title variant and follow-up mode. The emulator reads about one text
+ * every two seconds, so every chat (about 730 texts) does not fit in a CI run;
+ * the full evaluation is recorded from the same model files and tokenizer on a
+ * desktop (`RecallEvaluationDesktopTest`), and this subset shows whether
+ * Android's runtime changes any decision. The report is written to
+ * `recall-step14-report.json` in the app's external files folder, which
+ * Android Checks collects. Quality is measured, not asserted (G.15: no pass
+ * mark is invented in advance); only the rules that must always hold are
  * asserted.
  *
  * Emulator timings are not phone timings.
@@ -95,7 +100,7 @@ class RecallEvaluationInstrumentedTest {
 
         val fixtures = RecallFixtures.load(asset("recall_test_set/conversations.json"),
             "additions" to asset("recall_test_set/step14_additions.json"), "holdout" to asset("recall_test_set/step14_holdout.json"))
-        val evaluation = RecallEvaluation(fixtures, backend)
+        val evaluation = RecallEvaluation(fixtures, backend, onlyChats = CHATS)
         val indexStarted = System.nanoTime()
         evaluation.buildIndex()
         val indexMillis = (System.nanoTime() - indexStarted) / 1_000_000
@@ -103,7 +108,7 @@ class RecallEvaluationInstrumentedTest {
         val followUps = evaluation.followUps()
         val sweep = JSONArray()
         for ((label, tuning) in RecallTuningCandidates.all) {
-            val e = RecallEvaluation(fixtures, backend, tuning)
+            val e = RecallEvaluation(fixtures, backend, tuning, CHATS)
             val rows = e.questions().filter { it.variant == "A" } + e.followUps()
             sweep.put(JSONObject().put("tuning", label).put("totals", RecallEvaluation.totals(rows))
                 .put("rows", JSONArray(rows.map { it.json() })))
@@ -112,6 +117,7 @@ class RecallEvaluationInstrumentedTest {
 
         val report = JSONObject()
             .put("backend", "Android ONNX Runtime on the CI emulator (not phone timings)")
+            .put("chats", JSONArray(CHATS.sorted()))
             .put("abi", android.os.Build.SUPPORTED_ABIS.firstOrNull())
             .put("index_and_vectors_ms", indexMillis)
             .put("passages_made", store.madeVectorCount())
@@ -124,6 +130,7 @@ class RecallEvaluationInstrumentedTest {
 
         // Rules that must hold, whatever the scores: a hidden message, an edited message's old
         // words and a failed or unfinished reply are never recalled (G.15 correctness).
+        assertTrue(questions.isNotEmpty())
         for (row in questions) {
             val q = fixtures.questions.first { it.id == row.id }
             if (q.situation in setOf("hidden_best_match", "edited_old_words", "failed_or_unfinished_reply")) {
@@ -179,5 +186,14 @@ class RecallEvaluationInstrumentedTest {
             queue.run(EmbeddingQueue.Priority.LIVE) { control -> model.embed(text, true, model.messageTokenLimit, control) }
             return (System.nanoTime() - started) / 1_000_000
         }
+    }
+
+    private companion object {
+        /** Two companion chats, a roleplay chat, a one-subject chat, a chat of long dictated messages and a very
+         *  long exchange from Step 6, and two independent-check chats with recorded identities. */
+        val CHATS = setOf(
+            "chat-companion-rowan", "chat-home-repairs", "chat-book-club", "chat-saltmarrow-roleplay",
+            "chat-holdout-pip", "chat-holdout-ashes"
+        )
     }
 }
