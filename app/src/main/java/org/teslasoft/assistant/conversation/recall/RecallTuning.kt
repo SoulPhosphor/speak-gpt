@@ -28,6 +28,8 @@ data class RecallTuning(
     val vectorBatch: Int = 256,
     /** Most informative words of one search looked up in the keyword index, rarest first. */
     val maxQueryTerms: Int = 32,
+    /** Most distinct words looked up in the keyword index for one message, its pieces and the helper's query together. */
+    val maxTermLookups: Int = 96,
 
     // Retrieval stage 4: the relevance gate.
     /** Meaning: the similarity a passage must reach. */

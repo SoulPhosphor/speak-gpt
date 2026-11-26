@@ -11,11 +11,19 @@ import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
 /**
  * Conversation recall's read-only view of the conversation index (memory
  * development plan G.8a point 1). Each call is one statement on the readable
- * database; nothing is written.
+ * database, made under [ConversationIndexAccess]'s shared side so it never
+ * runs while a recovery replaces the file; nothing is written. A recovery that
+ * is running or waiting is not waited for, since recall must not hold a
+ * message back: the read fails and recall hands on nothing for that message.
  */
 class StoreRecallIndex(private val store: ConversationIndexStore) : RecallIndex {
 
-    override fun passages(chatId: String): List<RecallPassage> =
+    private fun <T> read(block: () -> T): T {
+        if (ConversationIndexAccess.recovering) throw IllegalStateException("the conversation index is being recovered")
+        return ConversationIndexAccess.shared(block)
+    }
+
+    override fun passages(chatId: String): List<RecallPassage> = read {
         store.readableDatabase.rawQuery(
             "SELECT row_id, message_id, passage_order, text_start, text_end, exchange_id, speaker, speaker_title, " +
                 "time_millis, chat_position, text_fingerprint, vector_model, vector_dimensions, scope_known, " +
@@ -47,14 +55,17 @@ class StoreRecallIndex(private val store: ConversationIndexStore) : RecallIndex 
                 }
             }
         }
+    }
 
     override fun rowsWithTerm(chatId: String, term: String): Set<Long> {
         if (term.isBlank()) return emptySet()
-        return store.readableDatabase.rawQuery(
-            "SELECT p.row_id FROM passage_keywords JOIN passages p ON p.row_id = passage_keywords.rowid " +
-                "WHERE passage_keywords MATCH ? AND p.chat_id = ?",
-            arrayOf("\"" + term.replace("\"", "\"\"") + "\"", chatId)
-        ).use { c -> buildSet { while (c.moveToNext()) add(c.getLong(0)) } }
+        return read {
+            store.readableDatabase.rawQuery(
+                "SELECT p.row_id FROM passage_keywords JOIN passages p ON p.row_id = passage_keywords.rowid " +
+                    "WHERE passage_keywords MATCH ? AND p.chat_id = ?",
+                arrayOf("\"" + term.replace("\"", "\"\"") + "\"", chatId)
+            ).use { c -> buildSet { while (c.moveToNext()) add(c.getLong(0)) } }
+        }
     }
 
     override fun vectors(
@@ -63,7 +74,7 @@ class StoreRecallIndex(private val store: ConversationIndexStore) : RecallIndex 
         vectorDimensions: Int,
         afterRowId: Long,
         limit: Int
-    ): List<RecallIndex.RowVector> =
+    ): List<RecallIndex.RowVector> = read {
         store.readableDatabase.rawQuery(
             "SELECT p.row_id, v.vector FROM passages p JOIN passage_vectors v " +
                 "ON v.search_fingerprint = p.search_fingerprint AND v.vector_model = p.vector_model " +
@@ -76,4 +87,5 @@ class StoreRecallIndex(private val store: ConversationIndexStore) : RecallIndex 
                 while (c.moveToNext()) add(RecallIndex.RowVector(c.getLong(0), VectorMath.fromBlob(c.getBlob(1))))
             }
         }
+    }
 }

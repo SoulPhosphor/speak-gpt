@@ -14,6 +14,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.teslasoft.assistant.conversation.index.ConversationIndexAccess
 import org.teslasoft.assistant.conversation.index.ConversationIndexStore
 import org.teslasoft.assistant.conversation.index.ConversationIndexUpdater
 import org.teslasoft.assistant.conversation.index.EmbeddingPauseState
@@ -55,8 +56,8 @@ class StoreRecallIndexInstrumentedTest {
     }
 
     private val source = object : RecallMessageSource {
-        override fun messages(chatId: String) = chats[chatId]?.toList()
-        override fun currentMessage(chatId: String, messageId: String) = chats[chatId]?.firstOrNull { it.messageId == messageId }
+        override fun read(chatId: String) = chats[chatId]?.let { ChatSnapshot(it.toList(), it.hashCode().toString()) }
+        override fun changedSince(chatId: String, snapshot: ChatSnapshot) = chats[chatId]?.hashCode()?.toString() != snapshot.version
     }
 
     @Before fun open() {
@@ -108,7 +109,7 @@ class StoreRecallIndexInstrumentedTest {
 
         // Waiting vectors: keywords alone can find it, meaning cannot.
         val waiting = engine().search(request("cedar"), RecallBudget.unlimited()) as RecallResult.Found
-        assertEquals(22, waiting.report.waitingPassages)
+        assertEquals(22, waiting.report.passagesWithoutVector)
 
         makeVectors()
         assertEquals(22, index.vectors("garden", MODEL, DIMS, Long.MIN_VALUE, 100).size)
@@ -176,6 +177,28 @@ class StoreRecallIndexInstrumentedTest {
             is RecallResult.Skipped -> assertEquals(SkipReason.INDEX_UNAVAILABLE, r.reason)
             is RecallResult.Found -> assertTrue(r.exchanges.all { it.exchangeId == "cedar" })
         }
+    }
+
+    @Test fun aRecoveryHoldingTheIndexIsNotWaitedForAndRecallHandsOnNothing() {
+        save("garden", garden())
+        makeVectors()
+        val holding = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val recovery = Thread { ConversationIndexAccess.exclusive { holding.countDown(); release.await() } }
+        recovery.start()
+        try {
+            assertTrue(holding.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            val started = System.nanoTime()
+            val r = engine().search(request("which wood did we pick"), RecallBudget.unlimited())
+            assertEquals(SkipReason.INDEX_UNAVAILABLE, (r as RecallResult.Skipped).reason)
+            assertTrue((System.nanoTime() - started) / 1_000_000 < 2_000)
+        } finally {
+            release.countDown()
+            recovery.join()
+        }
+        // After the recovery the same search reads the index again.
+        val after = engine().search(request("which wood did we pick"), RecallBudget.unlimited()) as RecallResult.Found
+        assertEquals(listOf("cedar"), after.exchanges.map { it.exchangeId })
     }
 
     @Test fun aRestoreMarkingEveryChatForRefreshDuringTheSearchChangesNothingThatIsStillTrue() {

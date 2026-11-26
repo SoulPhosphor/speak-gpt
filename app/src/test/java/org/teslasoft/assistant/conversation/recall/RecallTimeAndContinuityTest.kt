@@ -44,6 +44,12 @@ class RecallTimeAndContinuityTest {
         assertEquals("2026-05-21T23:59:59.999Z", Instant.ofEpochMilli(range("today", now)!!.toMillis).toString())
     }
 
+    @Test fun theFirstPhraseInTheMessageIsTheOneRead() {
+        val now = "2026-05-21T18:00:00Z"
+        assertEquals("2026-03-01" to "2026-03-31", days(range("What did we decide in March about the roof? I'm calling the roofer today.", now)))
+        assertEquals("2026-05-21" to "2026-05-21", days(range("Today I want to know what we decided in March.", now)))
+    }
+
     @Test fun unclearOrMissingPhrasesGiveNothing() {
         val now = "2026-05-21T18:00:00Z"
         assertNull(range("What did we decide about the beds?", now))

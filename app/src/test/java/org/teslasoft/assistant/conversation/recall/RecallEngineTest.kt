@@ -52,9 +52,8 @@ class RecallEngineTest {
         val indexedText = HashMap<String, String>()
         var otherModel = HashSet<String>()
         var readable = true
-        /** Runs when the engine first asks the chat for one message (just before handing results on). */
+        /** Runs when the engine asks whether the chat changed (just before handing results on). */
         var onRecheck: (() -> Unit)? = null
-        var current: (String) -> IndexSourceMessage? = { id -> messages.firstOrNull { it.messageId == id } }
 
         fun user(id: String, text: String, time: Long? = null, hidden: Boolean = false) =
             add(IndexSourceMessage(id, false, text, hidden, null, time, null))
@@ -87,11 +86,14 @@ class RecallEngineTest {
                     .take(limit).map { (p, _) -> RecallIndex.RowVector(p.rowId, VectorMath.normalize(vectors.getValue(p.messageId)!!)) }
         }
 
+        /** Changes whenever any message changes, as the chat's stored version does. */
+        private fun version() = messages.hashCode().toString()
+
         val source = object : RecallMessageSource {
-            override fun messages(chatId: String) = if (readable) ArrayList(messages) else null
-            override fun currentMessage(chatId: String, messageId: String): IndexSourceMessage? {
+            override fun read(chatId: String) = if (readable) ChatSnapshot(ArrayList(messages), version()) else null
+            override fun changedSince(chatId: String, snapshot: ChatSnapshot): Boolean {
                 onRecheck?.let { onRecheck = null; it() }
-                return current(messageId)
+                return !readable || version() != snapshot.version
             }
         }
     }
@@ -175,7 +177,7 @@ class RecallEngineTest {
         val chat = filler(Chat()).user("w", "we chose cedar").vector("w", null)
         val r = search(chat, request("why that wood")) as RecallResult.Found
         assertTrue(r.exchanges.isEmpty())
-        assertEquals(1, r.report.waitingPassages)
+        assertEquals(1, r.report.passagesWithoutVector)
     }
 
     @Test fun anotherModelsVectorsAreNeverCompared() {
@@ -434,5 +436,73 @@ class RecallEngineTest {
         // but the 0.45 passage does not pass as it would under the small-chat rule.
         assertEquals(27, r.report.passagesWithVectors)
         assertTrue(r.report.excluded.any { it.exchangeId == "y" && it.reason == ExclusionReason.IDENTITY_FILTER })
+    }
+
+    // ---- Review findings (2026-11-26) ----
+
+    @Test fun everyWordTheChatHoldsWeighsInALongMessageSoAFewSharedRareWordsAreNotEnough() {
+        val chat = Chat()
+        val common = (1..100).map { "common$it" }
+        for (i in 0 until 30) chat.user("u$i", common.filterIndexed { j, _ -> (j + i) % 6 != 0 }.joinToString(" ")).vector("u$i", null)
+        chat.user("t", "alpha bravo charlie delta").vector("t", null)
+        val message = "alpha bravo charlie delta " + common.joinToString(" ")
+        val r = search(chat, request(message, vector = null)) as RecallResult.Found
+        assertFalse(r.exchanges.any { it.exchangeId == "t" })
+    }
+
+    @Test fun aRepeatedPermanentIdIsCheckedAgainstTheCopyThatWasSearched() {
+        // The same permanent ID stored twice: the index keeps the first eligible copy, as the recheck must.
+        val chat = filler(Chat()).user("dup", "we chose cedar").vector("dup", at(0.9)).ai("dupa", "cedar it is").vector("dupa", at(0.2))
+            .user("other", "something else").vector("other", at(0.1)).ai("dup", "a later copy with other words")
+        // Another save lands during the search, so the chat is read again before handing on.
+        chat.onRecheck = { chat.ai("late", "an unrelated reply saved meanwhile") }
+        val r = search(chat, request("which wood")) as RecallResult.Found
+        assertEquals(listOf("dup"), r.exchanges.map { it.exchangeId })
+    }
+
+    @Test fun anIdenticalEarlierExchangeIsKeptWhenTheLaterCopyFailsItsFinalCheck() {
+        val chat = filler(Chat())
+            .user("r1", "Remind me to measure the window.").vector("r1", at(0.9)).ai("r1a", "Noted.").vector("r1a", at(0.1))
+            .user("r2", "Remind me to measure the window.").vector("r2", at(0.9)).ai("r2a", "Noted.").vector("r2a", at(0.1))
+        chat.onRecheck = {
+            val i = chat.messages.indexOfFirst { it.messageId == "r2a" }
+            chat.messages[i] = chat.messages[i].copy(modelText = "Measured: 90 centimetres.")
+        }
+        val r = search(chat, request("window")) as RecallResult.Found
+        assertEquals(listOf("r1"), r.exchanges.map { it.exchangeId })
+    }
+
+    @Test fun theLastExchangesTheAiReadsAreCountedWithoutTheCurrentMessageOrExchangesItCannotRead() {
+        val chat = filler(Chat(), 6).user("old", "cedar beds").vector("old", at(0.9))
+            .user("e1", "cedar again").vector("e1", at(0.9))
+            .user("e2", "cedar once more").vector("e2", at(0.9))
+            .user("e3", "cedar still").vector("e3", at(0.9))
+            .user("gone", "cedar hidden", hidden = true)
+            .user("now", "why cedar").vector("now", at(0.9))
+        val r = search(chat, request("why cedar", current = "now", sent = SentInFull.LastExchanges(3)))
+        assertEquals(listOf("old"), ids(r))
+    }
+
+    @Test fun aReaderThatFailsLeavesKeywordsAndASourceThatFailsSkipsRecallButNeitherFailsTheSend() {
+        val chat = filler(Chat()).user("c", "Cherokee Purple tomatoes").vector("c", at(0.9))
+        val failing = QueryVectorReader { _, _ -> throw IllegalStateException("model released") }
+        val r = search(chat, request("Cherokee Purple tomatoes", vector = null), reader = failing) as RecallResult.Found
+        assertEquals(listOf("c"), r.exchanges.map { it.exchangeId })
+        val broken = object : RecallMessageSource by chat.source {
+            override fun read(chatId: String): ChatSnapshot? = throw IllegalStateException("locked")
+        }
+        val s = RecallEngine(chat.index, broken, null).search(request("cedar"), RecallBudget.unlimited())
+        assertEquals(SkipReason.CHAT_UNAVAILABLE, (s as RecallResult.Skipped).reason)
+    }
+
+    @Test fun aLongMessageLooksUpABoundedNumberOfWords() {
+        val chat = filler(Chat())
+        var lookups = 0
+        val counting = object : RecallIndex by chat.index {
+            override fun rowsWithTerm(chatId: String, term: String): Set<Long> { lookups++; return chat.index.rowsWithTerm(chatId, term) }
+        }
+        val message = (1..600).joinToString(" ") { "distinctword$it" }
+        RecallEngine(counting, chat.source, null).search(request(message, vector = null), RecallBudget.unlimited())
+        assertTrue("looked up $lookups words", lookups <= RecallTuning().maxTermLookups)
     }
 }

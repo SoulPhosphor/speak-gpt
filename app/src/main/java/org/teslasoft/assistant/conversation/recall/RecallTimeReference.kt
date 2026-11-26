@@ -67,48 +67,39 @@ object RecallTimeReference {
             return Range(start, end, phrase)
         }
 
-        ISO.find(text)?.let { m ->
-            val date = dateOrNull(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())
-            if (date != null) return days(date, date, m.value)
+        // Every clear phrase with where it starts; the earliest in the message is read.
+        val found = ArrayList<Pair<Int, Range>>()
+        fun add(at: Int, range: Range?) { if (range != null) found.add(at to range) }
+        ISO.findAll(text).forEach { m ->
+            dateOrNull(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())?.let { add(m.range.first, days(it, it, m.value)) }
         }
-        MONTH_DAY.find(text)?.let { m ->
-            val month = MONTHS[m.groupValues[1]] ?: return@let
-            val date = writtenDate(month, m.groupValues[2].toInt(), m.groupValues[3].toIntOrNull(), today)
-            if (date != null) return days(date, date, m.value)
+        MONTH_DAY.findAll(text).forEach { m ->
+            val month = MONTHS[m.groupValues[1]] ?: return@forEach
+            writtenDate(month, m.groupValues[2].toInt(), m.groupValues[3].toIntOrNull(), today)?.let { add(m.range.first, days(it, it, m.value)) }
         }
-        DAY_MONTH.find(text)?.let { m ->
-            val month = MONTHS[m.groupValues[2]] ?: return@let
-            val date = writtenDate(month, m.groupValues[1].toInt(), m.groupValues[3].toIntOrNull(), today)
-            if (date != null) return days(date, date, m.value)
+        DAY_MONTH.findAll(text).forEach { m ->
+            val month = MONTHS[m.groupValues[2]] ?: return@forEach
+            writtenDate(month, m.groupValues[1].toInt(), m.groupValues[3].toIntOrNull(), today)?.let { add(m.range.first, days(it, it, m.value)) }
         }
-        DAYS_AGO.find(text)?.let { m ->
-            val n = m.groupValues[1].toIntOrNull() ?: NUMBER_WORDS[m.groupValues[1]] ?: return@let
-            if (n in 1..31) {
-                val day = today.minusDays(n.toLong())
-                return days(day, day, m.value)
-            }
+        DAYS_AGO.findAll(text).forEach { m ->
+            val n = m.groupValues[1].toIntOrNull() ?: NUMBER_WORDS[m.groupValues[1]] ?: return@forEach
+            if (n in 1..31) today.minusDays(n.toLong()).let { add(m.range.first, days(it, it, m.value)) }
         }
-        if (YESTERDAY.containsMatchIn(text)) {
-            val day = today.minusDays(1)
-            return days(day, day, "yesterday")
-        }
-        if (TODAY.containsMatchIn(text)) return days(today, today, "today")
-        LAST_WEEK.find(text)?.let {
+        YESTERDAY.find(text)?.let { m -> today.minusDays(1).let { add(m.range.first, days(it, it, "yesterday")) } }
+        TODAY.find(text)?.let { m -> add(m.range.first, days(today, today, "today")) }
+        LAST_WEEK.find(text)?.let { m ->
             val monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(1)
-            return days(monday, monday.plusDays(6), it.value)
+            add(m.range.first, days(monday, monday.plusDays(6), m.value))
         }
-        THIS_WEEK.find(text)?.let {
-            return days(today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)), today, it.value)
-        }
-        LAST_MONTH.find(text)?.let {
+        THIS_WEEK.find(text)?.let { m -> add(m.range.first, days(today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)), today, m.value)) }
+        LAST_MONTH.find(text)?.let { m ->
             val first = today.withDayOfMonth(1).minusMonths(1)
-            return days(first, first.with(TemporalAdjusters.lastDayOfMonth()), it.value)
+            add(m.range.first, days(first, first.with(TemporalAdjusters.lastDayOfMonth()), m.value))
         }
-        THIS_MONTH.find(text)?.let { return days(today.withDayOfMonth(1), today, it.value) }
+        THIS_MONTH.find(text)?.let { m -> add(m.range.first, days(today.withDayOfMonth(1), today, m.value)) }
         WEEKDAY.find(text)?.let { m ->
             val day = DAYS[m.groupValues[2]] ?: return@let
-            val date = today.with(TemporalAdjusters.previous(day))
-            return days(date, date, m.value)
+            today.with(TemporalAdjusters.previous(day)).let { add(m.range.first, days(it, it, m.value)) }
         }
         IN_MONTH.find(text)?.let { m ->
             val month = MONTHS[m.groupValues[2]] ?: return@let
@@ -116,9 +107,10 @@ object RecallTimeReference {
                 ?: if (month.value <= today.monthValue) today.year else today.year - 1
             val first = LocalDate.of(year, month, 1)
             val last = first.with(TemporalAdjusters.lastDayOfMonth())
-            return days(first, if (last.isAfter(today) && first.isBefore(today.plusDays(1))) today else last, m.value)
+            add(m.range.first, days(first, if (last.isAfter(today) && first.isBefore(today.plusDays(1))) today else last, m.value))
         }
-        return null
+        // At one position the longer phrase wins ("last week" over "last").
+        return found.minWithOrNull(compareBy<Pair<Int, Range>> { it.first }.thenByDescending { it.second.phrase.length })?.second
     }
 
     /** A written day of a month: in [year] when given, otherwise the most recent such day up to today. */

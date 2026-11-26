@@ -33,6 +33,7 @@ MAX_RECOVERIES="${MAX_RECOVERIES:-2}"
 MAX_EMULATOR_RESTARTS="${MAX_EMULATOR_RESTARTS:-1}"
 BOOT_WAIT_SECONDS="${BOOT_WAIT_SECONDS:-450}"
 STEP2_CLASS="Step2RecallInstrumentedTest"
+RECALL_EVAL_CLASS="RecallEvaluationInstrumentedTest"
 
 DIAG_DIR="$RESULTS_DIR/diagnostics"
 SUMMARY_TSV="$RESULTS_DIR/suite-summary.tsv"
@@ -307,6 +308,14 @@ run_class_attempt() {
       return
     fi
   fi
+  # The recall evaluation reads the same model fixture; after an emulator
+  # restart it is gone, which is a setup failure, not a test failure.
+  if [ "$result_name" = "$RECALL_EVAL_CLASS" ] && [ "$step2_model_present" -ne 1 ]; then
+    event "$result_name: the embedding model is not on the device (emulator was restarted)"
+    printf '%s\t%s\tsetup-failure\t0\t-\t%s\n' "$class_name" "$attempt" "model missing after emulator restart" >> "$SUMMARY_TSV"
+    OUTCOME="setup-failure"
+    return
+  fi
   if [ "$result_name" = "$STEP2_CLASS" ]; then
     if [ "$step2_model_present" -ne 1 ]; then
       event "$result_name: the embedding model is not on the device (emulator was restarted)"
@@ -333,7 +342,7 @@ run_class_attempt() {
   adb_t 120 logcat -d -v threadtime > "$RESULTS_DIR/$result_name$suffix-logcat.txt" 2>&1 \
     || event "$result_name: could not save its logcat"
   if [ "$result_name" = "$STEP2_CLASS" ]; then pull_step2_evidence; fi
-  if [ "$result_name" = "RecallEvaluationInstrumentedTest" ]; then pull_recall_report; fi
+  if [ "$result_name" = "$RECALL_EVAL_CLASS" ]; then pull_recall_report; fi
 
   # classify runs in this shell (not a subshell) so COMPLETION_NOTE survives.
   local outcome

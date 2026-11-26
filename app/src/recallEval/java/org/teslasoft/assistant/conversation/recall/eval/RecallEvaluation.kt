@@ -171,7 +171,7 @@ class RecallEvaluation(
                 }
                 alreadySent = expect.filter { exp -> result.report.excluded.any { it.exchangeId == exp && it.reason == ExclusionReason.SENT_IN_FULL } }
                 extra.put("follow_up", result.report.followUp.name)
-                extra.put("waiting_passages", result.report.waitingPassages)
+                extra.put("passages_without_vector", result.report.passagesWithoutVector)
                 // Why each expected exchange was missed, when the report can tell.
                 val why = JSONObject()
                 for (exp in expect.filter { it !in returned }) {

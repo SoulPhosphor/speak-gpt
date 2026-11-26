@@ -140,8 +140,12 @@ data class CarriedCheck(val exchangeId: String, val termShare: Double?, val carr
 data class RecallReport(
     val eligiblePassages: Int,
     val passagesWithVectors: Int,
-    /** Eligible passages still waiting for their vector: not found by meaning (G30). */
-    val waitingPassages: Int,
+    /**
+     * Eligible passages with no made vector of the current model: waiting for
+     * it (G30), failed, or every passage when no model is usable. None of them
+     * can be found by meaning.
+     */
+    val passagesWithoutVector: Int,
     /** Indexed passages whose message changed, was hidden or deleted since indexing. */
     val outdatedPassages: Int,
     val queriesRun: List<Pair<QueryKind, Int>>,

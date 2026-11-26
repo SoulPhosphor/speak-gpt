@@ -135,8 +135,8 @@ class RecallEvaluationDesktopTest {
         }
 
         override val messages = object : RecallMessageSource {
-            override fun messages(chatId: String) = chats[chatId]
-            override fun currentMessage(chatId: String, messageId: String) = chats[chatId]?.firstOrNull { it.messageId == messageId }
+            override fun read(chatId: String) = chats[chatId]?.let { ChatSnapshot(it, "1") }
+            override fun changedSince(chatId: String, snapshot: ChatSnapshot) = false
         }
 
         override fun queryVector(text: String): Pair<FloatArray?, Long> =

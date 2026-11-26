@@ -16,13 +16,16 @@ import org.teslasoft.assistant.preferences.memory.librarian.LiveRetrieval
 import org.teslasoft.assistant.preferences.memory.librarian.LongMessageSearch
 import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
 
+/** One read of a chat: every stored message in stored order, and the version it was read at. */
+class ChatSnapshot(val messages: List<IndexSourceMessage>, val version: String)
+
 /** The chat as stored now, read through the app's chat-reading layer (never written). */
 interface RecallMessageSource {
-    /** Every stored message of the chat in stored order, or null when it cannot be read now. */
-    fun messages(chatId: String): List<IndexSourceMessage>?
+    /** The chat as stored now, or null when it cannot be read now. */
+    fun read(chatId: String): ChatSnapshot?
 
-    /** One message as stored at this moment, or null when it is gone. */
-    fun currentMessage(chatId: String, messageId: String): IndexSourceMessage?
+    /** Whether the chat may have changed since [snapshot] was read; true whenever that cannot be told. */
+    fun changedSince(chatId: String, snapshot: ChatSnapshot): Boolean
 }
 
 /**
@@ -68,13 +71,29 @@ class RecallEngine(
     /** The index could not be read: closed by a recovery or deletion, damaged, or locked. */
     private class IndexUnavailable : RuntimeException()
 
-    /** A read of the index; any failure means recall hands on nothing for this message. */
+    /** The chat could not be read: a save in progress, locked or damaged storage. */
+    private class ChatUnavailable : RuntimeException()
+
+    /** A read of the index; any failure means recall hands on nothing for this message. Cancellation is never swallowed. */
     private inline fun <T> fromIndex(read: () -> T): T = try {
         read()
     } catch (e: OutOfTime) {
         throw e
+    } catch (e: java.util.concurrent.CancellationException) {
+        throw e
     } catch (_: Exception) {
         throw IndexUnavailable()
+    }
+
+    /** A read of the chat; any failure means recall hands on nothing for this message. */
+    private inline fun <T> fromChat(read: () -> T): T = try {
+        read()
+    } catch (e: OutOfTime) {
+        throw e
+    } catch (e: java.util.concurrent.CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        throw ChatUnavailable()
     }
 
     fun search(request: RecallRequest, budget: RecallBudget): RecallResult {
@@ -85,6 +104,8 @@ class RecallEngine(
             RecallResult.Skipped(SkipReason.OUT_OF_TIME, null)
         } catch (_: IndexUnavailable) {
             RecallResult.Skipped(SkipReason.INDEX_UNAVAILABLE, null)
+        } catch (_: ChatUnavailable) {
+            RecallResult.Skipped(SkipReason.CHAT_UNAVAILABLE, null)
         }
     }
 
@@ -94,7 +115,11 @@ class RecallEngine(
 
     private fun run(request: RecallRequest, budget: RecallBudget, started: Long): RecallResult {
         val chatId = request.chatId
-        val stored = messages.messages(chatId) ?: return RecallResult.Skipped(SkipReason.CHAT_UNAVAILABLE, null)
+        val read = fromChat { messages.read(chatId) } ?: return RecallResult.Skipped(SkipReason.CHAT_UNAVAILABLE, null)
+        snapshot = read
+        currentChecked = false
+        currentFingerprints = null
+        val stored = read.messages
         check(budget)
 
         // The chat as stored now: exchanges, as the index defines them (a user
@@ -143,7 +168,14 @@ class RecallEngine(
             if (!modelReady) return null
             if (given != null) return given
             val r = reader ?: return null
-            val v = r.read(text, budget.remainingMillis())
+            // A read that fails leaves that search to keywords; it never fails the send.
+            val v = try {
+                r.read(text, budget.remainingMillis())
+            } catch (e: java.util.concurrent.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
             check(budget)
             return v
         }
@@ -151,9 +183,25 @@ class RecallEngine(
         searches.add(Search(QueryKind.WHOLE, 0, request.message, vectorFor(request.message, request.messageVector)))
         if (!modelReady) skipped.add(QueryKind.WHOLE to "no embedding model: keywords only")
 
-        // Keyword rarity in this chat: how many usable passages hold a term.
+        // Keyword rarity in this chat: how many usable passages hold a term. A
+        // long message has many words, so at most maxTermLookups are looked up:
+        // the helper's query first, then the message's words shared out evenly
+        // across its pieces, longest first within each piece, so every part of
+        // the message is searched. A message of up to one piece has all its
+        // words looked up. A word not looked up counts as one the chat does not
+        // hold, which can only make a keyword match harder.
+        val pieces = LongMessageSearch.cut(request.message, tuning.pieceWords)
+        val lookable: Set<String> = run {
+            val order = LinkedHashSet<String>()
+            if (request.mode == RecallMode.API_AI) request.helperQuery?.let { order.addAll(LiveRetrieval.queryTerms(it)) }
+            val parts = (if (pieces.size > 1) pieces.map { it.text } else listOf(request.message))
+                .map { part -> LiveRetrieval.queryTerms(part).sortedByDescending { it.length }.toMutableList() }
+            while (parts.any { it.isNotEmpty() }) for (part in parts) if (part.isNotEmpty()) order.add(part.removeAt(0))
+            order.take(tuning.maxTermLookups).toSet()
+        }
         val termRows = HashMap<String, Set<Long>>()
         fun rowsOf(term: String): Set<Long> = termRows.getOrPut(term) {
+            if (term !in lookable) return@getOrPut emptySet()
             check(budget)
             fromIndex { index.rowsWithTerm(chatId, term) }.filterTo(HashSet()) { it in byRow }
         }
@@ -162,7 +210,6 @@ class RecallEngine(
             return ln(1.0 + (passageCount - df + 0.5) / (df + 0.5))
         }
 
-        val pieces = LongMessageSearch.cut(request.message, tuning.pieceWords)
         if (pieces.size > 1) {
             if (!budget.mayStartOptional()) skipped.add(QueryKind.PIECE to "no time")
             else {
@@ -196,7 +243,7 @@ class RecallEngine(
             val terms = LiveRetrieval.queryTerms(s.text).toList()
             val (present, absent) = terms.partition { rowsOf(it).isNotEmpty() }
             s.terms = present.sortedWith(compareBy({ rowsOf(it).size }, { terms.indexOf(it) })).take(tuning.maxQueryTerms)
-            s.termWeight = s.terms.sumOf { idf(it) } + absent.size * ln(1.0 + (passageCount + 0.5) / 0.5)
+            s.termWeight = present.sumOf { idf(it) } + absent.size * ln(1.0 + (passageCount + 0.5) / 0.5)
         }
 
         // Meaning: every usable passage vector of this model, a batch at a
@@ -290,32 +337,35 @@ class RecallEngine(
         // about to be handed on, best first, until enough are kept.
         val excluded = ArrayList<Exclusion>()
         filteredOut.forEach { excluded.add(Exclusion(it, ExclusionReason.IDENTITY_FILTER)) }
-        val inFull = inFullExchanges(request.sentInFull, all)
+        val inFull = inFullExchanges(request.sentInFull, all, request.currentMessageId)
         val accepted = ArrayList<Pair<Candidate, String>>()
         for (c in exchanges) {
             val reason = quickExclusion(c.key, request, members, inFull)
             if (reason != null) excluded.add(Exclusion(c.key, reason))
             else accepted.add(c to repeatKey(members.getValue(c.key)))
         }
-        // Stage 8: identical exchanges (text and speaker order) count once; the later one is kept.
-        val latestByText = HashMap<String, Int>()
-        for ((c, text) in accepted) {
-            val pos = members.getValue(c.key).first().position
-            if (pos > (latestByText[text] ?: -1)) latestByText[text] = pos
-        }
+        // Stage 8: identical exchanges (text and speaker order) count once, at
+        // the rank of the best of them: the latest copy that is still stored as
+        // it was is kept, and the others are repeats. A copy that changed during
+        // the search gives way to the next latest one.
+        val byText = accepted.groupBy({ it.second }, { it.first })
+        val settled = HashSet<String>()
         val offered = ArrayList<RecalledExchange>()
         for ((c, text) in accepted) {
-            if (members.getValue(c.key).first().position != latestByText[text]) {
-                excluded.add(Exclusion(c.key, ExclusionReason.REPEAT))
-                continue
-            }
+            if (!settled.add(text)) continue
             if (offered.size >= tuning.maxExchanges) continue
-            check(budget)
-            if (!stillStored(c.key, request.chatId, members)) {
-                excluded.add(Exclusion(c.key, ExclusionReason.NO_LONGER_ELIGIBLE))
-                continue
+            val copies = byText.getValue(text).sortedByDescending { members.getValue(it.key).first().position }
+            var kept: Candidate? = null
+            for (copy in copies) {
+                if (kept != null) {
+                    excluded.add(Exclusion(copy.key, ExclusionReason.REPEAT))
+                    continue
+                }
+                check(budget)
+                if (stillStored(copy.key, request.chatId, members)) kept = copy
+                else excluded.add(Exclusion(copy.key, ExclusionReason.NO_LONGER_ELIGIBLE))
             }
-            offered.add(toExchange(c, members.getValue(c.key)))
+            kept?.let { offered.add(toExchange(it, members.getValue(it.key))) }
         }
 
         // Code-based continuity (G36): a carried exchange is offered again
@@ -354,7 +404,7 @@ class RecallEngine(
         val report = RecallReport(
             eligiblePassages = passageCount,
             passagesWithVectors = withVector,
-            waitingPassages = (passageCount - withVector).coerceAtLeast(0),
+            passagesWithoutVector = (passageCount - withVector).coerceAtLeast(0),
             outdatedPassages = outdated,
             queriesRun = searches.map { it.kind to it.pieceNumber },
             queriesSkipped = skipped,
@@ -436,9 +486,15 @@ class RecallEngine(
     }
 
     /** Exchange keys the AI is already reading in full (stage 7). */
-    private fun inFullExchanges(sent: SentInFull, all: List<Stored>): Set<String> = when (sent) {
+    private fun inFullExchanges(sent: SentInFull, all: List<Stored>, currentMessageId: String?): Set<String> = when (sent) {
         is SentInFull.Messages -> all.filter { it.message.messageId in sent.messageIds }.mapNotNull { it.exchangeKey }.toSet()
-        is SentInFull.LastExchanges -> all.mapNotNull { it.exchangeKey }.distinct().takeLast(sent.count).toSet()
+        // The AI reads the exchanges it is sent: those with an eligible message,
+        // not counting the exchange of the message being sent.
+        is SentInFull.LastExchanges -> {
+            val current = all.firstOrNull { currentMessageId != null && it.message.messageId == currentMessageId }?.exchangeKey
+            all.filter { it.eligible && it.exchangeKey != null && it.exchangeKey != current }
+                .mapNotNull { it.exchangeKey }.distinct().takeLast(sent.count).toSet()
+        }
     }
 
     /**
@@ -466,11 +522,33 @@ class RecallEngine(
      * exchange that was eligible is still there, still eligible, with the same
      * text. A message edited, hidden or deleted during the search fails it.
      */
-    private fun stillStored(key: String, chatId: String, members: Map<String, List<Stored>>): Boolean =
-        members[key].orEmpty().filter { it.eligible }.all { s ->
-            val now = messages.currentMessage(chatId, s.message.messageId)
-            now != null && IndexEligibility.isEligible(now) && IndexFingerprint.of(now.modelText) == s.fingerprint
+    private fun stillStored(key: String, chatId: String, members: Map<String, List<Stored>>): Boolean {
+        val now = current(chatId) ?: return false
+        return members[key].orEmpty().filter { it.eligible }.all { s -> now[s.message.messageId] == s.fingerprint }
+    }
+
+    private var snapshot: ChatSnapshot? = null
+    private var currentChecked = false
+    private var currentFingerprints: Map<String, String>? = null
+
+    /**
+     * Each eligible message's fingerprint in the chat as stored at this moment
+     * (a repeated ID counts by its first eligible copy, as the index does), or
+     * null when the chat cannot be read now. Unchanged since the search began,
+     * the first read answers; changed, the chat is read once more.
+     */
+    private fun current(chatId: String): Map<String, String>? {
+        if (currentChecked) return currentFingerprints
+        currentChecked = true
+        val first = snapshot ?: return null
+        val chat = if (!fromChat { messages.changedSince(chatId, first) }) first else fromChat { messages.read(chatId) }
+        currentFingerprints = chat?.messages?.let { list ->
+            val map = LinkedHashMap<String, String>()
+            for (m in list) if (IndexEligibility.isEligible(m) && m.messageId !in map) map[m.messageId] = IndexFingerprint.of(m.modelText)
+            map
         }
+        return currentFingerprints
+    }
 
     /** Text and speaker order after whitespace normalisation; wording, numbers and names unchanged (stage 8). */
     private fun repeatKey(list: List<Stored>): String =

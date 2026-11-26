@@ -138,7 +138,7 @@ class RecallEvaluationInstrumentedTest {
             }
         }
         // Every passage got its vector, so nothing was scored while still waiting.
-        assertTrue(questions.all { (it.extra.optInt("waiting_passages", 0)) == 0 })
+        assertTrue(questions.all { it.extra.optInt("passages_without_vector", 0) == 0 })
     }
 
     private inner class DeviceBackend(
@@ -168,8 +168,8 @@ class RecallEvaluationInstrumentedTest {
         override val recallIndex = StoreRecallIndex(store)
 
         override val messages = object : RecallMessageSource {
-            override fun messages(chatId: String) = chats[chatId]
-            override fun currentMessage(chatId: String, messageId: String) = chats[chatId]?.firstOrNull { it.messageId == messageId }
+            override fun read(chatId: String) = chats[chatId]?.let { ChatSnapshot(it, "1") }
+            override fun changedSince(chatId: String, snapshot: ChatSnapshot) = false
         }
 
         override fun queryVector(text: String): Pair<FloatArray?, Long> {
