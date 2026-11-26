@@ -527,4 +527,11 @@ class RecallEngineTest {
         assertEquals("own", r.exchanges.first().exchangeId)
         assertEquals(RecallOrigin.OWN, r.exchanges.first().origin)
     }
+
+    @Test fun theHelpersWordsNeverUseUpTheLookupsTheMessagesOwnWordsNeed() {
+        val chat = filler(Chat()).user("c", "Cherokee Purple tomatoes").vector("c", null)
+        val helper = (1..120).joinToString(" ") { "helperword$it" }
+        val withHelper = search(chat, request("Cherokee", RecallMode.API_AI, vector = null, helper = helper, helperVector = null)) as RecallResult.Found
+        assertEquals(listOf("c"), withHelper.exchanges.map { it.exchangeId })
+    }
 }

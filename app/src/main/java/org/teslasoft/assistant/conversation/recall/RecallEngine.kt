@@ -182,20 +182,25 @@ class RecallEngine(
         if (!modelReady) skipped.add(QueryKind.WHOLE to "no embedding model: keywords only")
 
         // Keyword rarity in this chat: how many usable passages hold a term. A
-        // long message has many words, so at most maxTermLookups are looked up:
-        // the helper's query first, then the message's words shared out evenly
-        // across its pieces, longest first within each piece, so every part of
-        // the message is searched. A message of up to one piece has all its
+        // long message has many words, so at most maxTermLookups of the
+        // message's words are looked up, shared out evenly across its pieces,
+        // longest first within each piece, so every part of the message is
+        // searched; the helper's query adds up to maxQueryTerms of its own. A message of up to one piece has all its
         // words looked up. A word not looked up counts as one the chat does not
         // hold, which can only make a keyword match harder.
         val pieces = LongMessageSearch.cut(request.message, tuning.pieceWords)
         val lookable: Set<String> = run {
             val order = LinkedHashSet<String>()
-            if (request.mode == RecallMode.API_AI) request.helperQuery?.let { order.addAll(LiveRetrieval.queryTerms(it)) }
             val parts = (if (pieces.size > 1) pieces.map { it.text } else listOf(request.message))
                 .map { part -> LiveRetrieval.queryTerms(part).sortedByDescending { it.length }.toMutableList() }
             while (parts.any { it.isNotEmpty() }) for (part in parts) if (part.isNotEmpty()) order.add(part.removeAt(0))
-            order.take(tuning.maxTermLookups).toSet()
+            val own = order.take(tuning.maxTermLookups).toSet()
+            // The helper's lower-priority query gets lookups of its own on top,
+            // never the message's.
+            val helper = if (request.mode == RecallMode.API_AI) request.helperQuery?.let { q ->
+                LiveRetrieval.queryTerms(q).filterNot { it in own }.sortedByDescending { it.length }.take(tuning.maxQueryTerms)
+            }.orEmpty() else emptyList()
+            own + helper
         }
         val termRows = HashMap<String, Set<Long>>()
         fun rowsOf(term: String): Set<Long> = termRows.getOrPut(term) {
