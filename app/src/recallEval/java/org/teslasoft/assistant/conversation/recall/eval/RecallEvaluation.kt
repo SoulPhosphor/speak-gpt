@@ -70,6 +70,9 @@ class RecallEvaluation(
 
     private val engine by lazy { RecallEngine(backend.recallIndex, backend.messages, null, tuning) }
 
+    /** The same engine without the hand-on limit, so both rankings are compared over every exchange that passed. */
+    private val uncapped by lazy { RecallEngine(backend.recallIndex, backend.messages, null, tuning.copy(maxExchanges = Int.MAX_VALUE)) }
+
     fun buildIndex() {
         for (chat in fixtures.chats.values.filter { included(it.id) }) {
             backend.index(indexId(RecallFixtures.GENERIC, chat.id), chat.messages, RecallFixtures.GENERIC)
@@ -150,7 +153,8 @@ class RecallEvaluation(
 
     private fun score(
         id: String, group: String, variant: String, expect: List<String>, mustNot: List<String>,
-        result: RecallResult, readMillis: Long, extra: JSONObject = JSONObject()
+        result: RecallResult, readMillis: Long, extra: JSONObject = JSONObject(),
+        uncappedResult: RecallResult? = null
     ): Scored {
         val details = JSONArray()
         val returned = ArrayList<String>()
@@ -184,9 +188,10 @@ class RecallEvaluation(
                     })
                 }
                 extra.put("why_missed", why)
-                // Rank fusion's order of the same exchanges, for the comparison.
-                extra.put("top3_blend", JSONArray(result.exchanges.take(3).map { it.exchangeId }))
-                extra.put("top3_rrf", JSONArray(result.exchanges.sortedByDescending { it.rankFusion }.take(3).map { it.exchangeId }))
+                // The blend's and rank fusion's best 3, both chosen from every exchange that passed.
+                val all = (uncappedResult as? RecallResult.Found)?.exchanges ?: result.exchanges
+                extra.put("top3_blend", JSONArray(all.take(3).map { it.exchangeId }))
+                extra.put("top3_rrf", JSONArray(all.sortedByDescending { it.rankFusion }.take(3).map { it.exchangeId }))
             }
             is RecallResult.Skipped -> Unit
         }
@@ -203,13 +208,14 @@ class RecallEvaluation(
                 val filter = if (variant.filter) fixtures.resolve(q.names).takeIf { it.isNotEmpty() } else null
                 val (req, readMillis) = request(indexId(variant.titles, q.chat), chat, q.message, q.askedAtMillis, filter = filter)
                 val result = engine.search(req, RecallBudget.unlimited())
+                val uncappedResult = uncapped.search(req, RecallBudget.unlimited())
                 val extra = JSONObject().put("situation", q.situation).put("set", q.set)
                     .put("identity_filter", filter?.let { JSONArray(it.map { g -> JSONArray(g.sorted()) }) } ?: JSONObject.NULL)
                 q.early?.let { extra.put("early", it) }
                 q.later?.let { extra.put("later", it) }
                 q.required?.let { extra.put("required", it) }
                 extra.put("expected_in_last_exchanges", JSONArray(q.expect.filter { it in lastExchanges(chat) }))
-                out.add(score(q.id, group(q.set, q.situation), variant.name, q.expect, q.mustNot, result, readMillis, extra))
+                out.add(score(q.id, group(q.set, q.situation), variant.name, q.expect, q.mustNot, result, readMillis, extra, uncappedResult))
             }
         }
         return out

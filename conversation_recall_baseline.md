@@ -350,8 +350,10 @@ passages. This is the measurement that decides whether stage 9 is built.
 ### Ranking: weighted blend and rank fusion
 
 Taking each question's best 3, the blend and rank fusion keep the same
-exchanges (78 correct, 30 wrong in the best 3 over all questions). Rank fusion
-gives no reason to replace the blend.
+exchanges (78 correct, 30 wrong in the best 3 over all questions). Both are
+chosen from every exchange that passed the gate; no question had more than 6,
+so the 10-exchange limit removed nothing from the comparison. Rank fusion gives
+no reason to replace the blend.
 
 ### Time (not phone timings)
 
