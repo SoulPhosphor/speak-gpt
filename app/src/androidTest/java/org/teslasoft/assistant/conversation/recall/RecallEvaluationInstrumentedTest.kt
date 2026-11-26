@@ -44,8 +44,8 @@ import org.teslasoft.assistant.preferences.memory.librarian.OnnxEmbeddingModel
  * the chats in [CHATS] are indexed through the real updater, the real
  * encrypted index and the real EmbeddingGemma model with Android's ONNX
  * Runtime, and each of their questions is scored on its own, under every
- * speaker-title variant and follow-up mode. The emulator reads about one text
- * every two seconds, so every chat (about 730 texts) does not fit in a CI run;
+ * speaker-title variant and follow-up mode. The emulator takes seconds for each
+ * text, so every chat (about 730 texts) does not fit in a CI run;
  * the full evaluation is recorded from the same model files and tokenizer on a
  * desktop (`RecallEvaluationDesktopTest`), and this subset shows whether
  * Android's runtime changes any decision. The report is written to
@@ -129,7 +129,8 @@ class RecallEvaluationInstrumentedTest {
         File(context.getExternalFilesDir(null), "recall-step14-report.json").writeText(report.toString())
 
         // Rules that must hold, whatever the scores: a hidden message, an edited message's old
-        // words and a failed or unfinished reply are never recalled (G.15 correctness).
+        // words and a failed or unfinished reply are never recalled (G.15 correctness; these
+        // chats have none, and StoreRecallIndexInstrumentedTest covers them on the real index).
         assertTrue(questions.isNotEmpty())
         for (row in questions) {
             val q = fixtures.questions.first { it.id == row.id }
@@ -189,11 +190,13 @@ class RecallEvaluationInstrumentedTest {
     }
 
     private companion object {
-        /** Two companion chats, a roleplay chat, a one-subject chat, a chat of long dictated messages and a very
-         *  long exchange from Step 6, and two independent-check chats with recorded identities. */
-        val CHATS = setOf(
-            "chat-companion-rowan", "chat-home-repairs", "chat-book-club", "chat-saltmarrow-roleplay",
-            "chat-holdout-pip", "chat-holdout-ashes"
-        )
+        /**
+         * Three short chats of about 870 words in all: the independent-check bakery
+         * chat (details, unusual wording, changed decisions, a common word, nothing
+         * relevant and its follow-ups) and two roleplay chats with two identities of
+         * the same name. The emulator takes seconds for each text, so larger chats do
+         * not fit in the class's time limit.
+         */
+        val CHATS = setOf("chat-holdout-bakery", "chat-holdout-ashes", "chat-two-finns")
     }
 }
