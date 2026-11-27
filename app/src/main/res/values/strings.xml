@@ -915,7 +915,7 @@
     <string name="system_logs_desc">Records the process lifecycle.</string>
     <!-- Conversation indexing logs (Logging Preferences, Log Cabin; owner-approved, Nov 25 2026). -->
     <string name="indexing_error_details_title">Indexing Error Details</string>
-    <string name="indexing_error_details_desc">Adds technical details, such as the chain of causes and the indexing state at the time, to conversation indexing failures in the Error Log. Failures are always recorded.</string>
+    <string name="indexing_error_details_desc">Adds technical details, such as the chain of causes and the indexing state at the time, to conversation indexing failures in the error log. Failures are always recorded.</string>
     <string name="indexing_activity_title">Indexing Activity</string>
     <string name="indexing_activity_desc">Records when conversation indexing starts, stops, pauses, resumes, and finishes to the Indexing Log.</string>
     <string name="indexing_detailed_title">Detailed Indexing Diagnostics</string>
@@ -1471,8 +1471,6 @@
     <string name="restore_category_lorebooks_desc">Lorebooks, entries, triggers, and their supported relationships.</string>
     <string name="portable_restore_select_category">Select at least one category to restore.</string>
     <string name="portable_restore_nothing_available">This backup does not contain any of the selected categories.</string>
-    <string name="portable_restore_validation_failed">The selected data could not be validated safely.</string>
-    <string name="portable_restore_pending_recovery">A previous restore still needs to be recovered. Close and reopen the app, then try again.</string>
     <string name="portable_restore_too_large">This backup is too large to restore safely.</string>
     <string name="portable_unlock_title">Unlock Recovery Backup</string>
     <string name="portable_unlock_message">Use the Recovery Code, Recovery Key file, or password for this backup.</string>
@@ -1520,12 +1518,18 @@
     <string name="portable_partial_title">Restoration Partly Successful</string>
     <string name="portable_failure_title">Restoration Failed</string>
     <string name="portable_failure_message">Nothing was changed.</string>
-    <!-- Restore start failures and stale decisions (owner-approved, Nov 25 2026). -->
-    <string name="portable_restore_start_refused">Android did not allow the restore to start. Keep this screen open and try again.</string>
-    <string name="portable_restore_start_failed">The restore could not be started because of an unexpected error. Try again. Details are in the Error Log.</string>
-    <string name="portable_restore_state_changed">The restore could not continue because its state changed. Start the restore again.</string>
-    <string name="portable_unavailable_title">Restoration Unavailable</string>
-    <string name="portable_restore_in_progress">Another restore is already in progress.</string>
+    <!-- Restore start failures and outdated dialogs. -->
+    <string name="portable_restore_could_not_continue_title">Restoration Could Not Continue</string>
+    <string name="portable_restore_could_not_start_title">Restoration Could Not Start</string>
+    <string name="portable_restore_no_categories">No categories were selected. Select at least one category and try again.</string>
+    <string name="portable_restore_backup_unavailable">The selected backup is no longer available. Choose the backup again and restart the restoration.</string>
+    <string name="portable_restore_temporary_files_unavailable">The temporary files for this restoration are no longer available. Choose the backup again and restart the restoration.</string>
+    <string name="portable_restore_start_refused">Android blocked the restoration before any backup data was applied. Keep this screen open and try again.</string>
+    <string name="portable_restore_start_failed">An unexpected error stopped the restoration before any backup data was applied. Try again. Details are in the error log.</string>
+    <string name="portable_restore_in_progress_title">Restoration Already in Progress</string>
+    <string name="portable_restore_in_progress">Try again when the current run is complete.</string>
+    <string name="portable_restore_ended_title">Restoration Ended</string>
+    <string name="portable_restore_ended_message">This restoration is no longer running. Start the restoration again.</string>
     <string name="portable_restore_failure_reason">Reason: %1$s.</string>
     <string name="portable_restore_category_failure">%1$s could not be restored. Reason: %2$s</string>
     <string name="portable_restore_cleanup_pending">The selected data was restored, but cleanup could not finish. Choose Okay to finish recovery before starting another restore.</string>
@@ -4038,7 +4042,7 @@
     <string name="summarizer_err_interrupted_summary">The app stopped before the summary finished. Sections that were already finished were kept. The unfinished section was not saved.</string>
     <string name="summarizer_err_interrupted_outline">The app stopped before the chat outline finished. Nothing from the unfinished outline was saved. Create the outline again to finish it.</string>
     <!-- Summarizer Errors detail when the chat could not be read as a summary returned (owner-approved, Nov 25 2026). -->
-    <string name="summarizer_chat_unreadable_detail">The chat\'s saved messages could not be read when the summary returned, so the section was not saved. Technical details were recorded in the Error Log.</string>
+    <string name="summarizer_chat_unreadable_detail">The chat\'s saved messages could not be read when the summary returned, so the section was not saved. Technical details were recorded in the error log.</string>
     <string name="summarizer_err_unexpected_title">Internal Summarizer Error</string>
     <string name="summarizer_err_unexpected">An internal Summary Section error occurred. Technical details were recorded in the error log.</string>
 

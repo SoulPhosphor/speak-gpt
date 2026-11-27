@@ -237,6 +237,27 @@ class BackupRestoreScreenContractTest {
     }
 
     @Test
+    fun restorationErrorsExplainWhatHappenedAndWhatToDoNext() {
+        val strings = find(
+            "src/main/res/values/strings.xml",
+            "app/src/main/res/values/strings.xml"
+        ).readText()
+        assertTrue(strings.contains(
+            "<string name=\"portable_restore_in_progress_title\">Restoration Already in Progress</string>"
+        ))
+        assertTrue(strings.contains(
+            "<string name=\"portable_restore_in_progress\">Try again when the current run is complete.</string>"
+        ))
+        assertTrue(strings.contains(
+            "Android blocked the restoration before any backup data was applied. Keep this screen open and try again."
+        ))
+        assertTrue(strings.contains(
+            "An unexpected error stopped the restoration before any backup data was applied. Try again. Details are in the error log."
+        ))
+        assertTrue(!strings.contains("portable_restore_state_changed"))
+    }
+
+    @Test
     fun pendingOuterRestoreIsVisibleAndDoesNotAddDiagnosticLogging() {
         val application = find(
             "src/main/java/org/teslasoft/assistant/app/MainApplication.kt",

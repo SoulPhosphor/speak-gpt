@@ -32,7 +32,7 @@ import org.teslasoft.assistant.ui.activities.MemoryControlsActivity
  * test setting (a shortened limit), so Android refuses the next data-sync
  * start, whichever call it refuses: the start request, or the service's own
  * startForeground. Either way the refusal is never silent, the restore is
- * cancelled before it wrote anything, the Error Log names the actual
+ * cancelled before it wrote anything, the error log names the actual
  * exception, and the restore screen has a failure to show.
  */
 @RunWith(AndroidJUnit4::class)
@@ -53,7 +53,7 @@ class RestoreServiceStartInstrumentedTest {
         root.deleteRecursively()
     }
 
-    @Test fun androidRefusingTheStartIsRecordedAndShownAndNothingIsChanged() {
+    @Test fun androidRefusingTheStartIsRecordedAndShownBeforeBackupDataIsApplied() {
         useUpTheDataSyncTime()
         val logBefore = Logger.getCrashLog(app)
 
@@ -82,7 +82,7 @@ class RestoreServiceStartInstrumentedTest {
 
         val added = Logger.getCrashLog(app).removePrefix(logBefore)
         assertTrue(added, added.contains("Restore Service: The restore service could not start: android.app.ForegroundServiceStartNotAllowedException"))
-        assertTrue(added, added.contains("The restore did not run and nothing was changed."))
+        assertTrue(added, added.contains("The restoration stopped before any backup data was applied."))
         assertEquals(true, UnifiedPortableRestoreCoordinator.startFailureShown(failed.version))
     }
 

@@ -22,6 +22,17 @@ class UnifiedPortableRestoreLifecycleBoundaryTest {
     }
 
     @Test
+    fun everyRestoreDialogSubmitsTheStageThatDisplayedIt() {
+        val activity = source("ui/activities/MemoryBackupRestoreActivity.kt")
+        val coordinator = source("preferences/backup/portable/UnifiedPortableRestoreCoordinator.kt")
+        assertTrue(activity.contains("confirm(coordinatorVersion)"))
+        assertTrue(activity.contains("restoreAvailableCategories(state.version)"))
+        assertTrue(activity.contains("resolution, coordinatorVersion"))
+        assertTrue(activity.contains("cancelCoordinatorRestore(state.version)"))
+        assertTrue(coordinator.contains("state.version != expectedVersion"))
+    }
+
+    @Test
     fun foregroundServiceOwnsCoordinatorWorkAndMandatoryRestart() {
         val service = source("service/RestoreForegroundService.kt")
         assertTrue(service.contains("UnifiedPortableRestoreCoordinator.advance"))

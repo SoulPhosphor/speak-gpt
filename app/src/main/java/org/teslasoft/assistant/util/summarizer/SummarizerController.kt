@@ -1141,7 +1141,7 @@ class SummarizerController(
         }
         if (!prefs.advanceSummaryRegenerationLockBoundary(SummarySections.coveredCount(updated, latest))) {
             recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, runtime?.endpoint?.label ?: "Not Reported",
-                runtime?.model ?: prefs.getSummarizerModel(), null, "Could not save the Summary Section regeneration boundary. Technical details were recorded in the Error Log.")
+                runtime?.model ?: prefs.getSummarizerModel(), null, "Could not save the Summary Section regeneration boundary. Technical details were recorded in the error log.")
             return false
         }
         cycleResult = cycleResult.copy(saved = cycleResult.saved + 1)
@@ -1663,7 +1663,7 @@ class SummarizerController(
         if (operationState !is OperationState.Running)
             setOperationState(OperationState.Running(OperationKind.SUMMARIZING, chatName, 0, 0))
         recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, "Not Reported",
-            prefs.getSummarizerModel(), null, "$detail Technical details were recorded in the Error Log.")
+            prefs.getSummarizerModel(), null, "$detail Technical details were recorded in the error log.")
     }
 
     private fun recordUnexpectedFailure(error: Exception, kind: OperationKind, chatName: String) {
@@ -1676,7 +1676,7 @@ class SummarizerController(
         try {
             val prefs = Preferences.getPreferences(appContext, chatIdProvider())
             recordFailure(prefs, SummarizerErrorCategory.UNEXPECTED, "Not Reported",
-                prefs.getSummarizerModel(), null, "Technical details were recorded in the Error Log.",
+                prefs.getSummarizerModel(), null, "Technical details were recorded in the error log.",
                 exception = error, diagnosticRecorded = true)
         } catch (statusError: Exception) {
             if (statusError is CancellationException) throw statusError

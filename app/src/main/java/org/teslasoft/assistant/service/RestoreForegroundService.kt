@@ -102,11 +102,12 @@ class RestoreForegroundService : Service() {
                 val text = when (result) {
                     is UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.Cancelled ->
                         RestoreServiceStartFailure.notStarted(error, result.phase)
-                    UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.StillApplying ->
-                        RestoreServiceStartFailure.stillApplying(error)
-                    // Nothing to cancel, but the failure is still recorded.
+                    is UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.StillRunning ->
+                        RestoreServiceStartFailure.stillRunning(error, result.phase)
+                    UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.TerminalPreserved ->
+                        RestoreServiceStartFailure.terminalPreserved(error)
                     UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.NoRestore ->
-                        RestoreServiceStartFailure.notStarted(error, null)
+                        RestoreServiceStartFailure.noActiveRestore(error)
                 }
                 try {
                     Logger.log(app, "crash", RestoreServiceStartFailure.TAG, "error", text)

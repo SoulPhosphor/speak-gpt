@@ -308,7 +308,10 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     private val portableRecoveryKeyPicker = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) unlockPortableWithKeyFile(uri) else showPortableUnlockChoices()
+        val version = pendingPortableUnlockVersion
+        pendingPortableUnlockVersion = null
+        if (uri != null) unlockPortableWithKeyFile(uri, version)
+        else showPortableUnlockChoices(version)
     }
 
     private val readableSaveLauncher = registerForActivityResult(
@@ -341,6 +344,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     private var restoreFlowActive = false
     private var nonCancelableDatabaseOperation = false
     private var pendingPortableRestore: PendingPortableRestore? = null
+    private var pendingPortableUnlockVersion: Long? = null
     private var renderedPortableCoordinatorVersion = -1L
     private val portableCoordinatorObserver = UnifiedPortableRestoreCoordinator.Observer { state ->
         runOnUiThread { renderCoordinatorState(state) }
@@ -938,7 +942,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
             return
         }
         if (UnifiedPortableRestore.journalRoot(applicationContext).exists()) {
-            showPortableFailure(getString(R.string.portable_restore_pending_recovery))
+            finishPortableRestoreFlow()
             PortableRestoreRecoveryFlow.showIfPending(this)
             return
         }
@@ -1011,29 +1015,40 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         }
     }
 
-    private fun showPortableUnlockChoices() {
+    private fun showPortableUnlockChoices(coordinatorVersion: Long? = null) {
         val inspection = pendingPortableRestore?.inspection
             ?: UnifiedPortableRestoreCoordinator.inspection()
-            ?: return finishPortableRestoreFlow()
+            ?: return if (coordinatorVersion != null) {
+                showCurrentRestoreState()
+            } else {
+                finishPortableRestoreFlow()
+            }
         if (isFinishing) return
         val choices = ArrayList<Pair<String, () -> Unit>>()
-        choices.add(getString(R.string.portable_unlock_code) to ::showPortableRecoveryCode)
+        choices.add(getString(R.string.portable_unlock_code) to {
+            showPortableRecoveryCode(coordinatorVersion)
+        })
         choices.add(getString(R.string.portable_unlock_key_file) to {
+            pendingPortableUnlockVersion = coordinatorVersion
             portableRecoveryKeyPicker.launch(arrayOf("application/json", "text/*", "*/*"))
         })
         if (inspection.hasPasswordSlot) {
-            choices.add(getString(R.string.portable_unlock_password) to ::showPortablePassword)
+            choices.add(getString(R.string.portable_unlock_password) to {
+                showPortablePassword(coordinatorVersion)
+            })
         }
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.portable_unlock_title)
             .setMessage(R.string.portable_unlock_message)
             .setItems(choices.map { it.first }.toTypedArray()) { _, which -> choices[which].second() }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> cancelPortableUnlockFlow() }
-            .setOnCancelListener { cancelPortableUnlockFlow() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                cancelPortableUnlockFlow(coordinatorVersion)
+            }
+            .setOnCancelListener { cancelPortableUnlockFlow(coordinatorVersion) }
             .show()
     }
 
-    private fun showPortableRecoveryCode() {
+    private fun showPortableRecoveryCode(coordinatorVersion: Long?) {
         val input = EditText(this).apply {
             hint = getString(R.string.restore_recovery_code_hint)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
@@ -1045,18 +1060,21 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
             .setView(input)
             .setPositiveButton(R.string.portable_unlock_action) { _, _ ->
                 when (val decoded = RecoveryCode.decode(input.text?.toString().orEmpty())) {
-                    is RecoveryCode.DecodeResult.Ok -> decodePortableRestore(decoded.secret, null)
+                    is RecoveryCode.DecodeResult.Ok ->
+                        decodePortableRestore(decoded.secret, null, coordinatorVersion)
                     RecoveryCode.DecodeResult.Mistyped -> showPortableUnlockError(
-                        getString(R.string.backup_err_mistyped_code)
+                        getString(R.string.backup_err_mistyped_code), coordinatorVersion
                     )
                 }
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> showPortableUnlockChoices() }
-            .setOnCancelListener { showPortableUnlockChoices() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                showPortableUnlockChoices(coordinatorVersion)
+            }
+            .setOnCancelListener { showPortableUnlockChoices(coordinatorVersion) }
             .show()
     }
 
-    private fun showPortablePassword() {
+    private fun showPortablePassword(coordinatorVersion: Long?) {
         val input = EditText(this).apply {
             hint = getString(R.string.portable_password_hint)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -1067,14 +1085,18 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
             .setTitle(R.string.portable_password_title)
             .setView(input)
             .setPositiveButton(R.string.portable_unlock_action) { _, _ ->
-                decodePortableRestore(null, input.text?.toString().orEmpty().toCharArray())
+                decodePortableRestore(
+                    null, input.text?.toString().orEmpty().toCharArray(), coordinatorVersion
+                )
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> showPortableUnlockChoices() }
-            .setOnCancelListener { showPortableUnlockChoices() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                showPortableUnlockChoices(coordinatorVersion)
+            }
+            .setOnCancelListener { showPortableUnlockChoices(coordinatorVersion) }
             .show()
     }
 
-    private fun unlockPortableWithKeyFile(uri: Uri) {
+    private fun unlockPortableWithKeyFile(uri: Uri, coordinatorVersion: Long?) {
         runOffThread {
             val text = try {
                 contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
@@ -1082,15 +1104,21 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
             val parsed = text?.let(RecoveryKeyFile::parse)
             runOnUiThread {
                 if (parsed is RecoveryKeyFile.ParseResult.Ok) {
-                    decodePortableRestore(parsed.secret, null)
+                    decodePortableRestore(parsed.secret, null, coordinatorVersion)
                 } else {
-                    showPortableUnlockError(getString(R.string.portable_key_file_invalid))
+                    showPortableUnlockError(
+                        getString(R.string.portable_key_file_invalid), coordinatorVersion
+                    )
                 }
             }
         }
     }
 
-    private fun decodePortableRestore(secret: ByteArray?, password: CharArray?) {
+    private fun decodePortableRestore(
+        secret: ByteArray?,
+        password: CharArray?,
+        coordinatorVersion: Long? = null
+    ) {
         val unlock = if (password != null) {
             UnifiedPortableRestoreCoordinator.UnlockMaterial.Password(password)
         } else {
@@ -1099,37 +1127,46 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         secret?.fill(0)
         password?.fill('\u0000')
         val pending = pendingPortableRestore
-        val accepted = if (pending != null) {
-            UnifiedPortableRestoreCoordinator.begin(
-                pending.packageFile,
-                pending.decodeRoot,
-                pending.requested,
-                pending.inspection,
-                unlock,
-                pending.chatOptions
-            ).also { if (it) pendingPortableRestore = null }
-        } else {
-            UnifiedPortableRestoreCoordinator.retryUnlock(unlock)
-        }
-        if (!accepted) {
-            if (pending == null) {
-                staleRestoreDecision()
-                return
-            }
-            when (PortableRestoreScreenRule.refusal(
-                startingNew = true,
-                active = UnifiedPortableRestoreCoordinator.isActive(),
-                state = UnifiedPortableRestoreCoordinator.snapshot()
-            )) {
-                // Another restore holds the coordinator: this attempt is set aside and that one is shown.
-                PortableRestoreScreenRule.Refusal.UNAVAILABLE -> {
+        if (pending != null) {
+            when (val begin = UnifiedPortableRestoreCoordinator.beginDetailed(
+                    pending.packageFile,
+                    pending.decodeRoot,
+                    pending.requested,
+                    pending.inspection,
+                    unlock,
+                    pending.chatOptions
+                )
+            ) {
+                UnifiedPortableRestoreCoordinator.BeginResult.Started ->
+                    pendingPortableRestore = null
+                UnifiedPortableRestoreCoordinator.BeginResult.AlreadyInProgress -> {
                     pendingPortableRestore = null
                     PortableStaging.delete(pending.decodeRoot)
-                    showRestoreUnavailable()
+                    showRestoreAlreadyInProgress()
                     renderCoordinatorState(UnifiedPortableRestoreCoordinator.snapshot())
+                    return
                 }
-                else -> showPortableFailure(getString(R.string.portable_restore_validation_failed))
+                UnifiedPortableRestoreCoordinator.BeginResult.ExistingResult -> {
+                    pendingPortableRestore = null
+                    PortableStaging.delete(pending.decodeRoot)
+                    showCurrentRestoreState()
+                    return
+                }
+                is UnifiedPortableRestoreCoordinator.BeginResult.InvalidRequest -> {
+                    val message = when (begin.reason) {
+                        UnifiedPortableRestoreCoordinator.InvalidRequestReason.NO_CATEGORIES ->
+                            R.string.portable_restore_no_categories
+                        UnifiedPortableRestoreCoordinator.InvalidRequestReason.BACKUP_UNAVAILABLE ->
+                            R.string.portable_restore_backup_unavailable
+                        UnifiedPortableRestoreCoordinator.InvalidRequestReason.TEMPORARY_FILES_UNAVAILABLE ->
+                            R.string.portable_restore_temporary_files_unavailable
+                    }
+                    showPortableCouldNotStart(getString(message))
+                    return
+                }
             }
+        } else if (!UnifiedPortableRestoreCoordinator.retryUnlock(unlock, coordinatorVersion)) {
+            showCurrentRestoreState()
             return
         }
         if (!startUnifiedRestoreService()) return
@@ -1138,26 +1175,33 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     }
 
     private fun showFolderCollision(
-        collision: ChatMergePlanner.FolderCollision
+        collision: ChatMergePlanner.FolderCollision,
+        coordinatorVersion: Long
     ) {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.portable_folder_collision_title)
             .setMessage(getString(R.string.portable_folder_collision_message, collision.backupFolder.name))
             .setPositiveButton(R.string.portable_folder_create_new) { _, _ ->
-                showNewFolderName(collision)
+                showNewFolderName(collision, coordinatorVersion)
             }
             .setNegativeButton(R.string.portable_folder_merge) { _, _ ->
                 continueAfterFolderDecision(
                     collision,
-                    ChatMergePlanner.FolderResolution.MergeInto(collision.currentFolder.id)
+                    ChatMergePlanner.FolderResolution.MergeInto(collision.currentFolder.id),
+                    coordinatorVersion
                 )
             }
-            .setNeutralButton(R.string.btn_cancel) { _, _ -> cancelCoordinatorRestore() }
-            .setOnCancelListener { cancelCoordinatorRestore() }
+            .setNeutralButton(R.string.btn_cancel) { _, _ ->
+                cancelCoordinatorRestore(coordinatorVersion)
+            }
+            .setOnCancelListener { cancelCoordinatorRestore(coordinatorVersion) }
             .show()
     }
 
-    private fun showChatCollision(collision: ChatMergePlanner.ChatCollision) {
+    private fun showChatCollision(
+        collision: ChatMergePlanner.ChatCollision,
+        coordinatorVersion: Long
+    ) {
         val content = layoutInflater.inflate(R.layout.dialog_chat_restore_conflict, null)
         content.findViewById<TextView>(R.id.chat_restore_current_title).text =
             displayChatRestoreTitle(collision.current)
@@ -1187,19 +1231,25 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         }
         content.findViewById<MaterialButton>(R.id.chat_restore_keep_current).setOnClickListener {
             dialog.dismiss()
-            continueAfterChatDecision(collision, ChatMergePlanner.ChatResolution.KeepCurrent)
+            continueAfterChatDecision(
+                collision, ChatMergePlanner.ChatResolution.KeepCurrent, coordinatorVersion
+            )
         }
         content.findViewById<MaterialButton>(R.id.chat_restore_use_incoming).setOnClickListener {
             dialog.dismiss()
-            continueAfterChatDecision(collision, ChatMergePlanner.ChatResolution.UseIncoming)
+            continueAfterChatDecision(
+                collision, ChatMergePlanner.ChatResolution.UseIncoming, coordinatorVersion
+            )
         }
         content.findViewById<MaterialButton>(R.id.chat_restore_keep_both_action).setOnClickListener {
             dialog.dismiss()
-            continueAfterChatDecision(collision, ChatMergePlanner.ChatResolution.KeepBoth)
+            continueAfterChatDecision(
+                collision, ChatMergePlanner.ChatResolution.KeepBoth, coordinatorVersion
+            )
         }
         content.findViewById<MaterialButton>(R.id.chat_restore_cancel).setOnClickListener {
             dialog.dismiss()
-            cancelCoordinatorRestore()
+            cancelCoordinatorRestore(coordinatorVersion)
         }
         dialog.show()
     }
@@ -1243,7 +1293,8 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     }
 
     private fun showNewFolderName(
-        collision: ChatMergePlanner.FolderCollision
+        collision: ChatMergePlanner.FolderCollision,
+        coordinatorVersion: Long
     ) {
         val input = EditText(this).apply {
             hint = getString(R.string.portable_folder_name_hint)
@@ -1256,11 +1307,18 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
             .setTitle(R.string.portable_folder_name_title)
             .setView(input)
             .setPositiveButton(R.string.portable_folder_create, null)
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> showFolderCollision(collision) }
-            .setOnCancelListener { showFolderCollision(collision) }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                showFolderCollision(collision, coordinatorVersion)
+            }
+            .setOnCancelListener { showFolderCollision(collision, coordinatorVersion) }
             .create()
         dialog.setOnShowListener {
             dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                if (UnifiedPortableRestoreCoordinator.snapshot().version != coordinatorVersion) {
+                    dialog.dismiss()
+                    showCurrentRestoreState()
+                    return@setOnClickListener
+                }
                 val name = input.text?.toString().orEmpty().trim()
                 when {
                     name.isBlank() -> input.error = getString(R.string.portable_folder_blank)
@@ -1271,13 +1329,19 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                             val duplicate = currentFolderNameAlreadyUsed(name)
                             runOnUiThread {
                                 if (isFinishing || !dialog.isShowing) return@runOnUiThread
+                                if (UnifiedPortableRestoreCoordinator.snapshot().version != coordinatorVersion) {
+                                    dialog.dismiss()
+                                    showCurrentRestoreState()
+                                    return@runOnUiThread
+                                }
                                 if (duplicate) {
                                     input.error = getString(R.string.portable_folder_duplicate)
                                 } else {
                                     dialog.dismiss()
                                     continueAfterFolderDecision(
                                         collision,
-                                        ChatMergePlanner.FolderResolution.CreateNew(name)
+                                        ChatMergePlanner.FolderResolution.CreateNew(name),
+                                        coordinatorVersion
                                     )
                                 }
                             }
@@ -1309,7 +1373,8 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
     }
 
     private fun showPortableConfirmation(
-        selections: List<PortableRestoreSelectionPlan.Selection>
+        selections: List<PortableRestoreSelectionPlan.Selection>,
+        coordinatorVersion: Long
     ) {
         val categories = selections.joinToString(", ") { portableCategoryName(it.category) }
         val modes = selections.map { it.mode }.distinct()
@@ -1324,31 +1389,40 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
             .setTitle(R.string.portable_confirm_title)
             .setMessage(message)
             .setPositiveButton(R.string.health_btn_restore) { _, _ ->
-                if (UnifiedPortableRestoreCoordinator.confirm()) startUnifiedRestoreService()
+                if (UnifiedPortableRestoreCoordinator.confirm(coordinatorVersion)) {
+                    startUnifiedRestoreService()
+                } else showCurrentRestoreState()
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> cancelCoordinatorRestore() }
-            .setOnCancelListener { cancelCoordinatorRestore() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                cancelCoordinatorRestore(coordinatorVersion)
+            }
+            .setOnCancelListener { cancelCoordinatorRestore(coordinatorVersion) }
             .show()
     }
 
     private fun continueAfterFolderDecision(
         collision: ChatMergePlanner.FolderCollision,
-        resolution: ChatMergePlanner.FolderResolution
+        resolution: ChatMergePlanner.FolderResolution,
+        coordinatorVersion: Long
     ) {
         if (UnifiedPortableRestoreCoordinator.resolveFolder(
-                collision.backupFolder.id, resolution
+                collision.backupFolder.id, resolution, coordinatorVersion
             )
         ) startUnifiedRestoreService()
-        else staleRestoreDecision()
+        else showCurrentRestoreState()
     }
 
     private fun continueAfterChatDecision(
         collision: ChatMergePlanner.ChatCollision,
-        resolution: ChatMergePlanner.ChatResolution
+        resolution: ChatMergePlanner.ChatResolution,
+        coordinatorVersion: Long
     ) {
-        if (UnifiedPortableRestoreCoordinator.resolveChat(collision.incoming.chatId, resolution)) {
+        if (UnifiedPortableRestoreCoordinator.resolveChat(
+                collision.incoming.chatId, resolution, coordinatorVersion
+            )
+        ) {
             startUnifiedRestoreService()
-        } else staleRestoreDecision()
+        } else showCurrentRestoreState()
     }
 
     /**
@@ -1367,37 +1441,48 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
             }
         }
 
-    /**
-     * A decision or unlock the coordinator no longer expects (a double tap,
-     * or a dialog left from an earlier state). An active restore is redrawn
-     * from its actual state; otherwise the user is told it must be started
-     * again. Nothing of this attempt was applied.
-     */
-    private fun staleRestoreDecision() {
+    /** An outdated dialog closes and the screen shows what the restoration is doing now. */
+    private fun showCurrentRestoreState() {
         val current = UnifiedPortableRestoreCoordinator.snapshot()
-        when (PortableRestoreScreenRule.refusal(
-            startingNew = false, active = UnifiedPortableRestoreCoordinator.isActive(), state = current
-        )) {
-            PortableRestoreScreenRule.Refusal.REDRAW -> renderCoordinatorState(current)
-            else -> showPortableFailure(getString(R.string.portable_restore_state_changed))
+        if (current is UnifiedPortableRestoreCoordinator.State.Idle) {
+            finishPortableRestoreFlow()
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.portable_restore_ended_title)
+                .setMessage(R.string.portable_restore_ended_message)
+                .setPositiveButton(R.string.btn_ok, null)
+                .show()
+        } else {
+            renderedPortableCoordinatorVersion = -1L
+            renderCoordinatorState(current)
         }
     }
 
-    private fun showRestoreUnavailable() {
+    private fun showRestoreAlreadyInProgress() {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.portable_unavailable_title)
+            .setTitle(R.string.portable_restore_in_progress_title)
             .setMessage(R.string.portable_restore_in_progress)
             .setPositiveButton(R.string.btn_ok, null)
             .show()
     }
 
-    private fun cancelCoordinatorRestore() {
-        UnifiedPortableRestoreCoordinator.cancel()
-        finishPortableRestoreFlow()
+    private fun cancelCoordinatorRestore(expectedVersion: Long? = null) {
+        if (UnifiedPortableRestoreCoordinator.cancel(expectedVersion)) {
+            finishPortableRestoreFlow()
+        } else {
+            showCurrentRestoreState()
+        }
     }
 
-    private fun cancelPortableUnlockFlow() {
-        if (UnifiedPortableRestoreCoordinator.isActive()) cancelCoordinatorRestore()
+    private fun cancelPortableUnlockFlow(expectedVersion: Long? = null) {
+        if (expectedVersion != null &&
+            UnifiedPortableRestoreCoordinator.snapshot().version != expectedVersion
+        ) {
+            showCurrentRestoreState()
+            return
+        }
+        if (UnifiedPortableRestoreCoordinator.isActive()) {
+            cancelCoordinatorRestore(expectedVersion)
+        }
         else finishPortableRestoreFlow()
     }
 
@@ -1424,7 +1509,7 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
             is UnifiedPortableRestoreCoordinator.State.UnlockFailed -> {
                 setDatabaseMutationRunning(false)
                 setRestoreStatus(null, null, busy = false)
-                showPortableUnlockError(portableErrorMessage(state.error))
+                showPortableUnlockError(portableErrorMessage(state.error), state.version)
             }
             is UnifiedPortableRestoreCoordinator.State.MissingCategories -> {
                 setDatabaseMutationRunning(false)
@@ -1434,28 +1519,30 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                     .setTitle(R.string.portable_missing_title)
                     .setMessage(getString(R.string.portable_missing_message, names))
                     .setPositiveButton(R.string.portable_restore_available) { _, _ ->
-                        if (UnifiedPortableRestoreCoordinator.restoreAvailableCategories()) {
+                        if (UnifiedPortableRestoreCoordinator.restoreAvailableCategories(state.version)) {
                             startUnifiedRestoreService()
-                        }
+                        } else showCurrentRestoreState()
                     }
-                    .setNegativeButton(R.string.btn_cancel) { _, _ -> cancelCoordinatorRestore() }
-                    .setOnCancelListener { cancelCoordinatorRestore() }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                        cancelCoordinatorRestore(state.version)
+                    }
+                    .setOnCancelListener { cancelCoordinatorRestore(state.version) }
                     .show()
             }
             is UnifiedPortableRestoreCoordinator.State.FolderDecision -> {
                 setDatabaseMutationRunning(false)
                 setRestoreStatus(null, null, busy = false)
-                showFolderCollision(state.collision)
+                showFolderCollision(state.collision, state.version)
             }
             is UnifiedPortableRestoreCoordinator.State.ChatDecision -> {
                 setDatabaseMutationRunning(false)
                 setRestoreStatus(null, null, busy = false)
-                showChatCollision(state.collision)
+                showChatCollision(state.collision, state.version)
             }
             is UnifiedPortableRestoreCoordinator.State.Confirmation -> {
                 setDatabaseMutationRunning(false)
                 setRestoreStatus(null, null, busy = false)
-                showPortableConfirmation(state.selections)
+                showPortableConfirmation(state.selections, state.version)
             }
             is UnifiedPortableRestoreCoordinator.State.Terminal -> {
                 setDatabaseMutationRunning(false)
@@ -1465,8 +1552,9 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
                 PortableRestoreOutcomeFlow.showIfPending(this)
             }
             is UnifiedPortableRestoreCoordinator.State.StartFailed -> {
-                // The restore was cancelled before applying began, so nothing was changed.
-                showPortableFailure(getString(PortableRestoreScreenRule.startFailureMessage(state.androidRefused)))
+                showPortableStartFailure(
+                    getString(PortableRestoreScreenRule.startFailureMessage(state.androidRefused))
+                )
                 val app = applicationContext
                 val version = state.version
                 // After this render returns, so the coordinator's observers are not re-entered.
@@ -1506,12 +1594,40 @@ open class MemoryBackupRestoreActivity : SettingsPageActivity() {
         PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED -> R.string.backup_err_damaged
     })
 
-    private fun showPortableUnlockError(message: String) {
+    private fun showPortableUnlockError(message: String, coordinatorVersion: Long? = null) {
+        if (coordinatorVersion != null &&
+            UnifiedPortableRestoreCoordinator.snapshot().version != coordinatorVersion
+        ) {
+            showCurrentRestoreState()
+            return
+        }
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setMessage(message)
-            .setPositiveButton(R.string.btn_ok) { _, _ -> showPortableUnlockChoices() }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> cancelCoordinatorRestore() }
-            .setOnCancelListener { cancelCoordinatorRestore() }
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
+                showPortableUnlockChoices(coordinatorVersion)
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                cancelPortableUnlockFlow(coordinatorVersion)
+            }
+            .setOnCancelListener { cancelPortableUnlockFlow(coordinatorVersion) }
+            .show()
+    }
+
+    private fun showPortableStartFailure(message: String) {
+        finishPortableRestoreFlow()
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_restore_could_not_continue_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.btn_ok, null)
+            .show()
+    }
+
+    private fun showPortableCouldNotStart(message: String) {
+        finishPortableRestoreFlow()
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_restore_could_not_start_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.btn_ok, null)
             .show()
     }
 

@@ -8,7 +8,7 @@ import android.app.Application
 import android.app.ForegroundServiceStartNotAllowedException
 import java.io.File
 import java.nio.file.Files
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -17,6 +17,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.ConscryptMode
 import org.teslasoft.assistant.R
@@ -24,9 +25,9 @@ import org.teslasoft.assistant.R
 /**
  * A restore whose foreground service cannot start (Owner, 2026-11-25): it is
  * cancelled only before applying began, so "Nothing was changed" is true; a
- * restore that is applying is never cancelled; the Error Log entry precedes the
- * message; the message is shown once; and stale decisions never report a failure
- * for a restore that is still going.
+ * restore that is applying is never cancelled; the error-log entry precedes the
+ * message; the message is shown once; and an outdated screen cannot cancel a
+ * newer restoration stage.
  */
 @RunWith(RobolectricTestRunner::class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
@@ -45,7 +46,7 @@ class RestoreServiceStartFailureTest {
 
     @After
     fun tearDown() {
-        advancing().set(false)
+        advancing().set(null)
         coordinator.cancel()
         forceState(UnifiedPortableRestoreCoordinator.State.Idle(0))
         root.deleteRecursively()
@@ -69,7 +70,23 @@ class RestoreServiceStartFailureTest {
     private fun field(name: String) = UnifiedPortableRestoreCoordinator::class.java.getDeclaredField(name)
         .apply { isAccessible = true }
 
-    private fun advancing(): AtomicBoolean = field("advancing").get(coordinator) as AtomicBoolean
+    @Suppress("UNCHECKED_CAST")
+    private fun advancing(): AtomicReference<Any?> =
+        field("advancing").get(coordinator) as AtomicReference<Any?>
+
+    private fun setWorkerRunning(running: Boolean): Any? = if (running) {
+        Any().also { advancing().set(it) }
+    } else {
+        advancing().set(null)
+        null
+    }
+
+    private fun finishWaitingStep(workerToken: Any): Boolean {
+        val method = UnifiedPortableRestoreCoordinator::class.java
+            .getDeclaredMethod("finishWaitingStep", Any::class.java)
+            .apply { isAccessible = true }
+        return method.invoke(coordinator, workerToken) as Boolean
+    }
 
     private fun forceState(state: UnifiedPortableRestoreCoordinator.State) {
         field("state").set(coordinator, state)
@@ -135,23 +152,121 @@ class RestoreServiceStartFailureTest {
         begin()
         val applying = UnifiedPortableRestoreCoordinator.State.Progress(100, UnifiedPortableRestoreCoordinator.ProgressPhase.APPLYING)
         forceState(applying)
-        advancing().set(true)
+        setWorkerRunning(true)
         assertEquals(
-            UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.StillApplying,
+            UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.StillRunning(
+                UnifiedPortableRestoreCoordinator.ProgressPhase.APPLYING
+            ),
             coordinator.cancelAfterServiceStartFailure(androidRefused = true)
         )
         assertTrue(coordinator.isActive())
         assertEquals(applying, coordinator.snapshot())
-        advancing().set(false)
+        setWorkerRunning(false)
 
         val restarting = UnifiedPortableRestoreCoordinator.State.Progress(101, UnifiedPortableRestoreCoordinator.ProgressPhase.RESTARTING)
         forceState(restarting)
         assertEquals(
-            UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.StillApplying,
+            UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.StillRunning(
+                UnifiedPortableRestoreCoordinator.ProgressPhase.RESTARTING
+            ),
             coordinator.cancelAfterServiceStartFailure(androidRefused = true)
         )
         assertTrue(coordinator.isActive())
         assertEquals(restarting, coordinator.snapshot())
+    }
+
+    @Test
+    fun aRestoreThatIsAlreadyCheckingTheBackupIsNeverCancelledByAnotherStartFailure() {
+        begin()
+        val checking = UnifiedPortableRestoreCoordinator.State.Progress(
+            103, UnifiedPortableRestoreCoordinator.ProgressPhase.PREFLIGHT
+        )
+        forceState(checking)
+        setWorkerRunning(true)
+        assertEquals(
+            UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.StillRunning(
+                UnifiedPortableRestoreCoordinator.ProgressPhase.PREFLIGHT
+            ),
+            coordinator.cancelAfterServiceStartFailure(androidRefused = true)
+        )
+        assertTrue(coordinator.isActive())
+        assertEquals(checking, coordinator.snapshot())
+    }
+
+    @Test
+    fun aDecisionSubmittedBeforeTheWaitingWorkerFinishesIsConsumedByThatWorker() {
+        begin()
+        val waiting = UnifiedPortableRestoreCoordinator.State.UnlockFailed(
+            104,
+            PortablePackageFormat.RestoreError.MISTYPED_CODE,
+            coordinator.inspection()!!
+        )
+        forceState(waiting)
+        val workerToken = setWorkerRunning(true)!!
+
+        assertTrue(coordinator.retryUnlock(
+            UnifiedPortableRestoreCoordinator.UnlockMaterial.Password("retry".toCharArray()),
+            waiting.version
+        ))
+        assertEquals(
+            UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.StillRunning(
+                UnifiedPortableRestoreCoordinator.ProgressPhase.DECODING
+            ),
+            coordinator.cancelAfterServiceStartFailure(androidRefused = true)
+        )
+        assertFalse(
+            "the existing worker must continue with the submitted decision",
+            finishWaitingStep(workerToken)
+        )
+        assertEquals(workerToken, advancing().get())
+        assertTrue(coordinator.isActive())
+    }
+
+    @Test
+    fun aDecisionSubmittedAfterTheWaitingWorkerFinishesIsCancelledIfNoReplacementStarts() {
+        begin()
+        val waiting = UnifiedPortableRestoreCoordinator.State.UnlockFailed(
+            105,
+            PortablePackageFormat.RestoreError.MISTYPED_CODE,
+            coordinator.inspection()!!
+        )
+        forceState(waiting)
+        val workerToken = setWorkerRunning(true)!!
+
+        assertTrue(finishWaitingStep(workerToken))
+        assertEquals(null, advancing().get())
+        assertTrue(coordinator.retryUnlock(
+            UnifiedPortableRestoreCoordinator.UnlockMaterial.Password("retry".toCharArray()),
+            waiting.version
+        ))
+        assertEquals(
+            UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.Cancelled(
+                UnifiedPortableRestoreCoordinator.ProgressPhase.DECODING
+            ),
+            coordinator.cancelAfterServiceStartFailure(androidRefused = true)
+        )
+        assertFalse(coordinator.isActive())
+        assertTrue(coordinator.snapshot() is UnifiedPortableRestoreCoordinator.State.StartFailed)
+    }
+
+    @Test
+    fun aQueuedWorkerDoesNotRepeatWorkWhileTheRestorationIsWaitingForTheUser() {
+        begin()
+        val waiting = UnifiedPortableRestoreCoordinator.State.UnlockFailed(
+            106,
+            PortablePackageFormat.RestoreError.MISTYPED_CODE,
+            coordinator.inspection()!!
+        )
+        forceState(waiting)
+        setWorkerRunning(false)
+
+        assertEquals(
+            UnifiedPortableRestoreCoordinator.AdvanceResult.NO_WORK,
+            coordinator.advance(RuntimeEnvironment.getApplication())
+        )
+        assertEquals(waiting, coordinator.snapshot())
+        assertTrue(coordinator.isActive())
+        assertEquals(null, advancing().get())
     }
 
     @Test
@@ -166,35 +281,61 @@ class RestoreServiceStartFailureTest {
     }
 
     @Test
+    fun aFinishedRestorationsResultIsNeverReplacedByAServiceStartFailure() {
+        begin()
+        val terminal = UnifiedPortableRestoreCoordinator.State.Terminal(
+            102, PortableRestoreOutcome.NothingAvailable
+        )
+        forceState(terminal)
+        assertEquals(
+            UnifiedPortableRestoreCoordinator.ServiceStartFailureResult.TerminalPreserved,
+            coordinator.cancelAfterServiceStartFailure(androidRefused = true)
+        )
+        assertTrue(coordinator.isActive())
+        assertEquals(terminal, coordinator.snapshot())
+    }
+
+    @Test
     fun theLogSaysWhatHappenedAndNeverClaimsTheUserWasToldOrThatAnApplyingRestoreContinues() {
         val refused = ForegroundServiceStartNotAllowedException("Time limit already exhausted for foreground service type dataSync")
         val notStarted = RestoreServiceStartFailure.notStarted(refused, UnifiedPortableRestoreCoordinator.ProgressPhase.PREFLIGHT)
         assertTrue(notStarted.startsWith("Restore Service: The restore service could not start: android.app.ForegroundServiceStartNotAllowedException: Time limit already exhausted"))
         assertTrue(notStarted.contains("Operation: unified backup restore, checking."))
-        assertTrue(notStarted.contains("The restore did not run and nothing was changed."))
+        assertTrue(notStarted.contains("The restoration stopped before any backup data was applied."))
         assertTrue(notStarted.contains("has not been shown yet"))
         assertFalse(notStarted.contains("was told"))
 
-        val applying = RestoreServiceStartFailure.stillApplying(refused)
-        assertTrue(applying.startsWith("Restore Service: Android refused a further start of the restore service while the restore was applying"))
-        assertTrue(applying.contains("The restore was not cancelled. It may continue without the foreground-service protection and may be interrupted by Android."))
+        val applying = RestoreServiceStartFailure.stillRunning(
+            refused, UnifiedPortableRestoreCoordinator.ProgressPhase.APPLYING
+        )
+        assertTrue(applying.startsWith("Restore Service: Android refused a further start of the restore service while the restoration was applying changes"))
+        assertTrue(applying.contains("The failed additional service request did not cancel the restoration."))
         assertFalse(applying.contains("nothing was changed"))
-        assertFalse(applying.contains("continues without"))
-        assertTrue(RestoreServiceStartFailure.stillApplying(IllegalStateException("x")).contains("A further start of the restore service failed"))
+        assertTrue(
+            RestoreServiceStartFailure.stillRunning(
+                IllegalStateException("x"), UnifiedPortableRestoreCoordinator.ProgressPhase.PREFLIGHT
+            ).contains("A further start of the restore service failed")
+        )
+
+        val noActiveRestore = RestoreServiceStartFailure.noActiveRestore(refused)
+        assertTrue(noActiveRestore.contains("No active restoration was found"))
+        assertTrue(noActiveRestore.contains("does not establish the outcome"))
+        assertFalse(noActiveRestore.contains("nothing was changed"))
+
+        val terminalPreserved = RestoreServiceStartFailure.terminalPreserved(refused)
+        assertTrue(terminalPreserved.contains("result and recovery information were preserved"))
+        assertTrue(terminalPreserved.contains("Open Backup & Restore"))
     }
 
     @Test
-    fun staleDecisionsRedrawAGoingRestoreAndOnlyReportAFailureWhenNoneIsActive() {
-        val progress = UnifiedPortableRestoreCoordinator.State.Progress(1, UnifiedPortableRestoreCoordinator.ProgressPhase.PREFLIGHT)
-        val idle = UnifiedPortableRestoreCoordinator.State.Idle(2)
-        // A double tap while the restore goes on: its actual state is redrawn, never a failure.
-        assertEquals(PortableRestoreScreenRule.Refusal.REDRAW, PortableRestoreScreenRule.refusal(false, true, progress))
-        assertEquals(PortableRestoreScreenRule.Refusal.REDRAW,
-            PortableRestoreScreenRule.refusal(false, false, UnifiedPortableRestoreCoordinator.State.StartFailed(3, true)))
-        assertEquals(PortableRestoreScreenRule.Refusal.STATE_CHANGED, PortableRestoreScreenRule.refusal(false, false, idle))
-        // Starting a new restore while another holds the coordinator: unavailable, never "Nothing was changed".
-        assertEquals(PortableRestoreScreenRule.Refusal.UNAVAILABLE, PortableRestoreScreenRule.refusal(true, true, progress))
-        assertEquals(PortableRestoreScreenRule.Refusal.VALIDATION, PortableRestoreScreenRule.refusal(true, false, idle))
+    fun anOutdatedCancelActionCannotCancelTheCurrentRestoration() {
+        begin()
+        val current = coordinator.snapshot()
+        assertFalse(coordinator.cancel(current.version - 1))
+        assertTrue(coordinator.isActive())
+        assertEquals(current, coordinator.snapshot())
+        assertTrue(coordinator.cancel(current.version))
+        assertFalse(coordinator.isActive())
     }
 
     @Test
@@ -202,15 +343,15 @@ class RestoreServiceStartFailureTest {
         begin()
         val pkg = File(root, "other.bin").apply { writeText("y") }
         val decode = File(root, "decode2").apply { mkdirs() }
-        assertFalse(
-            coordinator.begin(
+        assertEquals(
+            UnifiedPortableRestoreCoordinator.BeginResult.AlreadyInProgress,
+            coordinator.beginDetailed(
                 pkg, decode,
                 listOf(PortableRestoreSelectionPlan.Selection(PortableRestoreCategory.CHATS, PortableRestoreMode.MERGE)),
                 PortablePackage.Inspection("password", "2026-11-25", "1", "app", "App", null, true),
                 UnifiedPortableRestoreCoordinator.UnlockMaterial.Password("pw".toCharArray())
             )
         )
-        assertEquals(PortableRestoreScreenRule.Refusal.UNAVAILABLE,
-            PortableRestoreScreenRule.refusal(true, coordinator.isActive(), coordinator.snapshot()))
+        assertTrue(coordinator.isActive())
     }
 }
