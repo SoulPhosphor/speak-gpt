@@ -49,6 +49,12 @@ class ChatBehaviorsActivity : SettingsPageActivity() {
         }
 
         val preferences = Preferences.getPreferences(this, "")
+        findViewById<MaterialSwitch>(R.id.switch_summarizer_titles).apply {
+            isChecked = preferences.getUseSummarizerForTitles()
+            setOnCheckedChangeListener { _, checked ->
+                preferences.setUseSummarizerForTitles(checked)
+            }
+        }
         findViewById<MaterialSwitch>(R.id.switch_allow_message_visibility).apply {
             isChecked = preferences.getAllowMessageVisibility()
             setOnCheckedChangeListener { _, checked ->

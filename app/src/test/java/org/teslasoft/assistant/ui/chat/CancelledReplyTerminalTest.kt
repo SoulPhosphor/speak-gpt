@@ -36,6 +36,7 @@ class CancelledReplyTerminalTest {
         assertEquals("reply could not start", plan.lifecycleError)
 
         val torn = CancelledReplyTerminal.plan(false, true, false, true, closed)
+        assertFalse(torn.logAsError)
         assertEquals(closed, torn.reason)
         assertEquals("reply could not start: $closed", torn.errorSummary)
         assertEquals(ResponseLifecycle.Outcome.CANCELLED, torn.outcome)
@@ -44,6 +45,7 @@ class CancelledReplyTerminalTest {
 
     @Test fun teardownMidReplyIsAnInterruption() {
         val plan = CancelledReplyTerminal.plan(false, true, true, true, closed)
+        assertFalse(plan.logAsError)
         assertEquals(MessageCompletionState.INTERRUPTED, plan.state)
         assertEquals(MessageCompletionState.DETAIL_SCREEN_CLOSED, plan.detail)
         assertEquals("GenInterrupted", plan.errorTag)

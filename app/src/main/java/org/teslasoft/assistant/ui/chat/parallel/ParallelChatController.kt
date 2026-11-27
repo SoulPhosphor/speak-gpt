@@ -47,6 +47,12 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var active = false
+        set(value) {
+            field = value
+            org.teslasoft.assistant.util.ProcessActivityTracker.update(this,
+                if (value && !closed) setOf(org.teslasoft.assistant.util.ProcessExitSnapshot.Activity.GENERATING)
+                else emptySet())
+        }
     private var selectingBranch = false
     private var pendingSave = false
     private data class PendingTitleReceipt(val assistantMessageId: String, val entry: UsageLogEntry)
@@ -527,6 +533,7 @@ internal class ParallelChatController(private val activity: FragmentActivity, pr
     }
 
     fun close() {
+        org.teslasoft.assistant.util.ProcessActivityTracker.clear(this)
         // Terminal checkpoints use guarded storage after teardown, never a stale screen snapshot.
         closed = true
         scope.cancel()

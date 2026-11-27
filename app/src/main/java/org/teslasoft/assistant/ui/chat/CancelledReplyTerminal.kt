@@ -46,7 +46,7 @@ internal object CancelledReplyTerminal {
                 val reason = if (destroying) screenClosedReason else null
                 val summary = "reply could not start" + (reason?.let { ": $it" } ?: "")
                 Plan(
-                    state, detail, reason, logAsError = true, errorTag = "GenStartFailed", errorSummary = summary,
+                    state, detail, reason, logAsError = !destroying, errorTag = "GenStartFailed", errorSummary = summary,
                     outcome = if (destroying) ResponseLifecycle.Outcome.CANCELLED else ResponseLifecycle.Outcome.INCOMPLETE,
                     termination = if (destroying) ResponseLifecycle.Termination.APP_CANCEL
                         else ResponseLifecycle.Termination.STREAM_CLOSED,
@@ -54,7 +54,7 @@ internal object CancelledReplyTerminal {
                 )
             }
             MessageCompletionState.DETAIL_SCREEN_CLOSED -> Plan(
-                state, detail, screenClosedReason, logAsError = true, errorTag = "GenInterrupted",
+                state, detail, screenClosedReason, logAsError = false, errorTag = "GenInterrupted",
                 errorSummary = "app interrupted the reply: $screenClosedReason",
                 outcome = ResponseLifecycle.Outcome.CANCELLED,
                 termination = ResponseLifecycle.Termination.APP_CANCEL,

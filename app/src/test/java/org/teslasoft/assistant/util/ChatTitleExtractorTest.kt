@@ -21,6 +21,21 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ChatTitleExtractorTest {
+    @Test fun punctuationOnlyTitlesAreRejectedAndSeparatorsAreSkipped() {
+        listOf("---", "***", "…", "Title: ---", "🌙").forEach { assertNull(ChatTitleExtractor.extract(it)) }
+        assertEquals("Weekend Plans", ChatTitleExtractor.extract("Weekend Plans\n---"))
+        listOf("夜の散歩", "Café Plans", "2026", "What's Next?").forEach {
+            assertEquals(it, ChatTitleExtractor.extract(it))
+        }
+    }
+
+    @Test fun duplicateTitlesUseTheFirstAvailableNumber() {
+        assertEquals("Weekend Plans", ChatTitleExtractor.availableTitle("Weekend Plans", emptySet()))
+        assertEquals("Weekend Plans 1", ChatTitleExtractor.availableTitle("Weekend Plans", setOf("Weekend Plans")))
+        assertEquals("Weekend Plans 2", ChatTitleExtractor.availableTitle("Weekend Plans",
+            setOf("Weekend Plans", "Weekend Plans 1", "Weekend Plans 3")))
+    }
+
 
     @Test
     fun plainTitleIsKept() {

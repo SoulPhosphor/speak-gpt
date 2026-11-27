@@ -100,29 +100,31 @@ class ParallelResponseUiInstrumentedTest {
         assertNotNull(send.colorFilter)
     }
 
-    @Test fun summarizerTitleSwitchPersistsAndSitsAboveTheNewChatSwitch() {
+    @Test fun summarizerTitleSwitchPersistsAboveUsageAlertInChatBehaviors() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = org.teslasoft.assistant.preferences.Preferences.getPreferences(context, "")
         val previous = prefs.getUseSummarizerForTitles()
         val newChats = prefs.getSummarizerOnForNewChats()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        var activity: org.teslasoft.assistant.ui.activities.SummarizerSettingsActivity? = null
+        var activity: android.app.Activity? = null
         try {
             prefs.setUseSummarizerForTitles(false)
             repeat(2) { visit ->
                 val opened = instrumentation.startActivitySync(android.content.Intent(context,
-                    org.teslasoft.assistant.ui.activities.SummarizerSettingsActivity::class.java)
-                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as org.teslasoft.assistant.ui.activities.SummarizerSettingsActivity
+                    org.teslasoft.assistant.ui.activities.ChatBehaviorsActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as org.teslasoft.assistant.ui.activities.ChatBehaviorsActivity
                 activity = opened
                 onMain {
                     val title = opened.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switch_summarizer_titles)
-                    val newChat = opened.findViewById<View>(R.id.switch_summarizer_new_chats)
+                    val usage = opened.findViewById<View>(R.id.switch_chat_usage_alert)
                     assertEquals(visit == 1, title.isChecked)
-                    val titleRow = title.parent as View
-                    val newChatRow = newChat.parent as View
-                    assertSame(titleRow.parent, newChatRow.parent)
+                    val titleRow = title.parent as android.view.ViewGroup
+                    val usageRow = usage.parent as View
+                    assertSame(titleRow.parent, usageRow.parent)
                     val parent = titleRow.parent as android.view.ViewGroup
-                    assertTrue(parent.indexOfChild(titleRow) < parent.indexOfChild(newChatRow))
+                    assertEquals(parent.indexOfChild(titleRow) + 1, parent.indexOfChild(usageRow))
+                    val textColumn = titleRow.getChildAt(0) as android.view.ViewGroup
+                    assertEquals("Use Summarizer to Title Chats", (textColumn.getChildAt(0) as TextView).text.toString())
                     if (visit == 0) {
                         title.performClick()
                         assertTrue(prefs.getUseSummarizerForTitles())
@@ -132,6 +134,17 @@ class ParallelResponseUiInstrumentedTest {
                 }
                 activity = null
             }
+            val oldScreen = instrumentation.startActivitySync(android.content.Intent(context,
+                org.teslasoft.assistant.ui.activities.SummarizerSettingsActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as org.teslasoft.assistant.ui.activities.SummarizerSettingsActivity
+            activity = oldScreen
+            onMain {
+                assertNull(oldScreen.findViewById<View>(R.id.switch_summarizer_titles))
+                val newChat = oldScreen.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.switch_summarizer_new_chats)
+                assertEquals(newChats, newChat.isChecked)
+                oldScreen.finish()
+            }
+            activity = null
         } finally {
             onMain { activity?.finish() }
             prefs.setUseSummarizerForTitles(previous)

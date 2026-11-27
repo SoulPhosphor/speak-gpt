@@ -417,6 +417,8 @@ import kotlinx.coroutines.asContextElement
 class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
 
+    private val exitActivity = org.teslasoft.assistant.ui.chat.ChatExitActivity()
+
     companion object {
         /** Time between steps of the compaction pop-up's looping dots. */
         private const val COMPACTION_DOTS_STEP_MS = 450L
@@ -738,7 +740,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     // Init states
     private var isRecording = false
+        set(value) { field = value; exitActivity.recording(value) }
     private var transcriptionInProgress = false
+        set(value) { field = value; exitActivity.transcribing(value) }
     private var keyboardMode = false
     private var isTTSInitialized = false
     private var appliedDeviceSpeechSettings: List<Any?>? = null
@@ -1004,6 +1008,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // Hands-free conversation loop state
     private var handsFreeUserSpoke = false
     private var handsFreeStopped = false
+        set(value) { field = value; if (value) exitActivity.voice(false) }
     private var handsFreeListenDeadline = 0L
     private val handsFreeHandler = Handler(Looper.getMainLooper())
 
@@ -1040,6 +1045,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // may re-arm the mic, so the completion handlers are gated on this flag.
     // Volatile for the same binder-thread/main-thread split as the token.
     @Volatile private var handsFreeReadbackExpected = false
+        set(value) {
+            synchronized(exitActivity) {
+                field = value
+                exitActivity.handsFreeReading(value)
+            }
+        }
 
     // Consecutive failed attempts to open the mic for the next hands-free
     // turn. The recognition service / capture device can refuse a session
@@ -1100,6 +1111,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // unreliable across engines) so it can neither leak the wake lock nor release
     // while audio is still playing.
     private var readbackKeepAliveActive = false
+        set(value) { field = value; exitActivity.reading(value) }
     private var readbackKeepAliveToken = 0
     // Dedicated handler so the poll is never swept away by the hands-free
     // teardown's removeCallbacksAndMessages(null); release is always explicit.
@@ -1141,6 +1153,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // generation path.
     private var parseMessageScope: CoroutineScope? = null
     private var requestPreparationInProgress = false
+        set(value) { field = value; exitActivity.preparing(value) }
 
     // A message deletion retires the reply in progress at once instead of
     // waiting for it to wind down; see deleteMessageRange.
@@ -1807,6 +1820,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     override fun onResume() {
         super.onResume()
+        exitActivity.open()
         // Keyboard Chat Interaction Debugging follows the saved switch.
         preferences?.let { ResizeTrace.enabled = it.getKeyboardChatInteractionDebugging() }
 
@@ -3107,6 +3121,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // previous session (or a hard kill mid-loop) can never auto-resume a
         // conversation the moment the chat opens.
         preferences?.setHandsFreeMode(false)
+        exitActivity.voice(false)
         handsFreeStopped = false
 
         if (Build.VERSION.SDK_INT >= 33) {
@@ -3292,6 +3307,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
+        exitActivity.close()
         parallelChat.close()
         org.teslasoft.assistant.util.ResourceDiagnostics.chatScreenDestroyed(
             this, this, isFinishing, isChangingConfigurations
@@ -10869,6 +10885,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // toggle any more — the button is the only control) and return the
         // conversation/send button from its red "live" look to resting.
         preferences?.setHandsFreeMode(false)
+        exitActivity.voice(false)
         refreshConversationButton()
         stopHandsFreeService("loop stopped: $reason")
     }
@@ -11549,6 +11566,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         preferences?.setHandsFreeMode(true)
+        exitActivity.voice(true)
         handsFreeStopped = false
         voiceLogGroup.run {
             logVoiceEvent("hands-free engaged (conversation button)")
@@ -11651,6 +11669,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // hands-free conversation: clear the engaged flag and reset the
         // conversation/send button from its red "live" look to resting.
         preferences?.setHandsFreeMode(false)
+        exitActivity.voice(false)
         refreshConversationButton()
         stopHandsFreeService("stopped: $source")
     }
@@ -12925,6 +12944,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // (otherwise the OS freezes the process / lets Wi-Fi power-save drop the
         // socket, and the request dies with "Software caused connection abort").
         GenerationForegroundService.begin(this, chatId, chatName)
+        val exitGeneration = exitActivity.beginGeneration()
 
         // From here the cancellation handler below writes this reply's
         // terminal state; a message deletion that comes first writes it instead.
@@ -13122,7 +13142,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     ?: currentProviderUsageAttempt
             val providerEvidence = evidenceOwner?.diagnosticSnapshot()
             val genError = GenerationErrorClassifier.classify(e, providerEvidence)
-            logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence)
+            logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence,
+                providerRequestWasSent = providerRequestDispatched)
 
             if (genError.isVisionRejection && conversationHasFullImages(requestMessageIncludes())) {
                 recordVisionCapability(
@@ -13271,6 +13292,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 setGenerationProgressVisible(false)
             }
         } finally {
+            exitGeneration.close()
             // Reference counted, so a retired reply still releases its own hold.
             GenerationForegroundService.end(this)
             // A message deletion that retired this reply already did the rest.
@@ -13393,12 +13415,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         e: Throwable,
         trigger: String,
         failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot? = null,
-        providerEvidence: ProviderDiagnosticSnapshot? = null
+        providerEvidence: ProviderDiagnosticSnapshot? = null,
+        providerRequestWasSent: Boolean = false
     ) {
         val voiceLive = org.teslasoft.assistant.util.resolveFailureVoiceState(
             failureSnapshot,
             isVoiceLive()
         )
+        // Provider-key rejections belong to the provider-failure path.
+        if (providerRequestWasSent && result.code == GenErrorCode.A1 && result.reachedServer()) {
+            logVoiceFailureSnapshot(result.code.code, voiceLive)
+            return
+        }
         try {
             val sb = StringBuilder()
             if (result.code == GenErrorCode.U0) {
@@ -14861,9 +14889,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Persist the title off the main thread. Keep the rename
         // guard across the IO suspension; the chat ID never changes.
         renameInProgress = true
+        var savedName = newChatName
         val renamed = try {
             withContext(Dispatchers.IO) {
-                ChatPreferences.getChatPreferences().editChat(this@ChatActivity, newChatName, placeholderName, chatId)
+                val chats = ChatPreferences.getChatPreferences()
+                if (autoNameAttempts >= AUTO_NAME_MAX_ATTEMPTS) {
+                    val numbered = chats.editChatWithNumberedTitle(this@ChatActivity, newChatName, placeholderName, chatId)
+                    if (numbered != null) savedName = numbered
+                    numbered != null
+                } else {
+                    chats.editChat(this@ChatActivity, newChatName, placeholderName, chatId)
+                }
             }
         } catch (e: Exception) {
             logVoiceEventAlways("auto-name rename threw (${e.message}); keeping the placeholder name and old chat id")
@@ -14878,9 +14914,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (renamed && !isFinishing && !isDestroyed) {
             // Update the display and restored title only. Existing
             // preferences, voice playback and jobs keep the same ID.
-            this.chatName = newChatName
+            this.chatName = savedName
             intent.putExtra("name", this.chatName)
-            activityTitle?.text = newChatName
+            activityTitle?.text = savedName
             autoNameAttempts = 0
             logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
         } else if (!renamed) {

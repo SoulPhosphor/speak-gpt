@@ -88,6 +88,7 @@ class MainApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        org.teslasoft.assistant.util.ProcessActivityTracker.register(this)
         // Anchor the process-uptime clock to app start so every memory sample's
         // "sessionMin/uptime" field measures from here (touches the lazy init).
         MemoryDiagnostics.processUptimeMinutes()
