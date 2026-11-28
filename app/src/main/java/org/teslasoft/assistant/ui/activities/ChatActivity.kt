@@ -436,6 +436,104 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         this, requestState, requestHooks, turnFence, replyRunHost
     )
 
+    /** A reply sent before this chat was closed, still arriving, shown here. */
+    private var attachedReply: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
+
+    /**
+     * This chat was reopened while a reply sent before it closed is still
+     * being received. The screen shows the reply as it arrives and becomes
+     * the one that saves it; it stays busy (with Stop) until the reply ends.
+     * Nothing is sent again.
+     */
+    private val onReplyHandedOff: (org.teslasoft.assistant.conversation.reply.ReplyRun) -> Unit = { run ->
+        if (!isFinishing && !isDestroyed && attachedReply == null && run.state.chatId == chatId) attachToRunningReply()
+    }
+
+    private fun attachToRunningReply() {
+        org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.watch(chatId, onReplyHandedOff)
+        val run = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(chatId) ?: return
+        if (run === currentReplyRun || !run.handedOff || run.ended || chatStorageUnavailable) return
+        val rowId = run.replyRowId
+        if (rowId.isBlank() || messages.none { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }) return
+        attachedReply = run
+        val previous = run.host
+        val turnId = previous.lifecycleTurnId()
+        val replyModel = previous.model
+        disableTurnControlsUnlessTheyAreStops()
+        setGenerationProgressVisible(true)
+        progress?.setOnClickListener { run.stopByUser() }
+        run.attach(object : org.teslasoft.assistant.conversation.reply.ReplyRunHost {
+            private var lastSaveUptime = 0L
+            override val model: String get() = replyModel
+            override val storageUnavailable: Boolean get() = chatStorageUnavailable
+            override fun conversationSnapshot(): List<Map<String, Any>> = messages
+            override fun lastRow(): HashMap<String, Any>? =
+                messages.firstOrNull { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
+            override fun containsRow(row: Map<String, Any>?): Boolean = row != null && messages.any { it === row }
+            override fun saveInBackground() = saveSettingsInBackground()
+            override fun usageCarrier(): HashMap<String, Any>? = lastRow()
+            override fun lifecycleTurnId(): String = turnId
+            override fun replyUpdated(text: String) {
+                val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
+                if (index < 0) return
+                messages[index]["message"] = text
+                adapter?.notifyItemChanged(index)
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - lastSaveUptime >= STREAM_SAVE_INTERVAL_MS) {
+                    lastSaveUptime = now
+                    saveSettingsInBackground()
+                }
+            }
+            override fun replyFinished() {
+                if (attachedReply === run) attachedReply = null
+                val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
+                if (index >= 0) adapter?.notifyItemChanged(index)
+                if (isFinishing || isDestroyed) return
+                setGenerationProgressVisible(false)
+                restoreUIState()
+                calculateCost()
+            }
+        })
+    }
+
+    /**
+     * This screen is closing while a reply it sent is still being received
+     * (Back, another chat, or Android closing the screen). The reply keeps
+     * going in its ReplyRun and saves itself; Stop and a message deletion are
+     * the only things that end it early. Nothing is sent again.
+     */
+    private fun handOffRunningReply() {
+        org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.unwatch(chatId, onReplyHandedOff)
+        attachedReply?.takeIf { !it.ended }?.let { run ->
+            val row = messages.firstOrNull {
+                org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == run.replyRowId
+            }
+            if (row != null) {
+                saveSettings()
+                run.attach(
+                    org.teslasoft.assistant.conversation.reply.DetachedReplyHost(
+                        this, { run.state.chatId }, run.host.model, ArrayList(messages), row,
+                        run.host.lifecycleTurnId(), REPLY_SAVE_DETECTED_DURING
+                    )
+                )
+            }
+            attachedReply = null
+        }
+        val run = currentReplyRun ?: return
+        if (!replyTerminalPending || userRequestedStop || !run.dispatched || run.handedOff || run.ended) return
+        val row = messages.lastOrNull()?.takeIf { it["isBot"] == true } ?: return
+        // The conversation as it stands, including the reply's row, is saved
+        // first; the reply then writes only its own row.
+        saveSettings()
+        run.chatName = chatName
+        run.handOff(
+            org.teslasoft.assistant.conversation.reply.DetachedReplyHost(
+                this, { run.state.chatId }, model, ArrayList(messages), row,
+                currentLifecycleTurnId, REPLY_SAVE_DETECTED_DURING
+            )
+        )
+    }
+
     private val replyRunHost = object : org.teslasoft.assistant.conversation.reply.ReplyRunHost {
         override val model: String get() = this@ChatActivity.model
         override val storageUnavailable: Boolean get() = chatStorageUnavailable
@@ -456,6 +554,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
 
     companion object {
+        /** What a damaged chat is labeled with when a reply saving with no
+         *  screen open finds it damaged (an existing label). */
+        private val REPLY_SAVE_DETECTED_DURING =
+            org.teslasoft.assistant.preferences.damaged.DamagedChatOperation.OPENING_A_CHAT
+
         /** Time between steps of the compaction pop-up's looping dots. */
         private const val COMPACTION_DOTS_STEP_MS = 450L
         /** Set by the launcher gate on the blank chat it opens at app start. */
@@ -1125,8 +1228,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // When a session ends "by itself", this line is the evidence.
                 logVoiceEventAlways("Hang Up received from the notification action " +
                         "(the notification button, a paired device, or an app with notification access) — stopping everything")
-                cancelAllAiActivity("notification Hang Up action")
-                restoreUIState()
+                cancelAllAiActivity("notification Hang Up action", keepSentReply = true)
+                // A reply still being received keeps the screen busy (Stop stays
+                // available) until it ends; the reply's own ending restores it.
+                if (!sentReplyRunning()) restoreUIState()
             } }
         }
     }
@@ -1175,6 +1280,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val deferredRequestImageDeletes = LinkedHashMap<String, ChatInclude>()
     private val protectedRequestPdfHashes = HashSet<String>()
     private val deferredRequestPdfDeletes = LinkedHashMap<String, ChatInclude>()
+
+    /** Ends the voice side of a conversation (listening, transcription and
+     *  readback) without stopping the reply being received; that reply finishes,
+     *  is saved and is not read aloud. */
+    private fun endVoiceKeepingReply() {
+        replyReadbackEnded = true
+        sttGate.cancel()
+        whisperScope?.coroutineContext?.cancel(CancellationException("Voice ended"))
+        whisperPreloadScope?.coroutineContext?.cancel(CancellationException("Voice ended"))
+        speechSelectionGate.cancel()
+        apiReadback?.stop()
+        speakScope?.coroutineContext?.cancel(CancellationException("Voice ended"))
+        handsFreeStopped = true
+        handsFreeReadbackExpected = false
+        handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeSubmitRunnable = null
+        handsFreeBuffer = ""
+    }
 
     private fun killAllProcesses() {
         onSpeechResultsScope?.coroutineContext?.cancel(CancellationException("Killed"))
@@ -3059,7 +3182,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         // A regeneration the app closed during: put the removed reply back,
         // or fold the new reply into its versions, then forget it.
-        if (ChatStorageHealth.isAuthoritative(historyResult.state)) {
+        if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
+            org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(preparedChatId)?.ended != false
+        ) {
             recoverPendingRegeneration(preparedPreferences, chatPreferences, preparedChatId, historyResult.messages)
         }
         // Copy the usage already stored in messages into the chat's usage log
@@ -3399,6 +3524,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Compacting continues without the screen; only its dialog closes.
         compactionDialog?.dismiss()
         compactionDialog = null
+        // A reply already sent keeps going and is saved (ReplyRun.handOff);
+        // everything below then stops only this screen's own work.
+        handOffRunningReply()
         killAllProcesses()
         stopHandsFreeService("chat screen destroyed")
 
@@ -3502,7 +3630,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // to "interrupted" once so it can't masquerade as a finished reply,
             // and persist. Idempotent; the partial text is untouched.
             var reconciledStreaming = false
+            // A reply still being received (with no screen) keeps its row as is.
+            val liveReplyRowId = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(chatId)
+                ?.takeIf { !it.ended }?.replyRowId.orEmpty()
             for (message: HashMap<String, Any> in messages) {
+                if (liveReplyRowId.isNotBlank() &&
+                    org.teslasoft.assistant.preferences.MessageIdentity.idOf(message) == liveReplyRowId
+                ) continue
                 if (message.containsKey(org.teslasoft.assistant.conversation.responsegroups.ResponseGroupCodec.KEY)) {
                     if (org.teslasoft.assistant.conversation.responsegroups.ResponseGroupRecovery.reconcile(message)) reconciledStreaming = true
                     continue
@@ -3570,6 +3704,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // The chat UI now exists, so a missing/absent configuration can be
             // surfaced (a dialog + Summoning Circle, or the API Endpoints screen).
             handleProviderRestoreOutcome()
+            attachToRunningReply()
         }
     }
 
@@ -10462,7 +10597,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun stopHandsFreeByUser() {
         voiceLogGroup.run {
             logVoiceEvent("hands-free stopped (conversation button)")
-            cancelAllAiActivity("conversation button tap (stop hands-free)")
+            cancelAllAiActivity("conversation button tap (stop hands-free)", keepSentReply = true)
         }
     }
 
@@ -10504,10 +10639,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  (impossible with the screen off) and the notification Hang Up
      *  PendingIntent — which any paired device or app with notification access
      *  can fire without a human tap. */
-    private fun cancelAllAiActivity(source: String) =
-        voiceLogGroup.run { cancelAllAiActivityGrouped(source) }
+    private fun cancelAllAiActivity(source: String, keepSentReply: Boolean = false) =
+        voiceLogGroup.run { cancelAllAiActivityGrouped(source, keepSentReply) }
 
-    private fun cancelAllAiActivityGrouped(source: String) {
+    /** A reply has been sent to the provider and has not ended. */
+    private fun sentReplyRunning(): Boolean =
+        (replyTerminalPending && !userRequestedStop && currentReplyRun?.dispatched == true &&
+            currentReplyRun?.ended != true) || attachedReply?.ended == false
+
+    /** Silences readback for the rest of the current reply (voice was ended). */
+    private var replyReadbackEnded = false
+
+    private fun cancelAllAiActivityGrouped(source: String, keepSentReply: Boolean = false) {
+        // Hang Up and turning hands-free off end the voice conversation; a
+        // reply already sent keeps going and is saved, silently (no readback).
+        val keepReply = keepSentReply && sentReplyRunning()
         parallelChat.stopAll()
         logVoiceEvent("all AI activity cancelled ($source)")
         cancelState = true
@@ -10515,7 +10661,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // spinner, notification Hang Up, mic tap, conversation button). Mark the
         // current generation's cancellation as user-initiated so it is treated
         // as a benign stop, not an app/lifecycle or unknown interruption.
-        userRequestedStop = true
+        if (!keepReply) userRequestedStop = true
         // Stop is a deliberate user cancel, so it DOES end a running image
         // generation (unlike leaving the screen, which lets it finish).
         if (chatId != "") ImageGenerationJobRegistry.cancel(chatId)
@@ -10534,7 +10680,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // the same path as the progress-spinner cancel always has (each launch
         // site catches CancellationException and restores the UI; the
         // generateResponse finally releases the foreground service).
-        killAllProcesses()
+        if (keepReply) {
+            endVoiceKeepingReply()
+        } else {
+            attachedReply?.stopByUser()
+            killAllProcesses()
+        }
         stopReadback()
         try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
         // A whisper-local capture holds the device mic (and the OS privacy
@@ -11657,6 +11808,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // This reply's own bookkeeping and provider requests.
         val run = newReplyRun()
         currentReplyRun = run
+        replyReadbackEnded = false
+        // Known from the start, so a screen opening this chat meanwhile leaves
+        // the reply's row alone (ReplyRunRegistry).
+        org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.register(chatId, run)
 
         // Silent retry point: any completed image still missing its summary
         // gets one before this turn's history is projected to the model.
@@ -11949,6 +12104,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // Reference counted, so a retired reply still releases its own hold
             // (a handed-off reply holds the service itself until it is saved).
             GenerationForegroundService.end(this)
+            if (!run.handedOff) {
+                org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.unregister(run.state.chatId, run)
+            }
             // A message deletion that retired this reply already did the rest;
             // a handed-off reply records its own turn when it ends.
             if (!turnFence.isStale() && !run.handedOff) {
@@ -13507,6 +13665,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun pronounce(st: Boolean, message: String) {
+        // Voice was ended (Hang Up, hands-free off) while this reply was received.
+        if (replyReadbackEnded) return
         val handsFree = preferences?.getHandsFreeMode() == true
         // Hands-free is a spoken conversation: it must read the reply back (that
         // completion is also what re-arms the mic) regardless of the Always-speak
@@ -14430,6 +14590,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * conversation, the composer and the next turn's state.
      */
     private fun retireRunningWorkForDeletion() {
+        attachedReply?.stopByUser()
         parallelChat.abandonForDeletion()
         val generationJobs = listOfNotNull(
             parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),

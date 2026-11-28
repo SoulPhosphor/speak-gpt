@@ -95,6 +95,8 @@ internal interface ReplyRunHost {
     fun replyUpdated(text: String)
     /** The reply's ending was written. Main thread. */
     fun replyFinished()
+    /** Another host took over this reply: stop saving it. Main thread. */
+    fun released() {}
 }
 
 /**
@@ -980,11 +982,21 @@ internal class ReplyRun(
         kotlinx.coroutines.MainScope().launch(fence.element()) { finishOnOwn() }
     }
 
-    /** A reopened chat screen shows this reply and becomes its host. Main thread. */
-    fun attach(screen: ReplyRunHost) {
-        host = screen
-        screen.replyUpdated(text)
+    /**
+     * A new host takes over this reply: a reopened chat screen, or a detached
+     * host when that screen closes again. The previous host stops saving.
+     * Main thread.
+     */
+    fun attach(next: ReplyRunHost) {
+        val previous = host
+        host = next
+        previous.released()
+        next.replyUpdated(text)
     }
+
+    /** The permanent ID of the reply's row, or blank. */
+    val replyRowId: String
+        get() = host.lastRow()?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }.orEmpty()
 
     /** Stop: the request ends now; the text received so far is kept as stopped. */
     fun stopByUser() {

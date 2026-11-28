@@ -115,6 +115,10 @@ internal class DetachedReplyHost(
 
     override fun replyFinished() {}
 
+    override fun released() {
+        synchronized(saveLock) { stopped = true }
+    }
+
     /** Saves a copy of the row as it is now; a save already running saves again after. */
     override fun saveInBackground() {
         val snapshot: Map<String, Any>
@@ -131,6 +135,10 @@ internal class DetachedReplyHost(
         var snapshot = first
         var delayMs = FIRST_RETRY_MS
         while (true) {
+            if (synchronized(saveLock) { stopped }) {
+                synchronized(saveLock) { saving = false }
+                return
+            }
             when (ReplyRowWriter.write(app, chatId(), snapshot, detectedDuring)) {
                 ReplyRowWriter.Outcome.ROW_GONE, ReplyRowWriter.Outcome.CHAT_GONE -> {
                     synchronized(saveLock) { stopped = true; saving = false }

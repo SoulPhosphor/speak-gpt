@@ -27,9 +27,29 @@ internal object ReplyRunRegistry {
     private val lock = Any()
     private val runs = HashMap<String, ReplyRun>()
     private val deleted = HashSet<String>()
+    private val screens = HashMap<String, (ReplyRun) -> Unit>()
 
-    /** Records [run] as [chatId]'s reply in progress. */
-    fun register(chatId: String, run: ReplyRun) = synchronized(lock) { runs[chatId] = run }
+    /** Records [run] as [chatId]'s reply in progress. When it was handed off
+     *  (its screen closed) and that chat is open in another screen, that
+     *  screen is told, so it shows and saves the reply. Main thread. */
+    fun register(chatId: String, run: ReplyRun) {
+        val screen = synchronized(lock) {
+            runs[chatId] = run
+            if (run.handedOff) screens[chatId] else null
+        }
+        screen?.invoke(run)
+    }
+
+    /** [onHandedOff] runs when a reply for [chatId] is handed off while this
+     *  screen shows that chat. Main thread. */
+    fun watch(chatId: String, onHandedOff: (ReplyRun) -> Unit) = synchronized(lock) {
+        screens[chatId] = onHandedOff
+    }
+
+    /** Stops [onHandedOff] being told, when it is still the one watching [chatId]. */
+    fun unwatch(chatId: String, onHandedOff: (ReplyRun) -> Unit) = synchronized(lock) {
+        if (screens[chatId] === onHandedOff) screens.remove(chatId)
+    }
 
     /** Removes [run] when it is still [chatId]'s reply in progress. */
     fun unregister(chatId: String, run: ReplyRun) = synchronized(lock) {
@@ -57,8 +77,10 @@ internal object ReplyRunRegistry {
         synchronized(lock) {
             runs.remove(oldId)?.let { run ->
                 runs[newId] = run
-                run.state.chatId = newId
+                // A run still shown by its own screen follows the screen's rename.
+                if (run.handedOff) run.state.chatId = newId
             }
+            screens.remove(oldId)?.let { screens[newId] = it }
         }
     }
 
