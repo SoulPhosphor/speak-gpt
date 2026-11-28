@@ -131,19 +131,23 @@ class ReplyHandOffInstrumentedTest {
     }
 
     /** Reads the relay as a screen would, then closes: hands off, stops reading. */
-    private suspend fun readThenClose(f: Fixture, source: Flow<String>, until: String) {
+    private suspend fun readThenClose(f: Fixture, source: Flow<String>, until: String, owner: ReplyRunHost? = null) {
         val received = CompletableDeferred<Unit>()
         val reader = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
             f.run.relay(source) { piece(it).also { received.complete(Unit) } }.collect { }
         }
         withTimeout(10_000) { received.await(); while (f.run.text != until) delay(10) }
         withContext(Dispatchers.Main) {
-            f.run.handOff(DetachedReplyHost(context, { f.chatId }, "model-x", ArrayList(f.rows), f.rows.last(), "T-test", label, f.run::ownsRow))
+            f.run.handOff(owner ?: DetachedReplyHost(context, { f.chatId }, "model-x", ArrayList(f.rows), f.rows.last(), "T-test", label, f.run::ownsRow))
             reader.cancel()
         }
     }
 
-    private suspend fun awaitEnded(run: ReplyRun) = withTimeout(20_000) { while (!run.ended) delay(20) }
+    private suspend fun awaitEnded(run: ReplyRun) = withTimeout(20_000) {
+        while (!run.ended) delay(20)
+        // Completion publishes to screens on main in the same turn.
+        withContext(Dispatchers.Main) { }
+    }
 
     @Test fun theRowWriterChangesOnlyItsOwnRowAndStopsForAGoneRowOrChat() {
         val chatId = newChat()
@@ -270,6 +274,34 @@ class ReplyHandOffInstrumentedTest {
         awaitEnded(f.run)
         assertEquals(MessageCompletionState.STOPPED, replacement.last()[MessageCompletionState.KEY_STATE])
         assertEquals(MessageCompletionState.STREAMING, older.last()[MessageCompletionState.KEY_STATE])
+    }
+
+    @Test fun aReplyRemainsRegisteredUntilStorageAcknowledgesTheFinalTransaction() = runBlocking {
+        val f = fixture()
+        val finish = CompletableDeferred<Unit>()
+        val awaitingCommit = CompletableDeferred<Unit>()
+        val acknowledgeCommit = CompletableDeferred<Unit>()
+        val durable = DetachedReplyHost(context, { f.chatId }, "model-x", f.rows, f.rows.last(), "T-test", label, f.run::ownsRow)
+        val delayedAcknowledgment = object : ReplyRunHost by durable {
+            override suspend fun awaitSaved() {
+                durable.awaitSaved()
+                awaitingCommit.complete(Unit)
+                acknowledgeCommit.await()
+            }
+        }
+        readThenClose(f, flow { emit("Answer"); finish.await() }, "Answer", delayedAcknowledgment)
+        finish.complete(Unit)
+        withTimeout(10_000) { awaitingCommit.await() }
+        val loaded = stored(f.chatId)
+        withContext(Dispatchers.Main) {
+            f.run.attach(observe(f, loaded))
+            assertFalse(f.run.ended)
+            assertTrue(ReplyRunRegistry.active(f.chatId) === f.run)
+            acknowledgeCommit.complete(Unit)
+        }
+        awaitEnded(f.run)
+        assertEquals(null, ReplyRunRegistry.active(f.chatId))
+        assertEquals(MessageCompletionState.DONE, loaded.last()[MessageCompletionState.KEY_STATE])
     }
 
     @Test fun reopeningDuringFailedAccountingKeepsFailureDetailsAndReportedUsage() = runBlocking {
