@@ -555,61 +555,43 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (rowId.isBlank() || messages.none { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }) return
         attachedReply = run
         takeOverRegenerationOf(rowId)
-        val previous = run.host
-        val turnId = previous.lifecycleTurnId()
-        val replyModel = previous.model
         disableTurnControlsUnlessTheyAreStops()
         setGenerationProgressVisible(true)
         progress?.setOnClickListener { run.stopByUser() }
+        // This adapter is a display subscription only. ReplyRun keeps its original
+        // row objects and its single persistence owner through final bookkeeping.
         run.attach(object : org.teslasoft.assistant.conversation.reply.ReplyRunHost {
-            private var lastSaveUptime = 0L
-            override val model: String get() = replyModel
+            override val model: String get() = run.host.model
             override val storageUnavailable: Boolean get() = chatStorageUnavailable
             override fun conversationSnapshot(): List<Map<String, Any>> = messages
-            override fun lastRow(): HashMap<String, Any>? =
-                messages.firstOrNull { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
-            override fun containsRow(row: Map<String, Any>?): Boolean = row != null && messages.any { it === row }
-            override fun saveInBackground() = saveSettingsInBackground()
-            override fun usageCarrier(): HashMap<String, Any>? = lastRow()
-            override fun lifecycleTurnId(): String = turnId
-            override fun replyUpdated(text: String) {
-                val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
-                if (index < 0) return
-                messages[index]["message"] = text
-                adapter?.notifyItemChanged(index)
-                val now = android.os.SystemClock.uptimeMillis()
-                if (now - lastSaveUptime >= STREAM_SAVE_INTERVAL_MS) {
-                    lastSaveUptime = now
-                    saveSettingsInBackground()
-                }
+            override fun lastRow(): HashMap<String, Any>? = messages.firstOrNull {
+                org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId
             }
-            override fun saveRow(row: HashMap<String, Any>) = saveSettingsInBackground()
-            override fun removeRow(row: HashMap<String, Any>) {
-                val index = messages.indexOfFirst { it === row }
-                if (index < 0) return
-                messages.removeAt(index)
-                adapter?.notifyItemRemoved(index)
-                selectionMode.rebuild(messages)
-                saveSettingsInBackground()
+            override fun containsRow(row: Map<String, Any>?): Boolean = row != null && messages.any { it === row }
+            override fun usageCarrier(): HashMap<String, Any>? = lastRow()
+            override fun lifecycleTurnId(): String = run.host.lifecycleTurnId()
+            override fun saveInBackground() {}
+            override fun saveRow(row: HashMap<String, Any>) {}
+            override fun removeRow(row: HashMap<String, Any>) {}
+            override fun replyUpdated(text: String) {
+                if (attachedReply !== run || isFinishing || isDestroyed) return
+                run.reconcileInto(messages)
+                adapter?.notifyDataSetChanged()
             }
             override fun reasoningObserved(
                 observation: ReasoningObservationContext,
                 learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
-            ) = deliverObservedReasoning(observation, learnedCapability)
+            ) = replyUpdated(run.text)
             override fun replyFinished() {
-                // A message deletion let go of this reply: it has settled the
-                // turn and the next one may already be running.
-                val stillAttached = attachedReply === run
-                if (stillAttached) attachedReply = null
-                val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
-                if (index >= 0) adapter?.notifyItemChanged(index)
-                if (!stillAttached || isFinishing || isDestroyed) return
-                // A regeneration this reply belongs to keeps its earlier versions.
+                if (attachedReply !== run || isFinishing || isDestroyed) return
+                run.reconcileInto(messages)
+                attachedReply = null
+                selectionMode.rebuild(messages)
+                adapter?.notifyDataSetChanged()
                 settlePendingRegeneration()
                 setGenerationProgressVisible(false)
                 restoreUIState()
                 calculateCost()
-                // The reply may have ended asking to create an image.
                 resumeWaitingImageApproval()
             }
         })
@@ -645,24 +627,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun handOffRunningReply() {
         org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.unwatch(chatId, onReplyHandedOff)
-        (attachedReply ?: releasedReply)?.takeIf { !it.ended }?.let { run ->
-            val row = messages.firstOrNull {
-                org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == run.replyRowId
-            }
-            if (row != null) {
-                saveSettings()
-                run.attach(
-                    org.teslasoft.assistant.conversation.reply.DetachedReplyHost(
-                        this, { run.state.chatId }, run.host.model, ArrayList(messages), row,
-                        run.host.lifecycleTurnId(), REPLY_SAVE_DETECTED_DURING
-                    )
-                )
-            }
-            attachedReply = null
-        }
+        (attachedReply ?: releasedReply)?.detachScreen()
+        attachedReply = null
         releasedReply = null
         val run = currentReplyRun ?: return
-        if (!replyTerminalPending || userRequestedStop || run.handedOff || run.ended) return
+        if (run.handedOff || run.ended || run.screenCompletion.isCompleted) return
         // Waiting for an image approval: nothing is being received. The
         // approval stays saved and returns when the chat is opened again.
         if (pendingImageConfirmation != null && currentToolTurn != null) {
@@ -680,12 +649,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // first; the reply then writes only its own row.
         saveSettings()
         run.chatName = chatName
+        if (userRequestedStop) run.stopByUser()
         run.handOff(
             org.teslasoft.assistant.conversation.reply.DetachedReplyHost(
                 this, { run.state.chatId }, model, ArrayList(messages), row,
                 currentLifecycleTurnId, REPLY_SAVE_DETECTED_DURING
-            )
+            ),
+            run.screenCompletion
         )
+        replyJob?.cancel(CancellationException("Reply continued without this screen"))
     }
 
     private val replyRunHost = object : org.teslasoft.assistant.conversation.reply.ReplyRunHost {
@@ -1074,7 +1046,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val pendingConversation: Boolean,
         val conversationMode: ConversationMode,
         /** The reply that was being received with no screen when the history was read. */
-        val replyRunAtRead: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
+        val replyRunAtRead: org.teslasoft.assistant.conversation.reply.ReplyRun? = null,
+        val replyReadStamp: org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.ReadStamp
     )
 
     private data class ChatStartupResult(
@@ -3248,29 +3221,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 val startupResult = startupAttempt.getOrElse { throw it }
 
-                if (startupResult.restoreRecoveryRequired || startupResult.storageLocked) {
-                    ChatDrawerController.retireReplaced(this)
-                }
-
-                if (startupResult.restoreRecoveryRequired) {
-                    startActivity(
-                        Intent(this, MemoryBackupRestoreActivity::class.java)
-                            .setAction(Intent.ACTION_VIEW)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    )
-                    finish()
-                    return@runOnUiThread
-                }
-
-                if (startupResult.storageLocked) {
-                    startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
-                    finish()
-                    return@runOnUiThread
-                }
-
-                initializeChatUi(startupResult.preparedChat!!, savedInstanceState)
+                completeChatStartup(startupResult, savedInstanceState)
             }
         }.start()
+    }
+
+    private fun completeChatStartup(startupResult: ChatStartupResult, savedInstanceState: Bundle?) {
+        if (startupResult.restoreRecoveryRequired || startupResult.storageLocked) {
+            ChatDrawerController.retireReplaced(this)
+        }
+
+        if (startupResult.restoreRecoveryRequired) {
+            startActivity(
+                Intent(this, MemoryBackupRestoreActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            )
+            finish()
+            return
+        }
+
+        if (startupResult.storageLocked) {
+            startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
+            finish()
+            return
+        }
+
+        initializeChatUi(startupResult.preparedChat!!, savedInstanceState)
     }
 
     /**
@@ -3303,8 +3280,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // chat finishes first and never writes while the chat is open.
         DefaultUsernameFill.markOpen(preparedChatId)
         fillOpenChatId = preparedChatId
-        val replyRunAtRead = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(preparedChatId)
-            ?.takeIf { !it.ended }
+        val replyReadStamp = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.capture(preparedChatId)
+        val replyRunAtRead = replyReadStamp.run
         val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId, DamagedChatOperation.OPENING_A_CHAT)
         // Saving the start date reads the whole chat list; once every chat's date
         // has been filled in, there is nothing left to save.
@@ -3332,7 +3309,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Every stored message gets its permanent ID once (MessageIdentity);
         // older chats receive them here, the first time they are opened.
         val fillName = DefaultUsernameFill.activeName(this)
-        if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
+        if (replyRunAtRead == null && ChatStorageHealth.isAuthoritative(historyResult.state) &&
             (LegacyReasoningRepair.repairHistory(historyResult.messages) or
                 org.teslasoft.assistant.preferences.MessageIdentity.ensure(historyResult.messages) or
                 // Messages saved before permanent numbers existed receive
@@ -3353,8 +3330,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         // A regeneration the app closed during: put the removed reply back,
         // or fold the new reply into its versions, then forget it.
-        if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
-            org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(preparedChatId)?.ended != false
+        if (replyRunAtRead == null && ChatStorageHealth.isAuthoritative(historyResult.state) &&
+            org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.isCurrent(preparedChatId, replyReadStamp)
         ) {
             recoverPendingRegeneration(preparedPreferences, chatPreferences, preparedChatId, historyResult.messages)
         }
@@ -3376,13 +3353,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 historyResult,
                 preparedPending,
                 preparedMode,
-                replyRunAtRead
+                replyRunAtRead,
+                replyReadStamp
             )
         )
     }
 
     /** Build the chat screen only after its encrypted startup data is ready. */
     private fun initializeChatUi(prepared: PreparedChatStartup, savedInstanceState: Bundle?) {
+        if (!org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.isCurrent(prepared.chatId, prepared.replyReadStamp)) {
+            // A reply finished while startup was reading. Reload the complete
+            // transaction (including carrier updates and removals), never one row.
+            Thread {
+                val retry = runCatching { prepareChatStartup() }
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) completeChatStartup(retry.getOrElse { throw it }, savedInstanceState)
+                }
+            }.start()
+            return
+        }
         chatId = prepared.chatId
         // Opening a chat screen starts every Summarizer prompt from its
         // collection's default. A Quick Settings rebuild of this same screen
@@ -3496,7 +3485,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
         val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
 
-        initSettings(prepared.historyResult, prepared.replyRunAtRead)
+        initSettings(prepared.historyResult, prepared.replyRunAtRead, prepared.replyReadStamp)
 
         // The Activity window may already be attached because startup storage
         // now loads on a worker. Apply insets explicitly once the chat views
@@ -3742,12 +3731,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val appContext = applicationContext
         val currentChatId = chatId
         Thread {
-            val replyRunAtRead = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(currentChatId)
-                ?.takeIf { !it.ended }
+            val readStamp = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.capture(currentChatId)
+            val replyRunAtRead = readStamp.run
             val historyResult = ChatPreferences.getChatPreferences()
                 .getChatByIdResult(appContext, currentChatId, DamagedChatOperation.OPENING_A_CHAT)
             runOnUiThread {
-                if (!isFinishing && !isDestroyed) initSettings(historyResult, replyRunAtRead)
+                if (!isFinishing && !isDestroyed) initSettings(historyResult, replyRunAtRead, readStamp)
             }
         }.start()
     }
@@ -3755,8 +3744,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @Suppress("unchecked")
     private fun initSettings(
         historyResult: ChatPreferences.ChatHistoryResult,
-        replyRunAtRead: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
+        replyRunAtRead: org.teslasoft.assistant.conversation.reply.ReplyRun? = null,
+        readStamp: org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.ReadStamp? = null
     ) {
+        if (readStamp != null && !org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.isCurrent(chatId, readStamp)) {
+            initSettings()
+            return
+        }
         // Brand-new chat: adopt the provider/model/routing the last conversation
         // successfully used, before the endpoint/key below are read. Updates
         // apiEndpointObject when it restores; otherwise records what the UI must
@@ -3807,16 +3801,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // to "interrupted" once so it can't masquerade as a finished reply,
             // and persist. Idempotent; the partial text is untouched.
             var reconciledStreaming = false
-            // A reply that was still being received when the history was read
-            // and has finished since: its finished row replaces the copy read
-            // before it ended, so the finished reply is never saved over.
-            replyRunAtRead?.takeIf { it.ended && it.state.chatId == chatId }
-                ?.let { run -> run.host.lastRow()?.let { HashMap(it) } }
-                ?.let { finished ->
-                    val id = org.teslasoft.assistant.preferences.MessageIdentity.idOf(finished)
-                    val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == id }
-                    if (id.isNotBlank() && index >= 0) messages[index] = finished
-                }
             // A reply still being received (with no screen) keeps its row as is.
             val liveReplyRowId = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(chatId)
                 ?.takeIf { !it.ended }?.replyRowId.orEmpty()
@@ -8846,6 +8830,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         bookmarkChanged: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
         if (deletingChat) return ChatStorageHealth.WriteOutcome.FAILED
+        if (currentReplyRun?.handedOff == true) return ChatStorageHealth.WriteOutcome.OK
+        attachedReply?.reconcileInto(messages)
         // A message deletion is settling the conversation; its one background
         // save, made right after, includes every change made meanwhile.
         if (holdSavesForDeletion) return ChatStorageHealth.WriteOutcome.OK
@@ -8901,7 +8887,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * that save, or a newer one, succeeds. Used by message deletion.
      */
     private fun saveSettingsInBackground() {
-        if (deletingChat || chatStorageUnavailable || chatId.isBlank()) return
+        if (deletingChat || chatStorageUnavailable || chatId.isBlank() || currentReplyRun?.handedOff == true) return
+        attachedReply?.reconcileInto(messages)
         val chatPreferences = ChatPreferences.getChatPreferences()
         // IDs and numbers are given to the live rows, so the snapshot and the
         // screen agree on them.
@@ -9551,7 +9538,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         globalPreferences: Preferences,
         shouldPronounce: Boolean
     ): Boolean {
-        if (!globalPreferences.getAskBeforeAiImages()) return true
+        if (!globalPreferences.getAskBeforeAiImages() &&
+            preferences?.getPendingImageApproval().isNullOrBlank()) return true
         val decision = CompletableDeferred<Boolean>()
         pendingImageConfirmation = decision
         saveWaitingImageApproval()
@@ -12286,6 +12274,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // Reference counted, so a retired reply still releases its own hold
             // (a handed-off reply holds the service itself until it is saved).
             GenerationForegroundService.end(this)
+            try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
+            generationNetworkMonitor = null
+            run.screenCompletion.complete(Unit)
             if (!run.handedOff) {
                 org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.unregister(run.state.chatId, run)
             }
@@ -12293,8 +12284,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // a handed-off reply records its own turn when it ends.
             if (!turnFence.isStale() && !run.handedOff) {
                 replyTerminalPending = false
-                try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
-                generationNetworkMonitor = null
                 // Memory system transcript capture: this finally is the one place
                 // every turn (typed or voice, success or failure) passes exactly
                 // once with the user's message still in scope — the same
@@ -14780,6 +14769,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         attachedReply?.let { run ->
             attachedReply = null
             releasedReply = run
+            run.detachScreen()
             run.stopByUser()
         }
         parallelChat.abandonForDeletion()

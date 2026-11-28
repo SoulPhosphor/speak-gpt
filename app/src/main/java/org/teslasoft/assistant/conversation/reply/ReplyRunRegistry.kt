@@ -27,6 +27,11 @@ internal object ReplyRunRegistry {
     private val lock = Any()
     private val runs = HashMap<String, ReplyRun>()
     private val deleted = HashSet<String>()
+    private val revisions = HashMap<String, Long>()
+    data class ReadStamp(val revision: Long, val run: ReplyRun?)
+    fun capture(chatId: String): ReadStamp = synchronized(lock) { ReadStamp(revisions[chatId] ?: 0L, runs[chatId]) }
+    fun isCurrent(chatId: String, read: ReadStamp): Boolean = synchronized(lock) { read.revision == (revisions[chatId] ?: 0L) }
+    private fun changed(chatId: String) { revisions[chatId] = (revisions[chatId] ?: 0L) + 1L }
     private val screens = HashMap<String, (ReplyRun) -> Unit>()
 
     /** Records [run] as [chatId]'s reply in progress. When it was handed off
@@ -34,6 +39,7 @@ internal object ReplyRunRegistry {
      *  screen is told, so it shows and saves the reply. Main thread. */
     fun register(chatId: String, run: ReplyRun) {
         val screen = synchronized(lock) {
+            if (runs[chatId] !== run) changed(chatId)
             runs[chatId] = run
             if (run.handedOff) screens[chatId] else null
         }
@@ -53,7 +59,7 @@ internal object ReplyRunRegistry {
 
     /** Removes [run] when it is still [chatId]'s reply in progress. */
     fun unregister(chatId: String, run: ReplyRun) = synchronized(lock) {
-        if (runs[chatId] === run) runs.remove(chatId)
+        if (runs[chatId] === run) { runs.remove(chatId); changed(chatId) }
     }
 
     /** [chatId]'s reply in progress, or null. */
@@ -66,6 +72,7 @@ internal object ReplyRunRegistry {
     fun markChatsDeleted(chatIds: Set<String>) {
         val stopped = synchronized(lock) {
             deleted.addAll(chatIds)
+            chatIds.forEach { changed(it); PendingToolTurns.forget(it) }
             chatIds.mapNotNull { runs.remove(it) }
         }
         stopped.forEach { it.retire() }
@@ -75,6 +82,9 @@ internal object ReplyRunRegistry {
     fun rename(oldId: String, newId: String) {
         if (oldId == newId) return
         synchronized(lock) {
+            changed(oldId)
+            changed(newId)
+            PendingToolTurns.rename(oldId, newId)
             runs.remove(oldId)?.let { run ->
                 runs[newId] = run
                 // A run still shown by its own screen follows the screen's rename.
@@ -86,7 +96,11 @@ internal object ReplyRunRegistry {
 
     /** The whole chat set was replaced (a restore): every reply stops and writes nothing more. */
     fun discardAll() {
-        val stopped = synchronized(lock) { runs.values.toList().also { runs.clear() } }
+        val stopped = synchronized(lock) {
+            runs.keys.forEach(::changed)
+            PendingToolTurns.clear()
+            runs.values.toList().also { runs.clear() }
+        }
         stopped.forEach { it.retire() }
     }
 }

@@ -21,97 +21,72 @@ import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.teslasoft.assistant.preferences.ChatHistoryWriteOrder
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageIdentity
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 
-/**
- * Writes one reply's row into its stored chat, by the row's permanent ID,
- * without touching any other row. The read, the change and the write happen
- * under the chat history lock as one ordered save, so it never replaces a
- * newer save, never writes a deleted chat and never writes over a chat whose
- * storage is locked or damaged.
- */
+/** An immutable transaction: update the reply and its usage carrier, and/or remove
+ * the empty reply, together. It never replaces an unrelated conversation row. */
+internal data class ReplyEdits(
+    val rows: List<HashMap<String, Any>>,
+    val removed: Set<String> = emptySet()
+) {
+    fun mergeInto(history: MutableList<HashMap<String, Any>>) {
+        history.removeAll { MessageIdentity.idOf(it) in removed }
+        for (row in rows) {
+            val index = history.indexOfFirst { MessageIdentity.idOf(it) == MessageIdentity.idOf(row) }
+            if (index >= 0) history[index] = HashMap(row)
+        }
+    }
+}
+
 internal object ReplyRowWriter {
     enum class Outcome { SAVED, ROW_GONE, CHAT_GONE, NOT_SAVED }
 
-    fun write(
-        context: Context,
-        chatId: String,
-        row: Map<String, Any>,
-        detectedDuring: DamagedChatOperation
+    fun write(context: Context, chatId: String, row: Map<String, Any>, detectedDuring: DamagedChatOperation): Outcome =
+        apply(context, chatId, ReplyEdits(ChatHistoryWriteOrder.snapshotOf(listOf(row))), detectedDuring)
+
+    fun remove(context: Context, chatId: String, rowId: String, detectedDuring: DamagedChatOperation): Boolean =
+        apply(context, chatId, ReplyEdits(emptyList(), setOf(rowId)), detectedDuring) in
+            setOf(Outcome.SAVED, Outcome.ROW_GONE, Outcome.CHAT_GONE)
+
+    fun apply(
+        context: Context, chatId: String, edits: ReplyEdits,
+        detectedDuring: DamagedChatOperation, wanted: () -> Boolean = { true }
     ): Outcome {
+        if (chatId.isBlank()) return Outcome.CHAT_GONE
         val app = context.applicationContext
-        val rowId = MessageIdentity.idOf(row)
-        if (rowId.isBlank() || chatId.isBlank()) return Outcome.ROW_GONE
         val order = ChatHistoryWriteOrder.shared
         var outcome = Outcome.NOT_SAVED
         val seq = order.claim(chatId)
-        val written = order.writeIfNewest(chatId, seq, { it == ChatStorageHealth.WriteOutcome.OK }) {
+        val written = order.writeIfNewest(chatId, seq, { it == ChatStorageHealth.WriteOutcome.OK }, stillWanted = wanted) {
             if (ReplyRunRegistry.isDeleted(chatId)) {
                 outcome = Outcome.CHAT_GONE
                 return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
             }
-            // A whole-history save of this chat that has not landed yet (for
-            // example a confirmed deletion) is newer than storage: wait for it
-            // and retry, never write a change of the older stored copy over it.
             if (order.hasPending(chatId)) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
             val chats = ChatPreferences.getChatPreferences()
             val stored = chats.getChatByIdResult(app, chatId, detectedDuring)
             if (!ChatStorageHealth.isAuthoritative(stored.state)) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
-            val history = stored.messages
-            val index = history.indexOfFirst { MessageIdentity.idOf(it) == rowId }
-            if (index < 0) {
+            if (edits.rows.isNotEmpty() && edits.rows.none { update -> stored.messages.any { MessageIdentity.idOf(it) == MessageIdentity.idOf(update) } }) {
                 outcome = Outcome.ROW_GONE
                 return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
             }
-            history[index] = ChatHistoryWriteOrder.snapshotOf(listOf(row)).first()
-            chats.saveChatHistory(app, chatId, history, synchronous = true)
+            // A deletion queued during the read takes priority. Retry its newer history.
+            if (!order.isLatestClaim(chatId, seq) || !wanted()) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
+            edits.mergeInto(stored.messages)
+            chats.saveChatHistory(app, chatId, stored.messages, synchronous = true)
         }
         if (written == ChatStorageHealth.WriteOutcome.OK) outcome = Outcome.SAVED
         return outcome
     }
-
-    /** Removes the stored row with [rowId]; true when it is gone afterwards. */
-    fun remove(context: Context, chatId: String, rowId: String, detectedDuring: DamagedChatOperation): Boolean {
-        val app = context.applicationContext
-        if (rowId.isBlank() || chatId.isBlank()) return true
-        val order = ChatHistoryWriteOrder.shared
-        var gone = false
-        val seq = order.claim(chatId)
-        val written = order.writeIfNewest(chatId, seq, { it == ChatStorageHealth.WriteOutcome.OK }) {
-            if (ReplyRunRegistry.isDeleted(chatId)) {
-                gone = true
-                return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
-            }
-            if (order.hasPending(chatId)) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
-            val chats = ChatPreferences.getChatPreferences()
-            val stored = chats.getChatByIdResult(app, chatId, detectedDuring)
-            if (!ChatStorageHealth.isAuthoritative(stored.state)) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
-            val history = stored.messages
-            val index = history.indexOfFirst { MessageIdentity.idOf(it) == rowId }
-            if (index < 0) {
-                gone = true
-                return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
-            }
-            history.removeAt(index)
-            chats.saveChatHistory(app, chatId, history, synchronous = true)
-        }
-        return gone || written == ChatStorageHealth.WriteOutcome.OK
-    }
 }
 
-/**
- * The host of a reply whose chat screen closed: the conversation as the
- * screen left it, and the reply's own row, which it saves through
- * [ReplyRowWriter] — every couple of seconds while text arrives, and once
- * more at the end, retrying a save storage refused until it lands or the
- * row or chat is gone.
- */
+/** The reply's permanent state/storage owner after its original screen closes.
+ * Reopened screens observe this host; they never replace its rows or writer. All
+ * row mutation/snapshot creation happens on main; IO only sees immutable copies. */
 internal class DetachedReplyHost(
     context: Context,
     private val chatId: () -> String,
@@ -122,111 +97,55 @@ internal class DetachedReplyHost(
     private val detectedDuring: DamagedChatOperation
 ) : ReplyRunHost {
     private val app = context.applicationContext
-    private val saves = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val saveLock = Any()
-    @Volatile private var lastSaveUptime = 0L
-    @Volatile private var saving = false
-    @Volatile private var saveAgain = false
-    @Volatile private var stopped = false
+    private val changed = LinkedHashMap<String, HashMap<String, Any>>()
+    private val removed = LinkedHashSet<String>()
+    private var lastSaveUptime = 0L
+    private val saves = ReplyWriteQueue<ReplyEdits>(CoroutineScope(SupervisorJob() + Dispatchers.IO)) { edits, wanted ->
+        when (ReplyRowWriter.apply(app, chatId(), edits, detectedDuring, wanted)) {
+            ReplyRowWriter.Outcome.SAVED -> ReplyWriteQueue.Result.SAVED
+            ReplyRowWriter.Outcome.NOT_SAVED -> ReplyWriteQueue.Result.RETRY
+            else -> ReplyWriteQueue.Result.GONE
+        }
+    }
 
     override val storageUnavailable: Boolean get() = false
-    override fun conversationSnapshot(): List<Map<String, Any>> = rows
+    override fun conversationSnapshot(): List<Map<String, Any>> = rows.filterNot { MessageIdentity.idOf(it) in removed }
     override fun lastRow(): HashMap<String, Any> = row
-    override fun containsRow(row: Map<String, Any>?): Boolean = row != null && (row === this.row || rows.any { it === row })
+    override fun containsRow(row: Map<String, Any>?): Boolean = row != null &&
+        MessageIdentity.idOf(row) !in removed && rows.any { it === row }
     override fun usageCarrier(): HashMap<String, Any> = row
     override fun lifecycleTurnId(): String = turnId
-
-    override fun replyUpdated(text: String) {
-        row["message"] = text
-        val now = SystemClock.uptimeMillis()
-        if (now - lastSaveUptime >= SAVE_INTERVAL_MS) {
-            lastSaveUptime = now
-            saveInBackground()
-        }
-    }
-
     override fun replyFinished() {}
 
-    override fun reasoningObserved(
-        observation: ReasoningObservationContext,
-        learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
-    ) {
-        if (!ObservedReasoning.belongsTo(row, observation)) return
-        if (ObservedReasoning.applyTo(row, observation, learnedCapability)) saveInBackground()
+    override fun replyUpdated(text: String) {
+        if (MessageIdentity.idOf(row) in removed) return
+        row["message"] = text
+        val now = SystemClock.uptimeMillis()
+        if (now - lastSaveUptime >= 2000L) { lastSaveUptime = now; saveInBackground() }
     }
 
-    override fun released() {
-        synchronized(saveLock) { stopped = true }
+    override fun reasoningObserved(observation: ReasoningObservationContext, learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?) {
+        if (MessageIdentity.idOf(row) !in removed && ObservedReasoning.belongsTo(row, observation) &&
+            ObservedReasoning.applyTo(row, observation, learnedCapability)) saveInBackground()
     }
 
+    private fun snapshot(): ReplyEdits {
+        val updates = LinkedHashMap(changed)
+        if (MessageIdentity.idOf(row) !in removed) updates[MessageIdentity.idOf(row)] = row
+        return ReplyEdits(ChatHistoryWriteOrder.snapshotOf(updates.values.toList()), removed.toSet())
+    }
+
+    override fun reconcileInto(history: MutableList<HashMap<String, Any>>) = snapshot().mergeInto(history)
+    override fun saveInBackground() = saves.submit(snapshot())
+    override suspend fun awaitSaved() = saves.awaitSaved()
+    override fun released() = saves.retire()
     override fun saveRow(row: HashMap<String, Any>) {
-        val snapshot = HashMap(row)
-        saves.launch {
-            var delayMs = FIRST_RETRY_MS
-            while (ReplyRowWriter.write(app, chatId(), snapshot, detectedDuring) == ReplyRowWriter.Outcome.NOT_SAVED) {
-                delay(delayMs)
-                delayMs = (delayMs * 2).coerceAtMost(MAX_RETRY_MS)
-            }
-        }
+        changed[MessageIdentity.idOf(row)] = row
+        saveInBackground()
     }
-
     override fun removeRow(row: HashMap<String, Any>) {
-        synchronized(saveLock) { stopped = true }
-        val rowId = MessageIdentity.idOf(row)
-        saves.launch {
-            var delayMs = FIRST_RETRY_MS
-            while (!ReplyRowWriter.remove(app, chatId(), rowId, detectedDuring)) {
-                delay(delayMs)
-                delayMs = (delayMs * 2).coerceAtMost(MAX_RETRY_MS)
-            }
-        }
-    }
-
-    /** Saves a copy of the row as it is now; a save already running saves again after. */
-    override fun saveInBackground() {
-        val snapshot: Map<String, Any>
-        synchronized(saveLock) {
-            if (stopped) return
-            if (saving) { saveAgain = true; return }
-            saving = true
-            snapshot = HashMap(row)
-        }
-        saves.launch { saveWithRetry(snapshot) }
-    }
-
-    private suspend fun saveWithRetry(first: Map<String, Any>) {
-        var snapshot = first
-        var delayMs = FIRST_RETRY_MS
-        while (true) {
-            if (synchronized(saveLock) { stopped }) {
-                synchronized(saveLock) { saving = false }
-                return
-            }
-            when (ReplyRowWriter.write(app, chatId(), snapshot, detectedDuring)) {
-                ReplyRowWriter.Outcome.ROW_GONE, ReplyRowWriter.Outcome.CHAT_GONE -> {
-                    synchronized(saveLock) { stopped = true; saving = false }
-                    return
-                }
-                ReplyRowWriter.Outcome.SAVED -> {
-                    val again = synchronized(saveLock) {
-                        if (saveAgain) { saveAgain = false; HashMap(row) } else { saving = false; null }
-                    } ?: return
-                    snapshot = again
-                    delayMs = FIRST_RETRY_MS
-                }
-                ReplyRowWriter.Outcome.NOT_SAVED -> {
-                    delay(delayMs)
-                    delayMs = (delayMs * 2).coerceAtMost(MAX_RETRY_MS)
-                    // Retry with the newest text.
-                    snapshot = synchronized(saveLock) { saveAgain = false; HashMap(row) }
-                }
-            }
-        }
-    }
-
-    private companion object {
-        const val SAVE_INTERVAL_MS = 2000L
-        const val FIRST_RETRY_MS = 250L
-        const val MAX_RETRY_MS = 30_000L
+        removed.add(MessageIdentity.idOf(row))
+        changed.remove(MessageIdentity.idOf(row))
+        saveInBackground()
     }
 }

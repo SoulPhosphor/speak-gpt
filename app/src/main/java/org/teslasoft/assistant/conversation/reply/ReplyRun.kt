@@ -87,6 +87,8 @@ internal interface ReplyRunHost {
     fun containsRow(row: Map<String, Any>?): Boolean
     /** Saves the conversation without making the caller wait. */
     fun saveInBackground()
+    suspend fun awaitSaved() {}
+    fun reconcileInto(history: MutableList<HashMap<String, Any>>) {}
     /** The row a reply's usage is recorded on, chosen before anything waits. */
     fun usageCarrier(): HashMap<String, Any>?
     /** The id shared by this turn's requests in the Response Lifecycle Log. */
@@ -123,6 +125,21 @@ internal class ReplyRun(
 ) {
     /** Runs the price lookups for this reply's requests: the reply's own scope, never a screen's. */
     private val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+    /** The original screen signals after all its cancellation-safe accounting ends. */
+    val screenCompletion = CompletableDeferred<Unit>()
+    private var screenObserver: ReplyRunHost? = null
+    private var recordedFailure: FailureRecord? = null
+
+    fun reconcileInto(history: MutableList<HashMap<String, Any>>) = host.reconcileInto(history)
+
+    /** Detach only the display. The same reply state and persistence owner stay alive. */
+    fun detachScreen() { screenObserver = null }
+
+    private fun publishText(value: String) {
+        host.replyUpdated(value)
+        screenObserver?.replyUpdated(value)
+    }
 
     private val app: Context = context.applicationContext
 
@@ -811,6 +828,7 @@ internal class ReplyRun(
         e: Throwable,
         logError: (org.teslasoft.assistant.util.GenErrorResult, ProviderDiagnosticSnapshot?) -> Unit
     ): FailureRecord {
+        recordedFailure?.let { return it }
         val evidenceOwner =
             (e as? org.teslasoft.assistant.preferences.ProviderStreamTerminalException)?.attempt
                 ?: (e as? GenerationAttemptFailureException)?.attempt
@@ -849,6 +867,8 @@ internal class ReplyRun(
                 providerEvidence = providerEvidence,
                 requestedRoutedProvider = requestedRoutedProvider
             )
+
+        recordedFailure = FailureRecord(genError, response, providerEvidence)
 
         // Lifecycle: an errored reply is Incomplete. The termination source
         // separates a provider error (the server answered with an error)
@@ -984,7 +1004,7 @@ internal class ReplyRun(
      * reply keeps receiving, saves itself through [detached] and finishes on
      * its own; a reopened chat screen reconnects with [attach].
      */
-    fun handOff(detached: ReplyRunHost) {
+    fun handOff(detached: ReplyRunHost, screenReleased: Deferred<Unit>? = null) {
         if (handedOff || ended) return
         handedOff = true
         host = detached
@@ -993,32 +1013,13 @@ internal class ReplyRun(
         org.teslasoft.assistant.service.GenerationForegroundService.begin(app, state.chatId, chatName)
         ReplyRunRegistry.register(state.chatId, this)
         // Carries the reply's deletion fence, so a deletion that retired it is still seen.
-        kotlinx.coroutines.MainScope().launch(fence.element()) { finishOnOwn() }
+        kotlinx.coroutines.MainScope().launch(fence.element()) { finishOnOwn(screenReleased) }
     }
 
-    /**
-     * A new host takes over this reply: a reopened chat screen, or a detached
-     * host when that screen closes again. The previous host stops saving.
-     * Main thread.
-     */
+    /** Attach a display without transferring the authoritative rows or writer. */
     fun attach(next: ReplyRunHost) {
-        val previous = host
-        host = next
-        previous.released()
+        screenObserver = next
         next.replyUpdated(text)
-    }
-
-    /**
-     * The reply's row as its current host has it, carrying what was written
-     * to [row] while finishing waited (a screen may have reconnected, with
-     * its own copy, during that wait). Main thread.
-     */
-    private fun currentRow(row: HashMap<String, Any>): HashMap<String, Any> {
-        val current = host.lastRow()?.takeIf { it["isBot"] == true } ?: return row
-        if (current === row) return current
-        current.putAll(row)
-        if (!row.containsKey(MessageCompletionState.KEY_STATE_DETAIL)) current.remove(MessageCompletionState.KEY_STATE_DETAIL)
-        return current
     }
 
     /** The permanent ID of the reply's row, or blank. */
@@ -1047,7 +1048,10 @@ internal class ReplyRun(
         learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
     ) {
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            if (observation.canDeliver()) host.reasoningObserved(observation, learnedCapability)
+            if (!retired && observation.canDeliver()) {
+                host.reasoningObserved(observation, learnedCapability)
+                screenObserver?.reasoningObserved(observation, learnedCapability)
+            }
         }
     }
 
@@ -1060,23 +1064,36 @@ internal class ReplyRun(
     /** The chat or this reply's message was removed: stop and write nothing more. */
     fun retire() {
         retired = true
+        detachScreen()
+        host.released()
         requests.cancelCurrent()
     }
 
-    private suspend fun finishOnOwn() {
+    private suspend fun finishOnOwn(screenReleased: Deferred<Unit>?) {
         try {
             val failure = followRequest()
+            // Only one finalizer: the original reader must finish its non-cancellable
+            // bookkeeping before this owner claims any still-unrecorded receipt.
+            screenReleased?.await()
             if (retired || fence.isStale()) return
-            when {
-                failure == null -> finishCompleted()
-                failure is kotlinx.coroutines.CancellationException -> finishStopped()
-                else -> finishFailed(failure)
+            val terminal = host.lastRow()?.get(MessageCompletionState.KEY_STATE)?.toString()
+            if (terminal != null && terminal != MessageCompletionState.STREAMING &&
+                state.currentUsageAttempt == null && pendingUsageSnapshot == null && toolCalls.assembled().isEmpty()) {
+                recordTurnMemoryScope()
+                host.saveInBackground()
+            } else when {
+                failure == null && !userStopped -> finishCompleted()
+                userStopped || failure is kotlinx.coroutines.CancellationException -> finishStopped()
+                else -> finishFailed(requireNotNull(failure))
             }
+            host.awaitSaved()
         } finally {
             ended = true
             ReplyRunRegistry.unregister(state.chatId, this)
             org.teslasoft.assistant.service.GenerationForegroundService.end(app)
             host.replyFinished()
+            screenObserver?.replyFinished()
+            detachScreen()
         }
     }
 
@@ -1088,14 +1105,14 @@ internal class ReplyRun(
                 val current = text
                 if (current != shown) {
                     shown = current
-                    host.replyUpdated(current)
+                    publishText(current)
                 }
                 kotlinx.coroutines.delay(FOLLOW_INTERVAL_MS)
             }
         }
         val failure = requests.awaitCurrent()
         follower.cancel()
-        host.replyUpdated(text)
+        publishText(text)
         failure
     }
 
@@ -1130,7 +1147,6 @@ internal class ReplyRun(
             org.teslasoft.assistant.preferences.ChatPreferences.getChatPreferences()
                 .putTimestampToChatById(app, state.chatId)
         } catch (_: Exception) { }
-        currentRow(row)
         recordTurnMemoryScope()
         host.saveInBackground()
     }
@@ -1179,8 +1195,7 @@ internal class ReplyRun(
             row[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             row.remove(MessageCompletionState.KEY_STATE_DETAIL)
             recordTakenUsageSafely(row) { listOfNotNull(completePendingUsageRecord()) }
-            currentRow(row)
-            host.saveInBackground()
+                host.saveInBackground()
         }
         if (retired || fence.isStale()) return
         try {
@@ -1226,7 +1241,7 @@ internal class ReplyRun(
             keepCompletedUsage = true
         )
         if (retired || fence.isStale() || row == null) return
-        val target = currentRow(row)
+        val target = row
         target["message"] = text
         val existing = target[MessageCompletionState.KEY_STATE]?.toString()
         if (existing == MessageCompletionState.STREAMING || existing.isNullOrBlank()) {
@@ -1255,7 +1270,9 @@ internal class ReplyRun(
             val scope = org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.current(state.chatPreferences)
             @Suppress("UNCHECKED_CAST")
             val rows = host.conversationSnapshot().filterIsInstance<HashMap<String, Any>>()
-            org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.stamp(rows, scope)
+            if (org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.stamp(rows, scope)) {
+                rows.dropLast(1).lastOrNull { it["isBot"] != true }?.let(host::saveRow)
+            }
             val personaId = scope.companionPersonaId
             scopeForBackground.launch {
                 try {

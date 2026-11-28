@@ -45,5 +45,10 @@ internal object PendingToolTurns {
         contexts[chatId]?.takeIf { it.approvalId == approvalId }?.also { contexts.remove(chatId) }
     }
 
+    fun clear() = synchronized(contexts) { contexts.clear() }
+    fun rename(oldId: String, newId: String) = synchronized(contexts) {
+        contexts.remove(oldId)?.let { contexts[newId] = it }
+    }
+
     fun forget(chatId: String) = synchronized(contexts) { contexts.remove(chatId) }
 }

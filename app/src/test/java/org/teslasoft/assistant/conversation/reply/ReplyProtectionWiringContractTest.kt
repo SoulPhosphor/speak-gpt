@@ -93,29 +93,26 @@ class ReplyProtectionWiringContractTest {
         assertTrue(takeOver.contains("pendingRetryVariants = org.teslasoft.assistant.ui.chat.RegenerationRecovery.historyOf(pending.original)"))
     }
 
-    @Test fun aMessageDeletionLetsGoOfAReconnectedReplyBeforeTheNextTurn() {
+    @Test fun aMessageDeletionDetachesTheOldDisplayBeforeTheNextTurn() {
         val retire = chat.substringAfter("private fun retireRunningWorkForDeletion() {")
-        val letGo = retire.indexOf("attachedReply = null")
-        assertTrue(letGo in 0 until retire.indexOf("run.stopByUser()"))
-        val finished = chat.substringAfter("override fun replyFinished() {\n                // A message deletion")
-        assertTrue(finished.contains("if (!stillAttached || isFinishing || isDestroyed) return"))
-        val handOff = chat.substringAfter("private fun handOffRunningReply() {")
-        assertTrue(handOff.contains("(attachedReply ?: releasedReply)?.takeIf { !it.ended }"))
+        assertTrue(retire.indexOf("attachedReply = null") < retire.indexOf("run.stopByUser()"))
+        assertTrue(retire.contains("run.detachScreen()"))
+        assertTrue(chat.contains("if (attachedReply !== run || isFinishing || isDestroyed) return"))
     }
 
-    @Test fun finishingWritesTheRowOfTheHostThatHasTheReplyNow() {
+    @Test fun reattachingDoesNotTransferTheReplysRowsOrPersistenceOwner() {
         val run = source("conversation/reply/ReplyRun.kt")
-        for (finish in listOf("private suspend fun finishCompleted()", "private suspend fun finishStopped()")) {
-            val body = run.substringAfter(finish).substringBefore("\n    }\n")
-            assertTrue("$finish uses the current host's row", body.contains("currentRow(row)"))
-            assertTrue(body.indexOf("currentRow(row)") < body.lastIndexOf("host.saveInBackground()"))
-        }
+        val attach = run.substringAfter("fun attach(next: ReplyRunHost) {").substringBefore("\n    }")
+        assertTrue(attach.contains("screenObserver = next"))
+        assertFalse(attach.contains("host ="))
+        assertTrue(run.contains("screenReleased?.await()"))
+        assertTrue(run.indexOf("host.awaitSaved()") < run.indexOf("ended = true", run.indexOf("private suspend fun finishOnOwn")))
     }
 
-    @Test fun aReplyThatFinishedAfterTheHistoryWasReadIsNotSavedOver() {
-        val prepare = chat.substringAfter("val replyRunAtRead = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(preparedChatId)")
-        assertTrue(prepare.indexOf("getChatByIdResult(") in 0 until 400)
-        val init = chat.substringAfter("var reconciledStreaming = false")
-        assertTrue(init.indexOf("replyRunAtRead?.takeIf { it.ended") in 0 until init.indexOf("if (reconciledStreaming) saveSettings()"))
+    @Test fun startupRejectsTheWholeSnapshotWhenItsReplyFinishedDuringTheRead() {
+        assertTrue(chat.contains("ReplyRunRegistry.capture(preparedChatId)"))
+        val init = chat.substringAfter("private fun initializeChatUi(")
+        assertTrue(init.indexOf("ReplyRunRegistry.isCurrent(") < init.indexOf("chatId = prepared.chatId"))
+        assertFalse(chat.contains("messages[index] = finished"))
     }
 }
