@@ -362,6 +362,19 @@ seconds of the screen turning off.
   shutdown, model preparation/loading, transcription-lock wait and native
   decoding time.
 
+### Outstanding: the conversation continues when the chat screen closes (Phase 2)
+
+Reply protection (Phase 1) keeps a reply already sent when the chat screen
+closes (Back, another chat, or Android closing it to free memory): the reply
+is received to the end and saved, and reopening the chat reconnects to it.
+The voice conversation itself still lives in the chat screen, so when the
+screen closes the hands-free call ends: the saved reply is not read aloud
+and the mic does not reopen. Phase 2 moves listening, transcription,
+voice detection, readback and the hands-free loop into the hands-free
+service, so the call continues with no screen. It depends on Phase 1's
+reply owner (ReplyRun) for the reply to read back, and is not started
+without the owner's approval.
+
 ---
 
 ## Files we expect to touch
