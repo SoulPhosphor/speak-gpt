@@ -25,6 +25,8 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import org.teslasoft.assistant.imagegen.StreamedToolCallAssembler
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.Deferred
@@ -123,14 +125,62 @@ internal class ReplyRun(
      */
     @Volatile var handedOff: Boolean = false
 
-    /** Runs [source] through [RequestRelay] with the current request context,
-     *  which the request hooks read. */
-    fun <T> relay(source: kotlinx.coroutines.flow.Flow<T>): kotlinx.coroutines.flow.Flow<T> =
-        requests.relay(source, state.requestContext.asContextElement(state.requestContext.get())) { handedOff }
+    /** The current request's reply text as received so far. */
+    @Volatile var text: String = ""
+        private set
 
-    /** A completed (non-streaming) provider call, run like [relay]. */
-    suspend fun <T> relayCall(call: suspend () -> T): T =
-        requests.relayCall(call, state.requestContext.asContextElement(state.requestContext.get())) { handedOff }
+    /** The current request's tool-call pieces as received so far. */
+    @Volatile var toolCalls: StreamedToolCallAssembler = StreamedToolCallAssembler()
+        private set
+
+    /**
+     * Records one piece of the provider's reply: its lifecycle and usage
+     * figures, its tool-call pieces and its text, in that order. Throws when
+     * the piece ends the reply with a provider error. Called where the
+     * request is collected, so the reply stays complete whoever displays it.
+     */
+    fun accept(piece: ReplyPiece) {
+        noteLifecycleChunk(
+            piece.finishReason, piece.id, piece.contentLength,
+            piece.promptTokens, piece.completionTokens, piece.totalTokens
+        )
+        piece.toolCalls.forEach { toolCalls.accept(it.index, it.id, it.name, it.arguments) }
+        if (piece.whole) {
+            text = piece.content.orEmpty()
+            state.currentLifecycle?.markNonStreamingResponse()
+        } else {
+            piece.content?.let { text += it }
+        }
+    }
+
+    /** Starts a new request phase: no text or tool calls received yet. */
+    private fun beginReceiving() {
+        text = ""
+        toolCalls = StreamedToolCallAssembler()
+    }
+
+    /**
+     * Runs the provider request [source] through [RequestRelay] with the
+     * current request context (which the request hooks read), recording each
+     * piece with [accept] as it arrives. The returned flow delivers the same
+     * items, after they are recorded, and the request's failure.
+     */
+    fun <T> relay(source: kotlinx.coroutines.flow.Flow<T>, piece: (T) -> ReplyPiece): kotlinx.coroutines.flow.Flow<T> {
+        beginReceiving()
+        return requests.relay(
+            source.onEach { accept(piece(it)) },
+            state.requestContext.asContextElement(state.requestContext.get())
+        ) { handedOff }
+    }
+
+    /** A completed (non-streaming) provider call, run and recorded like [relay]. */
+    suspend fun <T> relayCall(call: suspend () -> T, piece: (T) -> ReplyPiece): T {
+        beginReceiving()
+        return requests.relayCall(
+            { call().also { accept(piece(it)) } },
+            state.requestContext.asContextElement(state.requestContext.get())
+        ) { handedOff }
+    }
 
     /** One reply's usage and lifecycle state, taken off the screen's fields. */
     internal class ClaimedTerminal(

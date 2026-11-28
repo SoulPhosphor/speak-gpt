@@ -13,6 +13,9 @@ import org.junit.Test
 class StreamingRequestPathTest {
 
     private val source: String by lazy { chatActivitySource().readText() }
+    private val runSource: String by lazy {
+        mainSource("src/main/java/org/teslasoft/assistant/conversation/reply/ReplyRun.kt").readText()
+    }
     private val hooksSource: String by lazy {
         mainSource("src/main/java/org/teslasoft/assistant/conversation/reply/ChatRequestHooks.kt").readText()
     }
@@ -28,14 +31,15 @@ class StreamingRequestPathTest {
         assertTrue(region.contains("if (streamingEnabled)"))
         assertTrue(region.contains("ai!!.chatCompletions(chatCompletionRequest)"))
         // Both reply calls run through the reply's relay (ReplyRun).
-        assertTrue(region.contains("replyRun.relay(ai!!.chatCompletions(chatCompletionRequest))"))
-        assertTrue(region.contains("replyRun.relayCall { client.chatCompletion(chatCompletionRequest) }"))
+        assertTrue(region.contains("replyRun.relay(ai!!.chatCompletions(chatCompletionRequest)) { ReplyPiece.of(it) }"))
+        assertTrue(region.contains("replyRun.relayCall({ client.chatCompletion(chatCompletionRequest) }) { ReplyPiece.of(it) }"))
         assertTrue(
             region.contains(
                 "streamOptions = if (streamingEnabled) StreamOptions(includeUsage = true) else null"
             )
         )
-        assertTrue(region.contains("currentLifecycle?.markNonStreamingResponse()"))
+        // The reply marks a completed (non-streaming) response when it records it.
+        assertTrue(runSource.contains("state.currentLifecycle?.markNonStreamingResponse()"))
         // The request hooks (and their attribute keys) live in ChatRequestHooks.
         assertTrue(hooksSource.contains("AttributeKey<Boolean>(\"GenerationRequest\")"))
         assertTrue(region.contains("generationRequestActive = true"))
@@ -49,7 +53,7 @@ class StreamingRequestPathTest {
         assertTrue(hooksSource.contains(".noteHttpResponse(response.status.value, body)"))
         assertTrue(!hooksSource.contains("capturedProviderErrorBody"))
         assertTrue(!source.contains("capturedProviderErrorBody"))
-        assertTrue(source.contains("replyRun.relayCall { client.chatCompletion(chatCompletionRequest) }"))
+        assertTrue(source.contains("replyRun.relayCall({ client.chatCompletion(chatCompletionRequest) }) { ReplyPiece.of(it) }"))
         assertTrue(source.contains("stream_options"))
     }
 

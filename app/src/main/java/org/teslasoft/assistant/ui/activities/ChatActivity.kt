@@ -189,6 +189,7 @@ import org.teslasoft.assistant.preferences.ResponseLifecycle
 import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
 import org.teslasoft.assistant.conversation.reply.GenerationRequestContext
 import org.teslasoft.assistant.conversation.reply.ReplyRun.ClaimedTerminal
+import org.teslasoft.assistant.conversation.reply.ReplyPiece
 import org.teslasoft.assistant.conversation.reply.ReasoningObservationContext
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.RecentModelsPreferences
@@ -425,12 +426,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val requestHooks by lazy {
         org.teslasoft.assistant.conversation.reply.ChatRequestHooks(this, requestState)
     }
-    // The reply's usage, pricing and lifecycle bookkeeping (see ReplyRun).
-    private val replyRun by lazy {
-        org.teslasoft.assistant.conversation.reply.ReplyRun(
-            this, requestState, requestHooks, turnFence, replyRunHost, lifecycleScope
-        )
-    }
+    // The current reply's bookkeeping and provider requests (see ReplyRun).
+    // Each reply gets its own; this one also serves the screen between replies.
+    private var currentReplyRun: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
+    private val replyRun: org.teslasoft.assistant.conversation.reply.ReplyRun
+        get() = currentReplyRun ?: newReplyRun().also { currentReplyRun = it }
+
+    private fun newReplyRun() = org.teslasoft.assistant.conversation.reply.ReplyRun(
+        this, requestState, requestHooks, turnFence, replyRunHost, lifecycleScope
+    )
     private val replyRunHost = object : org.teslasoft.assistant.conversation.reply.ReplyRunHost {
         override val model: String get() = this@ChatActivity.model
         override val storageUnavailable: Boolean get() = chatStorageUnavailable
@@ -9498,35 +9502,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         attachActiveMemoryAttribution(activeMemoryReferences)
         startLifecycle(ResponseLifecycle.PHASE_TOOL_CONTINUATION, request.maxTokens)
         scroll(true)
-        val toolCallAssembler = StreamedToolCallAssembler()
         if (streamingEnabled) {
             generationRequestActive = true
             try {
                 withGenerationRequestContext {
-                    val completions: Flow<ChatCompletionChunk> = replyRun.relay(ai!!.chatCompletions(request))
+                    // Each piece is recorded by the reply (ReplyRun.accept) as it arrives.
+                    val completions: Flow<ChatCompletionChunk> =
+                        replyRun.relay(ai!!.chatCompletions(request)) { ReplyPiece.of(it) }
                     // Dispatch begins at collection; a failure past this point is a real
                     // provider/network end, not a pre-dispatch one.
                     startGenerationNetworkDiagnostics()
                     providerRequestDispatched = true
-                    completions.collect { v ->
+                    completions.collect {
                         if (!currentCoroutineContext().isActive) throw CancellationException()
-                        val choice = v.choices.firstOrNull()
-                        noteLifecycleChunk(
-                            choice?.finishReason?.value, v.id,
-                            (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
-                            v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
-                        )
-                        choice?.delta?.toolCalls?.forEach { fragment ->
-                            toolCallAssembler.accept(
-                                fragment.index,
-                                fragment.id?.id,
-                                fragment.function?.nameOrNull,
-                                fragment.function?.argumentsOrNull
-                            )
-                        }
-                        val delta = choice?.delta?.content
-                        if (delta != null && delta != "null") {
-                            response += delta
+                        val received = replyRun.text
+                        if (received != response) {
+                            response = received
                             messages[messages.size - 1]["message"] = response
                             adapter?.notifyItemChanged(messages.size - 1)
                             scroll(false)
@@ -9543,35 +9534,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // response before returning.
             startGenerationNetworkDiagnostics()
             providerRequestDispatched = true
-            val completion = try {
+            try {
                 generationRequestActive = true
                 withGenerationRequestContext {
                     val client = ai!!
-                    replyRun.relayCall { client.chatCompletion(request) }
+                    // The reply records the whole response (ReplyRun.accept).
+                    replyRun.relayCall({ client.chatCompletion(request) }) { ReplyPiece.of(it) }
                 }
             } finally {
                 if (!turnFence.isStale()) generationRequestActive = false
             }
-            val choice = completion.choices.firstOrNull()
-            val content = choice?.message?.content?.takeIf { it != "null" }
-            response = content.orEmpty()
-            noteLifecycleChunk(
-                choice?.finishReason?.value, completion.id, response.length,
-                completion.usage?.promptTokens, completion.usage?.completionTokens,
-                completion.usage?.totalTokens
-            )
-            choice?.message?.toolCalls?.forEachIndexed { index, call ->
-                if (call is ToolCall.Function) {
-                    toolCallAssembler.accept(
-                        index,
-                        call.id.id,
-                        call.function.nameOrNull,
-                        call.function.argumentsOrNull
-                    )
-                }
-            }
+            response = replyRun.text
             messages[messages.size - 1]["message"] = response
-            currentLifecycle?.markNonStreamingResponse()
             adapter?.notifyItemChanged(messages.size - 1)
         }
         val providerDiagnostics = finalizeLifecycleSuccess()
@@ -11721,6 +11695,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // cleared, so only a Stop during THIS generation counts as a user stop.
         userRequestedStop = false
 
+        // This reply's own bookkeeping and provider requests.
+        currentReplyRun = newReplyRun()
+
         // Silent retry point: any completed image still missing its summary
         // gets one before this turn's history is projected to the model.
         ensureImageSummaries()
@@ -11792,24 +11769,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
 
                 withGenerationRequestContext {
-                    val completions: Flow<TextCompletion> = replyRun.relay(ai!!.completions(completionRequest))
+                    // Each piece is recorded by the reply (ReplyRun.accept) as it arrives.
+                    val completions: Flow<TextCompletion> =
+                        replyRun.relay(ai!!.completions(completionRequest)) { ReplyPiece.of(it) }
 
                     // Dispatch begins at collection; a failure past this point is a
                     // real provider/network end, not a pre-dispatch one.
                     startGenerationNetworkDiagnostics()
                     providerRequestDispatched = true
                     recordRecentChatModel(completionRequest.model.id)
-                    completions.collect { v ->
+                    completions.collect {
                         run {
                             if (!currentCoroutineContext().isActive) throw CancellationException()
-                            val choice = v.choices.firstOrNull()
-                            noteLifecycleChunk(
-                                choice?.finishReason?.value, v.id,
-                                (choice?.text?.takeIf { it != "null" }?.length ?: 0),
-                                v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
-                            )
-                            if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
-                                response += v.choices[0].text
+                            val received = replyRun.text
+                            if (received != response) {
+                                response = received
                                 messages[messages.size - 1]["message"] = response
                                 if (messages.size > 2) {
                                     adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
@@ -13403,15 +13377,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // fragments or one complete chunk. The same assembler also accepts a
         // complete response's tool calls, so the tool flow is identical after
         // either transport path returns.
-        val toolCallAssembler = StreamedToolCallAssembler()
 
         scroll(true)
         if (streamingEnabled) {
             generationRequestActive = true
             try {
                 withGenerationRequestContext {
+                    // Each piece is recorded by the reply (ReplyRun.accept) as it arrives.
                     val completions: Flow<ChatCompletionChunk> =
-                        replyRun.relay(ai!!.chatCompletions(chatCompletionRequest))
+                        replyRun.relay(ai!!.chatCompletions(chatCompletionRequest)) { ReplyPiece.of(it) }
 
                     // The provider request begins dispatch here; from this point a
                     // failure is a genuine provider/network/stream end, not a
@@ -13419,30 +13393,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     startGenerationNetworkDiagnostics()
                     providerRequestDispatched = true
                     recordRecentChatModel(chatCompletionRequest.model.id)
-                    completions.collect { v ->
+                    completions.collect {
                         run {
                             if (!currentCoroutineContext().isActive) throw CancellationException()
-                            val choice = v.choices.firstOrNull()
-                            // A usage-only final chunk (requested via streamOptions)
-                            // carries an EMPTY choices list, so every choice access here
-                            // must be null-safe — the old v.choices[0] would throw on
-                            // that chunk.
-                            noteLifecycleChunk(
-                                choice?.finishReason?.value, v.id,
-                                (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
-                                v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
-                            )
-                            choice?.delta?.toolCalls?.forEach { fragment ->
-                                toolCallAssembler.accept(
-                                    fragment.index,
-                                    fragment.id?.id,
-                                    fragment.function?.nameOrNull,
-                                    fragment.function?.argumentsOrNull
-                                )
-                            }
-                            val deltaContent = choice?.delta?.content
-                            if (deltaContent != null && deltaContent != "null") {
-                                response += deltaContent
+                            val received = replyRun.text
+                            if (received != response) {
+                                response = received
                                 messages[messages.size - 1]["message"] = response
                                 if (messages.size > 2) {
                                     adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
@@ -13474,35 +13430,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             startGenerationNetworkDiagnostics()
             providerRequestDispatched = true
             recordRecentChatModel(chatCompletionRequest.model.id)
-            val completion = try {
+            try {
                 generationRequestActive = true
                 withGenerationRequestContext {
                     val client = ai!!
-                    replyRun.relayCall { client.chatCompletion(chatCompletionRequest) }
+                    // The reply records the whole response (ReplyRun.accept).
+                    replyRun.relayCall({ client.chatCompletion(chatCompletionRequest) }) { ReplyPiece.of(it) }
                 }
             } finally {
                 if (!turnFence.isStale()) generationRequestActive = false
             }
-            val choice = completion.choices.firstOrNull()
-            val content = choice?.message?.content?.takeIf { it != "null" }
-            response = content.orEmpty()
-            noteLifecycleChunk(
-                choice?.finishReason?.value, completion.id, response.length,
-                completion.usage?.promptTokens, completion.usage?.completionTokens,
-                completion.usage?.totalTokens
-            )
-            choice?.message?.toolCalls?.forEachIndexed { index, call ->
-                if (call is ToolCall.Function) {
-                    toolCallAssembler.accept(
-                        index,
-                        call.id.id,
-                        call.function.nameOrNull,
-                        call.function.argumentsOrNull
-                    )
-                }
-            }
+            response = replyRun.text
             messages[messages.size - 1]["message"] = response
-            currentLifecycle?.markNonStreamingResponse()
             adapter?.notifyItemChanged(messages.size - 1)
         }
 
@@ -13526,7 +13465,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // §7: an actual tool call is the ONLY thing that triggers a second
         // conversation-model request. Ordinary text responses fall through
         // to the normal completion below with exactly one request made.
-        val assembledToolCalls = toolCallAssembler.assembled()
+        val assembledToolCalls = replyRun.toolCalls.assembled()
         if (assembledToolCalls.isNotEmpty()) {
             handleAssistantToolCalls(
                 assembledToolCalls,
