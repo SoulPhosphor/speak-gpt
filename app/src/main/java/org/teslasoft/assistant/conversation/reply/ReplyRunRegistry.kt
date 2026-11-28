@@ -28,9 +28,24 @@ internal object ReplyRunRegistry {
     private val runs = HashMap<String, ReplyRun>()
     private val deleted = HashSet<String>()
     private val revisions = HashMap<String, Long>()
-    data class ReadStamp(val revision: Long, val run: ReplyRun?)
-    fun capture(chatId: String): ReadStamp = synchronized(lock) { ReadStamp(revisions[chatId] ?: 0L, runs[chatId]) }
-    fun isCurrent(chatId: String, read: ReadStamp): Boolean = synchronized(lock) { read.revision == (revisions[chatId] ?: 0L) }
+    // Scalar leases retain no reply, request, row or screen objects. A newer
+    // regeneration keeps its lease after completion, fencing late older saves.
+    private val rowOwners = HashMap<String, HashMap<String, Long>>()
+    fun claimRow(chatId: String, rowId: String, owner: Long) = synchronized(lock) {
+        if (rowId.isNotBlank() && chatId !in deleted) {
+            val rows = rowOwners.getOrPut(chatId) { HashMap() }
+            if ((rows[rowId] ?: Long.MIN_VALUE) <= owner) rows[rowId] = owner
+        }
+    }
+    fun ownsRow(chatId: String, rowId: String, owner: Long): Boolean = synchronized(lock) {
+        chatId !in deleted && rowOwners[chatId]?.get(rowId) == owner
+    }
+    private var generation = 0L
+    data class ReadStamp(val revision: Long, val run: ReplyRun?, val generation: Long)
+    fun capture(chatId: String): ReadStamp = synchronized(lock) { ReadStamp(revisions[chatId] ?: 0L, runs[chatId], generation) }
+    fun isCurrent(chatId: String, read: ReadStamp): Boolean = synchronized(lock) {
+        read.generation == generation && read.revision == (revisions[chatId] ?: 0L)
+    }
     private fun changed(chatId: String) { revisions[chatId] = (revisions[chatId] ?: 0L) + 1L }
     private val screens = HashMap<String, (ReplyRun) -> Unit>()
 
@@ -72,7 +87,7 @@ internal object ReplyRunRegistry {
     fun markChatsDeleted(chatIds: Set<String>) {
         val stopped = synchronized(lock) {
             deleted.addAll(chatIds)
-            chatIds.forEach { changed(it); PendingToolTurns.forget(it) }
+            chatIds.forEach { changed(it); rowOwners.remove(it); PendingToolTurns.forget(it) }
             chatIds.mapNotNull { runs.remove(it) }
         }
         stopped.forEach { it.retire() }
@@ -85,6 +100,10 @@ internal object ReplyRunRegistry {
             changed(oldId)
             changed(newId)
             PendingToolTurns.rename(oldId, newId)
+            rowOwners.remove(oldId)?.let { moved ->
+                val current = rowOwners.getOrPut(newId) { HashMap() }
+                moved.forEach { (id, owner) -> current[id] = maxOf(current[id] ?: Long.MIN_VALUE, owner) }
+            }
             runs.remove(oldId)?.let { run ->
                 runs[newId] = run
                 // A run still shown by its own screen follows the screen's rename.
@@ -97,8 +116,11 @@ internal object ReplyRunRegistry {
     /** The whole chat set was replaced (a restore): every reply stops and writes nothing more. */
     fun discardAll() {
         val stopped = synchronized(lock) {
+            generation += 1
             runs.keys.forEach(::changed)
             PendingToolTurns.clear()
+            deleted.clear()
+            rowOwners.clear()
             runs.values.toList().also { runs.clear() }
         }
         stopped.forEach { it.retire() }

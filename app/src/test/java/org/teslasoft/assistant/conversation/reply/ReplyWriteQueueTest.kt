@@ -89,4 +89,20 @@ class ReplyWriteQueueTest {
             assertEquals(listOf(Transaction(23, true)), saved)
         } finally { scope.cancel() }
     }
+    @Test fun aStorageExceptionKeepsTheReceiptQueuedUntilARetrySucceeds() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val attempts = AtomicInteger(0)
+            val queue = ReplyWriteQueue<String>(scope, 1) { _, wanted ->
+                if (attempts.incrementAndGet() == 1) throw java.io.IOException("fixture storage refusal")
+                assertTrue(wanted())
+                ReplyWriteQueue.Result.SAVED
+            }
+            queue.submit("terminal receipt")
+            withTimeout(5000) { queue.awaitSaved() }
+            assertEquals(2, attempts.get())
+            assertNull(queue.lastFailure)
+        } finally { scope.cancel() }
+    }
+
 }

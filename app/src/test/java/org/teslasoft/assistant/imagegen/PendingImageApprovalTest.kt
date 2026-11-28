@@ -49,4 +49,12 @@ class PendingImageApprovalTest {
         val empty = PendingImageApproval("a1", emptyList(), "", "m", "e")
         assertNull(PendingImageApproval.decode(empty.encode()))
     }
+    @Test fun turningTheGlobalSettingOffDoesNotApproveASavedRequest() {
+        val saved = PendingImageApproval.of("a1", calls, "", "model-x", "endpoint-7").encode()
+        org.junit.Assert.assertTrue(PendingImageApproval.requiresConfirmation(false, saved))
+        org.junit.Assert.assertTrue(PendingImageApproval.requiresConfirmation(true, null))
+        org.junit.Assert.assertFalse(PendingImageApproval.requiresConfirmation(false, null))
+        org.junit.Assert.assertFalse(PendingImageApproval.requiresConfirmation(false, "not an approval"))
+    }
+
 }

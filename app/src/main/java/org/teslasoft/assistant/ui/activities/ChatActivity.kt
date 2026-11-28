@@ -552,7 +552,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val run = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(chatId) ?: return
         if (run === currentReplyRun || !run.handedOff || run.ended || chatStorageUnavailable) return
         val rowId = run.replyRowId
-        if (rowId.isBlank() || messages.none { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }) return
+        if (rowId.isBlank()) return
+        if (messages.none { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }) {
+            disableTurnControlsUnlessTheyAreStops()
+            setGenerationProgressVisible(true)
+            initSettings()
+            return
+        }
         attachedReply = run
         takeOverRegenerationOf(rowId)
         disableTurnControlsUnlessTheyAreStops()
@@ -653,7 +659,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         run.handOff(
             org.teslasoft.assistant.conversation.reply.DetachedReplyHost(
                 this, { run.state.chatId }, model, ArrayList(messages), row,
-                currentLifecycleTurnId, REPLY_SAVE_DETECTED_DURING
+                currentLifecycleTurnId, REPLY_SAVE_DETECTED_DURING, run::ownsRow
             ),
             run.screenCompletion
         )
@@ -8537,6 +8543,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 apiEndpointObject?.responseTimeoutSeconds ?: ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS
             ).seconds
 
+            val hooks = requestHooks
             val config = OpenAIConfig(
                 // OpenAIConfig.token unconditionally generates an
                 // "Authorization: Bearer <token>" header. When the user picks
@@ -8561,7 +8568,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // ResponseObserver preserves streaming: the OpenAI-compatible
                 // client receives the original channel unchanged and unbuffered.
                 httpClientConfig = {
-                    requestHooks.install(this)
+                    hooks.install(this)
                 }
             )
 
@@ -9538,8 +9545,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         globalPreferences: Preferences,
         shouldPronounce: Boolean
     ): Boolean {
-        if (!globalPreferences.getAskBeforeAiImages() &&
-            preferences?.getPendingImageApproval().isNullOrBlank()) return true
+        if (!org.teslasoft.assistant.imagegen.PendingImageApproval.requiresConfirmation(
+                globalPreferences.getAskBeforeAiImages(), preferences?.getPendingImageApproval())) return true
         val decision = CompletableDeferred<Boolean>()
         pendingImageConfirmation = decision
         saveWaitingImageApproval()
@@ -11134,6 +11141,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (turnFence.isStale()) return
         val last = messages.lastOrNull() ?: return
         if (last["isBot"] == true) {
+            replyRun.claimRow(org.teslasoft.assistant.preferences.MessageIdentity.idOf(last))
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.STREAMING
             // Freeze the producing model onto the reply the moment it begins, so
             // a later model switch never relabels this turn (plan §4.1). Only a

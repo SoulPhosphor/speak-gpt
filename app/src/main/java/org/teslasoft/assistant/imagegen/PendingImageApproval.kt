@@ -60,6 +60,10 @@ data class PendingImageApproval(
     companion object {
         private const val VERSION = 1
 
+        /** A setting change does not answer an already saved Create/Cancel decision. */
+        fun requiresConfirmation(askBeforeCreating: Boolean, savedApproval: String?): Boolean =
+            askBeforeCreating || decode(savedApproval) != null
+
         fun of(
             id: String,
             calls: List<StreamedToolCallAssembler.AssembledToolCall>,

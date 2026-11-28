@@ -26,6 +26,8 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageIdentity
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
+import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
+import org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope
 
 /** An immutable transaction: update the reply and its usage carrier, and/or remove
  * the empty reply, together. It never replaces an unrelated conversation row. */
@@ -37,7 +39,20 @@ internal data class ReplyEdits(
         history.removeAll { MessageIdentity.idOf(it) in removed }
         for (row in rows) {
             val index = history.indexOfFirst { MessageIdentity.idOf(it) == MessageIdentity.idOf(row) }
-            if (index >= 0) history[index] = HashMap(row)
+            if (index >= 0) {
+                val current = history[index]
+                // Generation owns response fields. Bookmarks, visibility, display
+                // choices, user text and attachments still belong to the conversation.
+                val fields = if (row["isBot"] == true) ChatAdapter.VARIANT_FIELDS
+                    else listOf(ChatAdapter.KEY_TOKEN_USAGE_RECORDS, ScanMessageScope.KEY)
+                for (field in fields) {
+                    if (row.containsKey(field)) current[field] = row.getValue(field)
+                    else if (row["isBot"] == true) current.remove(field)
+                }
+                for (field in listOf(ChatAdapter.KEY_VARIANTS, ChatAdapter.KEY_CANONICAL_VARIANT)) {
+                    row[field]?.let { current[field] = it }
+                }
+            }
         }
     }
 }
@@ -94,16 +109,20 @@ internal class DetachedReplyHost(
     private val rows: List<HashMap<String, Any>>,
     private val row: HashMap<String, Any>,
     private val turnId: String,
-    private val detectedDuring: DamagedChatOperation
+    private val detectedDuring: DamagedChatOperation,
+    private val ownerWanted: () -> Boolean = { true }
 ) : ReplyRunHost {
     private val app = context.applicationContext
     private val changed = LinkedHashMap<String, HashMap<String, Any>>()
     private val removed = LinkedHashSet<String>()
     private var lastSaveUptime = 0L
     private val saves = ReplyWriteQueue<ReplyEdits>(CoroutineScope(SupervisorJob() + Dispatchers.IO)) { edits, wanted ->
-        when (ReplyRowWriter.apply(app, chatId(), edits, detectedDuring, wanted)) {
+        val target = chatId()
+        if (!ownerWanted()) ReplyWriteQueue.Result.GONE else when (ReplyRowWriter.apply(
+            app, target, edits, detectedDuring, { wanted() && target == chatId() && ownerWanted() }
+        )) {
             ReplyRowWriter.Outcome.SAVED -> ReplyWriteQueue.Result.SAVED
-            ReplyRowWriter.Outcome.NOT_SAVED -> ReplyWriteQueue.Result.RETRY
+            ReplyRowWriter.Outcome.NOT_SAVED -> if (ownerWanted()) ReplyWriteQueue.Result.RETRY else ReplyWriteQueue.Result.GONE
             else -> ReplyWriteQueue.Result.GONE
         }
     }

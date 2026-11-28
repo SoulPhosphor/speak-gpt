@@ -1,5 +1,6 @@
 package org.teslasoft.assistant.conversation.reply
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -18,6 +19,8 @@ internal class ReplyWriteQueue<T>(
     private var pending: Pending<T>? = null
     private var running = false
     private var retired = false
+    @Volatile var lastFailure: Exception? = null
+        private set
     private var drained = CompletableDeferred<Unit>().apply { complete(Unit) }
 
     fun submit(value: T) {
@@ -37,10 +40,12 @@ internal class ReplyWriteQueue<T>(
         }
     }
 
-    fun retire() = synchronized(lock) {
-        retired = true
-        pending = null
-        drained.complete(Unit)
+    fun retire() {
+        synchronized(lock) {
+            retired = true
+            pending = null
+            drained.complete(Unit)
+        }
     }
 
     private suspend fun drain() {
@@ -49,9 +54,15 @@ internal class ReplyWriteQueue<T>(
             val current = synchronized(lock) {
                 pending.takeUnless { retired }.also { if (it == null) running = false }
             } ?: return
-            val result = write(current.value) {
-                synchronized(lock) { !retired && pending === current }
+            val result = try {
+                write(current.value) { synchronized(lock) { !retired && pending === current } }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                lastFailure = failure
+                Result.RETRY
             }
+            if (result == Result.SAVED) lastFailure = null
             val retry = synchronized(lock) {
                 if (result == Result.GONE && pending === current) retired = true
                 if (retired || (result == Result.SAVED && pending === current)) {

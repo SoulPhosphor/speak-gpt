@@ -128,6 +128,9 @@ internal class ReplyRun(
 
     /** The original screen signals after all its cancellation-safe accounting ends. */
     val screenCompletion = CompletableDeferred<Unit>()
+    private val ownership = ownerships.incrementAndGet()
+    fun claimRow(rowId: String) = ReplyRunRegistry.claimRow(state.chatId, rowId, ownership)
+    fun ownsRow(): Boolean = !retired && ReplyRunRegistry.ownsRow(state.chatId, replyRowId, ownership)
     private var screenObserver: ReplyRunHost? = null
     private var recordedFailure: FailureRecord? = null
 
@@ -674,7 +677,7 @@ internal class ReplyRun(
         function: UsageFunction? = null
     ) {
         val prefs = state.chatPreferences ?: return
-        if (records.isEmpty() || host.storageUnavailable) return
+        if (records.isEmpty() || host.storageUnavailable || retired) return
         val snapshot = host.conversationSnapshot().map { HashMap(it) }
         withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
             UsageLogStore.seed(prefs, snapshot)
@@ -783,7 +786,7 @@ internal class ReplyRun(
         if (rows.isEmpty()) return
         CoroutineScope(Dispatchers.IO + kotlinx.coroutines.NonCancellable).launch {
             var delayMs = 250L
-            while (true) {
+            while (!retired) {
                 val kept = try { UsageLogStore.seedChecked(prefs, rows) } catch (_: Exception) { false }
                 if (kept) break
                 kotlinx.coroutines.delay(delayMs)
@@ -1005,7 +1008,8 @@ internal class ReplyRun(
      * its own; a reopened chat screen reconnects with [attach].
      */
     fun handOff(detached: ReplyRunHost, screenReleased: Deferred<Unit>? = null) {
-        if (handedOff || ended) return
+        if (handedOff || ended || retired) return
+        claimRow(detached.lastRow()?.let(org.teslasoft.assistant.preferences.MessageIdentity::idOf).orEmpty())
         handedOff = true
         host = detached
         // The reply's own hold keeps the app running until the reply is saved;
@@ -1276,6 +1280,7 @@ internal class ReplyRun(
             val personaId = scope.companionPersonaId
             scopeForBackground.launch {
                 try {
+                    if (retired) return@launch
                     org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.ensureCompanion(app, personaId)
                     org.teslasoft.assistant.service.MemoryScanAutoResume.onChatReplyFinished(app)
                 } catch (_: Exception) { }
@@ -1343,6 +1348,7 @@ internal class ReplyRun(
     private val scopeForBackground = CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
     private companion object {
+        val ownerships = AtomicLong(0)
         /** How often the reply's text is shown and saved while it arrives with no screen. */
         const val FOLLOW_INTERVAL_MS = 250L
     }

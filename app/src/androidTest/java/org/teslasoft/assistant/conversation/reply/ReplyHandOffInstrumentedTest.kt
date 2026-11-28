@@ -367,4 +367,75 @@ class ReplyHandOffInstrumentedTest {
         assertEquals("Preserved reasoning", stored(f.chatId).last()[ChatAdapter.KEY_MESSAGE_REASONING])
     }
 
+    @Test fun replyTransactionsPreserveConcurrentUserEditsVisibilityAndBookmarks() {
+        val f = fixture()
+        val carrier = HashMap(f.rows.first()).apply {
+            put(ChatAdapter.KEY_TOKEN_USAGE_RECORDS, TokenUsageAccounting.encodeRecords(listOf(
+                TurnUsageRecord("model-x", "fixture", totalTokens = 13, requestId = "tool-receipt"))))
+        }
+        val reply = HashMap(f.rows.last()).apply { put("message", "finished answer") }
+        val newer = stored(f.chatId)
+        newer.first()["message"] = "user edited the question"
+        newer.first()["bookmark"] = true
+        newer.last()["hiddenFromAi"] = true
+        newer.last()["bookmark"] = true
+        chats.saveChatHistory(context, f.chatId, newer, synchronous = true)
+        assertEquals(ReplyRowWriter.Outcome.SAVED, ReplyRowWriter.apply(
+            context, f.chatId, ReplyEdits(listOf(carrier, reply)), label))
+        val after = stored(f.chatId)
+        assertEquals("user edited the question", after.first()["message"])
+        assertEquals(13, receipt(after.first()).single().totalTokens)
+        assertEquals("finished answer", after.last()["message"])
+        assertEquals(true, after.first()["bookmark"])
+        assertEquals(true, after.last()["bookmark"])
+        assertEquals(true, after.last()["hiddenFromAi"])
+    }
+
+    @Test fun aKeptWholeHistoryDeletionIsSavedBeforeTheReplyTransformsStorage() = runBlocking {
+        val f = fixture()
+        val deleted = row("older message being deleted", bot = false)
+        chats.saveChatHistory(context, f.chatId, arrayListOf(deleted, *f.rows.toTypedArray()), synchronous = true)
+        val order = org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared
+        try {
+            order.saveInBackground(f.chatId, order.claim(f.chatId),
+                org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.snapshotOf(f.rows), false,
+                org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.Writer { _, _, _ -> false })
+            val reply = HashMap(f.rows.last()).apply { put("message", "finished answer") }
+            assertEquals(ReplyRowWriter.Outcome.NOT_SAVED, ReplyRowWriter.write(context, f.chatId, reply, label))
+            order.saveInBackground(f.chatId, order.claim(f.chatId),
+                org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.snapshotOf(f.rows), false,
+                org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.historyWriter(context))
+            withTimeout(10_000) { order.awaitSaved(f.chatId) }
+            assertEquals(ReplyRowWriter.Outcome.SAVED, ReplyRowWriter.write(context, f.chatId, reply, label))
+            val after = stored(f.chatId)
+            assertEquals(2, after.size)
+            assertFalse(after.any { MessageIdentity.idOf(it) == MessageIdentity.idOf(deleted) })
+            assertEquals("finished answer", after.last()["message"])
+        } finally { order.discard(listOf(f.chatId)) }
+    }
+
+    @Test fun aNewGenerationOfTheSamePermanentRowFencesTheOldWriterEvenAfterItFinishes() = runBlocking {
+        val f = fixture()
+        val replyId = MessageIdentity.idOf(f.rows.last())
+        f.run.claimRow(replyId)
+        val oldHost = DetachedReplyHost(context, { f.chatId }, "model-x", f.rows, f.rows.last(), "T-old", label, f.run::ownsRow)
+        f.run.host = oldHost
+        val updated = stored(f.chatId).apply { last()["message"] = "new generation" }
+        val state = ChatRequestState().apply { chatId = f.chatId }
+        val newer = ReplyRun(context, state, ChatRequestHooks(context, state), ConversationTurnFence(), ScreenHost("model-x", updated))
+        synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+            oldHost.saveInBackground()
+            newer.claimRow(replyId)
+            ReplyRunRegistry.register(f.chatId, newer)
+            chats.saveChatHistory(context, f.chatId, updated, synchronous = true)
+            ReplyRunRegistry.unregister(f.chatId, newer)
+            // An old sender cannot regain the lease by closing late.
+            f.run.claimRow(replyId)
+        }
+        withTimeout(5000) { oldHost.awaitSaved() }
+        assertFalse(f.run.ownsRow())
+        assertTrue(newer.ownsRow())
+        assertEquals("new generation", stored(f.chatId).last()["message"])
+    }
+
 }
