@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Runs a provider request in [scope] (the reply's own scope) and hands its
@@ -43,11 +44,11 @@ internal class RequestRelay(private val scope: CoroutineScope) {
         @Volatile var failure: Throwable? = null
     }
 
-    @Volatile private var current: Current? = null
+    private val current = AtomicReference<Current?>()
 
     /** Waits for the request most recently started to end; returns its failure, or null. */
     suspend fun awaitCurrent(): Throwable? {
-        val call = current ?: return null
+        val call = current.get() ?: return null
         call.job.join()
         // Stopped before it could record anything: still a stopped request.
         return call.failure ?: if (call.job.isCancelled) kotlinx.coroutines.CancellationException("Request stopped") else null
@@ -55,17 +56,17 @@ internal class RequestRelay(private val scope: CoroutineScope) {
 
     /** Stops the request most recently started, if it is still running. */
     fun cancelCurrent() {
-        current?.job?.cancel()
+        current.get()?.job?.cancel()
     }
 
     /** The terminal owner no longer needs the completed coroutine's inputs. */
     fun release() {
-        val call = current ?: return
+        val call = current.get() ?: return
         if (call.job.isCompleted) {
-            if (current === call) current = null
+            current.compareAndSet(call, null)
         } else scope.launch {
             call.job.join()
-            if (current === call) current = null
+            current.compareAndSet(call, null)
         }
     }
 
@@ -99,7 +100,7 @@ internal class RequestRelay(private val scope: CoroutineScope) {
             }
         }
         val call = Current(producer)
-        current = call
+        current.set(call)
         started.complete(call)
         producer.start()
         return flow {

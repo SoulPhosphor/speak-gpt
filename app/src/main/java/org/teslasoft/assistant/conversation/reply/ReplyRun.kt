@@ -233,7 +233,7 @@ internal class ReplyRun(
     }
 
     private fun requireScreenRequestOwner() {
-        if (handedOff || retired || fence.isStale())
+        if (handedOff || ended || retired || fence.isStale())
             throw CancellationException("This reply no longer accepts requests from its original screen")
     }
 
@@ -1234,7 +1234,7 @@ internal class ReplyRun(
             row[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             row.remove(MessageCompletionState.KEY_STATE_DETAIL)
             recordTakenUsageSafely(row) { listOfNotNull(completePendingUsageRecord()) }
-                host.saveInBackground()
+            host.saveInBackground()
         }
         if (retired || fence.isStale()) return
         try {
