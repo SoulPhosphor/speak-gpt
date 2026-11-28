@@ -20,6 +20,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -47,6 +48,11 @@ import org.teslasoft.assistant.preferences.chatstore.ChatStorageAuthority
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.ui.chat.ConversationTurnFence
 import java.util.UUID
+import org.teslasoft.assistant.usage.ProviderUsageAttempt
+import org.teslasoft.assistant.usage.TokenPricingCatalog
+import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.TurnUsageRecord
+import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 
 /**
  * A reply already sent keeps going when its chat screen closes: it is
@@ -87,7 +93,7 @@ class ReplyHandOffInstrumentedTest {
     )
 
     /** The chat screen's part before it closes: rows it shows and saves. */
-    private class ScreenHost(override val model: String, val rows: ArrayList<HashMap<String, Any>>) : ReplyRunHost {
+    private open class ScreenHost(override val model: String, val rows: ArrayList<HashMap<String, Any>>) : ReplyRunHost {
         override val storageUnavailable: Boolean get() = false
         override fun conversationSnapshot(): List<Map<String, Any>> = rows
         override fun lastRow(): HashMap<String, Any>? = rows.lastOrNull()
@@ -122,10 +128,11 @@ class ReplyHandOffInstrumentedTest {
 
     /** Reads the relay as a screen would, then closes: hands off, stops reading. */
     private suspend fun readThenClose(f: Fixture, source: Flow<String>, until: String) {
+        val received = CompletableDeferred<Unit>()
         val reader = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
-            f.run.relay(source) { piece(it) }.collect { }
+            f.run.relay(source) { piece(it).also { received.complete(Unit) } }.collect { }
         }
-        withTimeout(10_000) { while (f.run.text != until) delay(10) }
+        withTimeout(10_000) { received.await(); while (f.run.text != until) delay(10) }
         withContext(Dispatchers.Main) {
             f.run.handOff(DetachedReplyHost(context, { f.chatId }, "model-x", ArrayList(f.rows), f.rows.last(), "T-test", label))
             reader.cancel()
@@ -191,4 +198,173 @@ class ReplyHandOffInstrumentedTest {
         val reply = stored(f.chatId).last()
         assertFalse(reply["message"].toString().startsWith("Hello"))
     }
+    private class PricingGate(private val gate: CompletableDeferred<TokenPricingCatalog> = CompletableDeferred()) :
+        Deferred<TokenPricingCatalog> by gate {
+        val waiting = CompletableDeferred<Unit>()
+        override suspend fun await(): TokenPricingCatalog {
+            waiting.complete(Unit)
+            return gate.await()
+        }
+        fun release() { gate.complete(TokenPricingCatalog("model-x")) }
+    }
+
+    private fun usage(f: Fixture): PricingGate {
+        f.run.state.currentUsageAttempt = ProviderUsageAttempt("model-x", "fixture-provider", "https://fixture.invalid")
+            .also { it.noteTypedUsage(11, 2, 13) }
+        return PricingGate().also { f.run.pricingCatalog = it }
+    }
+
+    /** Each reopening loads separate objects, but only observes the same owner. */
+    private fun observe(f: Fixture, loaded: ArrayList<HashMap<String, Any>>) =
+        object : ScreenHost("model-x", loaded) {
+            override fun replyUpdated(text: String) { f.run.reconcileInto(loaded) }
+            override fun replyFinished() { f.run.reconcileInto(loaded) }
+        }
+
+    private fun receipt(message: Map<String, Any>) = TokenUsageAccounting.decodeRecords(
+        message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString()
+    )
+
+    @Test fun reopeningAndClosingAgainDuringCompletedAccountingKeepsOneOwnerAndAllUsage() = runBlocking {
+        val f = fixture()
+        val price = usage(f)
+        val finish = CompletableDeferred<Unit>()
+        readThenClose(f, flow { emit("Answer"); finish.await() }, "Answer")
+        val owner = f.run.host
+        val first = stored(f.chatId)
+        finish.complete(Unit)
+        withTimeout(5000) { price.waiting.await() }
+        val second = stored(f.chatId)
+        withContext(Dispatchers.Main) {
+            f.run.attach(observe(f, first))
+            f.run.detachScreen()
+            f.run.attach(observe(f, second))
+            assertTrue(owner === f.run.host)
+            assertFalse(f.run.ended)
+            price.release()
+        }
+        awaitEnded(f.run)
+        for (reply in listOf(stored(f.chatId).last(), second.last())) {
+            assertEquals(MessageCompletionState.DONE, reply[MessageCompletionState.KEY_STATE])
+            assertEquals("Answer\n", reply["message"])
+            assertEquals(13, receipt(reply).single().totalTokens)
+        }
+    }
+
+    @Test fun reopeningDuringFailedAccountingKeepsFailureDetailsAndReportedUsage() = runBlocking {
+        val f = fixture()
+        val price = usage(f)
+        val finish = CompletableDeferred<Unit>()
+        readThenClose(f, flow { emit("Partial"); finish.await(); throw IllegalStateException("fixture request failed") }, "Partial")
+        val loaded = stored(f.chatId)
+        finish.complete(Unit)
+        withTimeout(5000) { price.waiting.await() }
+        withContext(Dispatchers.Main) { f.run.attach(observe(f, loaded)); price.release() }
+        awaitEnded(f.run)
+        for (reply in listOf(stored(f.chatId).last(), loaded.last())) {
+            assertEquals(MessageCompletionState.FAILED, reply[MessageCompletionState.KEY_STATE])
+            assertTrue(reply[MessageCompletionState.KEY_ERROR_TEXT].toString().isNotBlank())
+            assertEquals(13, receipt(reply).single().totalTokens)
+        }
+    }
+
+    @Test fun reopeningDuringStoppedAccountingKeepsThePartialReplyAndUsage() = runBlocking {
+        val f = fixture()
+        val price = usage(f)
+        readThenClose(f, flow { emit("Partial"); awaitCancellation() }, "Partial")
+        val loaded = stored(f.chatId)
+        withContext(Dispatchers.Main) { f.run.stopByUser() }
+        withTimeout(5000) { price.waiting.await() }
+        withContext(Dispatchers.Main) { f.run.attach(observe(f, loaded)); price.release() }
+        awaitEnded(f.run)
+        assertEquals(MessageCompletionState.STOPPED, stored(f.chatId).last()[MessageCompletionState.KEY_STATE])
+        assertEquals(13, receipt(loaded.last()).single().totalTokens)
+    }
+
+    @Test fun toolOnlyAccountingUpdatesItsCarrierAndRemovesItsReplyAsOneFinishedTransaction() = runBlocking {
+        val prefs = Preferences.getPreferences(context, "")
+        val previous = prefs.getAskBeforeAiImages()
+        prefs.setAskBeforeAiImages(true)
+        try {
+            val f = fixture()
+            val price = usage(f)
+            val finish = CompletableDeferred<Unit>()
+            readThenClose(f, flow {
+                emit(""); finish.await()
+                f.run.toolCalls.accept(0, "fixture-call", "create_image", "{\"prompt\":\"a lighthouse\"}")
+            }, "")
+            val before = ReplyRunRegistry.capture(f.chatId)
+            val loaded = stored(f.chatId)
+            finish.complete(Unit)
+            withTimeout(5000) { price.waiting.await() }
+            withContext(Dispatchers.Main) { f.run.attach(observe(f, loaded)); price.release() }
+            awaitEnded(f.run)
+            assertFalse(ReplyRunRegistry.isCurrent(f.chatId, before))
+            for (history in listOf(stored(f.chatId), loaded)) {
+                assertEquals(1, history.size)
+                assertEquals(false, history.single()["isBot"])
+                assertEquals(13, receipt(history.single()).single().totalTokens)
+            }
+            assertTrue(f.run.state.chatPreferences!!.getPendingImageApproval().isNotBlank())
+        } finally { prefs.setAskBeforeAiImages(previous) }
+    }
+
+    @Test fun closingDuringOriginalFinalBookkeepingWaitsForItsReceiptBeforeFinishing() = runBlocking {
+        val f = fixture()
+        val sourceDone = CompletableDeferred<Unit>()
+        val releaseOriginal = CompletableDeferred<Unit>()
+        val providerGate = CompletableDeferred<Unit>()
+        val received = CompletableDeferred<Unit>()
+        val reader = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
+            f.run.relay(flow {
+                emit("Answer"); providerGate.await(); sourceDone.complete(Unit)
+            }) { piece(it).also { received.complete(Unit) } }.collect { }
+        }
+        withTimeout(5000) { received.await() }
+        withContext(Dispatchers.Main) {
+            f.run.handOff(DetachedReplyHost(context, { f.chatId }, "model-x", f.rows, f.rows.last(), "T-test", label), releaseOriginal)
+            reader.cancel()
+        }
+        providerGate.complete(Unit)
+        withTimeout(5000) { sourceDone.await() }
+        withContext(Dispatchers.Main) {
+            assertFalse(f.run.ended)
+            f.run.attachUsageRecords(f.rows.last(), listOf(TurnUsageRecord("model-x", "fixture-provider", totalTokens = 13, requestId = "original-receipt")))
+            f.rows.last()[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
+            releaseOriginal.complete(Unit)
+        }
+        awaitEnded(f.run)
+        assertEquals("original-receipt", receipt(stored(f.chatId).last()).single().requestId)
+    }
+
+    @Test fun aRetiredHostCannotApplyAQueuedSnapshotToTheNewerConversation() = runBlocking {
+        val f = fixture()
+        val host = DetachedReplyHost(context, { f.chatId }, "model-x", f.rows, f.rows.last(), "T-test", label)
+        withContext(Dispatchers.Main) { host.saveInBackground(); host.released() }
+        val newer = stored(f.chatId)
+        newer.last()["message"] = "newer saved answer"
+        chats.saveChatHistory(context, f.chatId, newer, synchronous = true)
+        host.awaitSaved()
+        assertEquals("newer saved answer", stored(f.chatId).last()["message"])
+    }
+
+    @Test fun reasoningAlreadyDeliveredBeforeReopeningIsTransferredWithTheSameOwnedRow() = runBlocking {
+        val f = fixture()
+        readThenClose(f, flow { emit("Partial"); awaitCancellation() }, "Partial")
+        val loaded = stored(f.chatId)
+        val acc = org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator().apply {
+            acceptLine("data: {\"choices\":[{\"delta\":{\"reasoning\":\"Preserved reasoning\"}}]}")
+        }
+        withContext(Dispatchers.Main) {
+            val observation = ReasoningObservationContext(acc, "fixture", "model-x", true,
+                MessageIdentity.idOf(f.rows.last()), null, { true }, { _, _ -> })
+            f.run.host.reasoningObserved(observation, null)
+            f.run.attach(observe(f, loaded))
+            assertEquals("Preserved reasoning", loaded.last()[ChatAdapter.KEY_MESSAGE_REASONING])
+            f.run.stopByUser()
+        }
+        awaitEnded(f.run)
+        assertEquals("Preserved reasoning", stored(f.chatId).last()[ChatAdapter.KEY_MESSAGE_REASONING])
+    }
+
 }

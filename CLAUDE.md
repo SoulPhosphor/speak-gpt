@@ -264,7 +264,7 @@ This file is the navigation point, not an encyclopedia. Locate any additional sp
 | UI and theme-ready styles | `ui-style-guide.md` and `ui-style-adoption.md` |
 | UI redesign | `ui-redesign-plan.md` |
 | Document attachments | `document-includes-plan.md` |
-| Local speech | `whisper-local-plan.md` |
+| Local speech and remaining voice work | `whisper-memory-and-voice-handoff-2026-11-28.md`; `legacy/whisper-local-plan.md` is historical reference only |
 | API speech-to-text | `api-voice-service-plan.md` |
 
 Feature plans specify intended outcomes and work orders. Current code shows the implementation. If they disagree, identify the exact discrepancy; do not quietly choose a side or restart a completed feature. Historical documents are research only unless a current approved work order explicitly relies on them.
