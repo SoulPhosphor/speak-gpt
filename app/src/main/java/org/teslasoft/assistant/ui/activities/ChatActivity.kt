@@ -534,13 +534,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** A reply sent before this chat was closed, still arriving, shown here. */
     private var attachedReply: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
+    private var detachReplyDisplay: (() -> Unit)? = null
     /** A reconnected reply a message deletion stopped, still writing its stopped ending. */
     private var releasedReply: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
 
     /**
      * This chat was reopened while a reply sent before it closed is still
-     * being received. The screen shows the reply as it arrives and becomes
-     * the one that saves it; it stays busy (with Stop) until the reply ends.
+     * being received. The screen observes the reply's permanent owner and
+     * stays busy (with Stop) until the reply is durably saved.
      * Nothing is sent again.
      */
     private val onReplyHandedOff: (org.teslasoft.assistant.conversation.reply.ReplyRun) -> Unit = { run ->
@@ -566,7 +567,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         progress?.setOnClickListener { run.stopByUser() }
         // This adapter is a display subscription only. ReplyRun keeps its original
         // row objects and its single persistence owner through final bookkeeping.
-        run.attach(object : org.teslasoft.assistant.conversation.reply.ReplyRunHost {
+        detachReplyDisplay?.invoke()
+        detachReplyDisplay = run.attach(object : org.teslasoft.assistant.conversation.reply.ReplyRunHost {
             override val model: String get() = run.host.model
             override val storageUnavailable: Boolean get() = chatStorageUnavailable
             override fun conversationSnapshot(): List<Map<String, Any>> = messages
@@ -633,7 +635,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun handOffRunningReply() {
         org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.unwatch(chatId, onReplyHandedOff)
-        (attachedReply ?: releasedReply)?.detachScreen()
+        detachReplyDisplay?.invoke()
+        detachReplyDisplay = null
         attachedReply = null
         releasedReply = null
         val run = currentReplyRun ?: return
@@ -14777,7 +14780,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         attachedReply?.let { run ->
             attachedReply = null
             releasedReply = run
-            run.detachScreen()
+            detachReplyDisplay?.invoke()
+            detachReplyDisplay = null
             run.stopByUser()
         }
         parallelChat.abandonForDeletion()

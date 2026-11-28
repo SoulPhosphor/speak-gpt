@@ -134,7 +134,7 @@ class ReplyHandOffInstrumentedTest {
         }
         withTimeout(10_000) { received.await(); while (f.run.text != until) delay(10) }
         withContext(Dispatchers.Main) {
-            f.run.handOff(DetachedReplyHost(context, { f.chatId }, "model-x", ArrayList(f.rows), f.rows.last(), "T-test", label))
+            f.run.handOff(DetachedReplyHost(context, { f.chatId }, "model-x", ArrayList(f.rows), f.rows.last(), "T-test", label, f.run::ownsRow))
             reader.cancel()
         }
     }
@@ -251,6 +251,22 @@ class ReplyHandOffInstrumentedTest {
         }
     }
 
+    @Test fun anOlderScreensCleanupCannotDetachTheReplacementDisplay() = runBlocking {
+        val f = fixture()
+        readThenClose(f, flow { emit("Partial"); awaitCancellation() }, "Partial")
+        val older = stored(f.chatId)
+        val replacement = stored(f.chatId)
+        withContext(Dispatchers.Main) {
+            val closeOlder = f.run.attach(observe(f, older))
+            f.run.attach(observe(f, replacement))
+            closeOlder()
+            f.run.stopByUser()
+        }
+        awaitEnded(f.run)
+        assertEquals(MessageCompletionState.STOPPED, replacement.last()[MessageCompletionState.KEY_STATE])
+        assertEquals(MessageCompletionState.STREAMING, older.last()[MessageCompletionState.KEY_STATE])
+    }
+
     @Test fun reopeningDuringFailedAccountingKeepsFailureDetailsAndReportedUsage() = runBlocking {
         val f = fixture()
         val price = usage(f)
@@ -337,6 +353,30 @@ class ReplyHandOffInstrumentedTest {
         assertEquals("original-receipt", receipt(stored(f.chatId).last()).single().requestId)
     }
 
+    @Test fun restoringDuringToolAccountingCannotWriteOldUsageOrAnApprovalIntoTheRestoredChat() = runBlocking {
+        val f = fixture()
+        val price = usage(f)
+        val finish = CompletableDeferred<Unit>()
+        readThenClose(f, flow {
+            emit(""); finish.await()
+            f.run.toolCalls.accept(0, "fixture-call", "create_image", "{\"prompt\":\"a lighthouse\"}")
+        }, "")
+        finish.complete(Unit)
+        withTimeout(5000) { price.waiting.await() }
+        val restored = arrayListOf(row("restored question", false), row("restored answer", true))
+        synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+            ReplyRunRegistry.discardAll()
+            chats.saveChatHistory(context, f.chatId, restored, synchronous = true)
+            f.run.state.chatPreferences!!.commitUsageLog("restored usage sentinel")
+        }
+        withContext(Dispatchers.Main) { price.release() }
+        awaitEnded(f.run)
+        assertEquals("restored answer", stored(f.chatId).last()["message"])
+        assertEquals("restored usage sentinel", f.run.state.chatPreferences!!.getUsageLog())
+        assertEquals("", f.run.state.chatPreferences!!.getPendingImageApproval())
+        assertEquals(null, org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.activeJob(f.chatId))
+    }
+
     @Test fun aRetiredHostCannotApplyAQueuedSnapshotToTheNewerConversation() = runBlocking {
         val f = fixture()
         val host = DetachedReplyHost(context, { f.chatId }, "model-x", f.rows, f.rows.last(), "T-test", label)
@@ -376,6 +416,8 @@ class ReplyHandOffInstrumentedTest {
         val reply = HashMap(f.rows.last()).apply { put("message", "finished answer") }
         val newer = stored(f.chatId)
         newer.first()["message"] = "user edited the question"
+        newer.first()[ChatAdapter.KEY_TOKEN_USAGE_RECORDS] = TokenUsageAccounting.encodeRecords(listOf(
+            TurnUsageRecord("model-x", "fixture", totalTokens = 7, requestId = "newer-tool-receipt")))
         newer.first()["bookmark"] = true
         newer.last()["hiddenFromAi"] = true
         newer.last()["bookmark"] = true
@@ -384,11 +426,16 @@ class ReplyHandOffInstrumentedTest {
             context, f.chatId, ReplyEdits(listOf(carrier, reply)), label))
         val after = stored(f.chatId)
         assertEquals("user edited the question", after.first()["message"])
-        assertEquals(13, receipt(after.first()).single().totalTokens)
+        assertEquals(setOf("newer-tool-receipt", "tool-receipt"), receipt(after.first()).map { it.requestId }.toSet())
+        assertEquals(20, receipt(after.first()).sumOf { it.totalTokens ?: 0 })
         assertEquals("finished answer", after.last()["message"])
         assertEquals(true, after.first()["bookmark"])
         assertEquals(true, after.last()["bookmark"])
         assertEquals(true, after.last()["hiddenFromAi"])
+        // Reapplying the same reply transaction is idempotent, including receipts.
+        assertEquals(ReplyRowWriter.Outcome.SAVED, ReplyRowWriter.apply(
+            context, f.chatId, ReplyEdits(listOf(carrier, reply)), label))
+        assertEquals(2, receipt(stored(f.chatId).first()).size)
     }
 
     @Test fun aKeptWholeHistoryDeletionIsSavedBeforeTheReplyTransformsStorage() = runBlocking {

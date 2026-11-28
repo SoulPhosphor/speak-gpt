@@ -680,11 +680,15 @@ internal class ReplyRun(
         if (records.isEmpty() || host.storageUnavailable || retired) return
         val snapshot = host.conversationSnapshot().map { HashMap(it) }
         withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
-            UsageLogStore.seed(prefs, snapshot)
-            UsageLogStore.append(
-                prefs,
-                records.map { UsageLog.entry(category, messageId?.ifBlank { null }, it, function = function) }
-            )
+            synchronized(org.teslasoft.assistant.preferences.ChatPreferences.CHAT_LIST_LOCK) {
+                if (retired || ReplyRunRegistry.isDeleted(state.chatId) ||
+                    org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate.blocksCurrentProcess(app)) return@withContext
+                UsageLogStore.seed(prefs, snapshot)
+                UsageLogStore.append(
+                    prefs,
+                    records.map { UsageLog.entry(category, messageId?.ifBlank { null }, it, function = function) }
+                )
+            }
         }
     }
 
@@ -787,7 +791,13 @@ internal class ReplyRun(
         CoroutineScope(Dispatchers.IO + kotlinx.coroutines.NonCancellable).launch {
             var delayMs = 250L
             while (!retired) {
-                val kept = try { UsageLogStore.seedChecked(prefs, rows) } catch (_: Exception) { false }
+                val kept = try {
+                    synchronized(org.teslasoft.assistant.preferences.ChatPreferences.CHAT_LIST_LOCK) {
+                        if (retired || ReplyRunRegistry.isDeleted(state.chatId) ||
+                            org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate.blocksCurrentProcess(app)) true
+                        else UsageLogStore.seedChecked(prefs, rows)
+                    }
+                } catch (_: Exception) { false }
                 if (kept) break
                 kotlinx.coroutines.delay(delayMs)
                 delayMs = (delayMs * 2).coerceAtMost(30_000L)
@@ -1021,9 +1031,12 @@ internal class ReplyRun(
     }
 
     /** Attach a display without transferring the authoritative rows or writer. */
-    fun attach(next: ReplyRunHost) {
+    fun attach(next: ReplyRunHost): () -> Unit {
         screenObserver = next
         next.replyUpdated(text)
+        // A previous screen may be destroyed after its replacement attaches.
+        // Its cleanup may remove only its own subscription.
+        return { if (screenObserver === next) screenObserver = null }
     }
 
     /** The permanent ID of the reply's row, or blank. */
@@ -1208,28 +1221,35 @@ internal class ReplyRun(
         } catch (_: Exception) { }
         recordTurnMemoryScope()
 
-        val global = org.teslasoft.assistant.preferences.Preferences.getPreferences(app, "")
-        if (global.getAskBeforeAiImages()) {
-            val endpointId = state.endpoint?.id.orEmpty()
-            val approval = org.teslasoft.assistant.imagegen.PendingImageApproval.of(
-                java.util.UUID.randomUUID().toString(), calls, text, host.model, endpointId
-            )
-            state.chatPreferences?.setPendingImageApproval(approval.encode())
-            toolTurnRequest?.let { request ->
-                PendingToolTurns.keep(
-                    state.chatId,
-                    ToolTurnContext(approval.id, endpointId, request, toolTurnStreaming, toolTurnMemoryReferences, turnReasoning)
+        // Deletion/restore and the resulting tool decision share the history
+        // lock. A late finalizer cannot recreate approval settings or start
+        // a new paid image job after it has lost ownership.
+        synchronized(org.teslasoft.assistant.preferences.ChatPreferences.CHAT_LIST_LOCK) {
+            if (retired || fence.isStale() || !ownsRow() ||
+                org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate.blocksCurrentProcess(app)) return
+            val global = org.teslasoft.assistant.preferences.Preferences.getPreferences(app, "")
+            if (global.getAskBeforeAiImages()) {
+                val endpointId = state.endpoint?.id.orEmpty()
+                val approval = org.teslasoft.assistant.imagegen.PendingImageApproval.of(
+                    java.util.UUID.randomUUID().toString(), calls, text, host.model, endpointId
+                )
+                state.chatPreferences?.setPendingImageApproval(approval.encode())
+                toolTurnRequest?.let { request ->
+                    PendingToolTurns.keep(
+                        state.chatId,
+                        ToolTurnContext(approval.id, endpointId, request, toolTurnStreaming, toolTurnMemoryReferences, turnReasoning)
+                    )
+                }
+            } else {
+                val call = calls.firstOrNull { it.name == org.teslasoft.assistant.imagegen.CreateImageTool.NAME } ?: return
+                val valid = org.teslasoft.assistant.imagegen.CreateImageTool.validate(call.arguments)
+                    as? org.teslasoft.assistant.imagegen.CreateImageTool.Validation.Valid ?: return
+                val request = org.teslasoft.assistant.imagegen.CreateImageTool.requestFor(valid, global) ?: return
+                org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.start(
+                    app, state.chatId, chatName, request,
+                    org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.Origin.TOOL
                 )
             }
-        } else {
-            val call = calls.firstOrNull { it.name == org.teslasoft.assistant.imagegen.CreateImageTool.NAME } ?: return
-            val valid = org.teslasoft.assistant.imagegen.CreateImageTool.validate(call.arguments)
-                as? org.teslasoft.assistant.imagegen.CreateImageTool.Validation.Valid ?: return
-            val request = org.teslasoft.assistant.imagegen.CreateImageTool.requestFor(valid, global) ?: return
-            org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.start(
-                app, state.chatId, chatName, request,
-                org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.Origin.TOOL
-            )
         }
     }
 

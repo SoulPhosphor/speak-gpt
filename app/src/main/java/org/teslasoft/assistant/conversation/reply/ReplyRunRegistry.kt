@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.conversation.reply
 
+import org.teslasoft.assistant.preferences.ChatPreferences
+
 /**
  * The replies that are still being received with no chat screen showing
  * them, one per chat. A reopened chat screen finds its reply here and
@@ -51,7 +53,7 @@ internal object ReplyRunRegistry {
 
     /** Records [run] as [chatId]'s reply in progress. When it was handed off
      *  (its screen closed) and that chat is open in another screen, that
-     *  screen is told, so it shows and saves the reply. Main thread. */
+     *  screen is told, so it observes the reply. Main thread. */
     fun register(chatId: String, run: ReplyRun) {
         val screen = synchronized(lock) {
             if (runs[chatId] !== run) changed(chatId)
@@ -84,7 +86,7 @@ internal object ReplyRunRegistry {
     fun isDeleted(chatId: String): Boolean = synchronized(lock) { chatId in deleted }
 
     /** The chats were deleted: their replies stop and write nothing more. */
-    fun markChatsDeleted(chatIds: Set<String>) {
+    fun markChatsDeleted(chatIds: Set<String>) = synchronized(ChatPreferences.CHAT_LIST_LOCK) {
         val stopped = synchronized(lock) {
             deleted.addAll(chatIds)
             chatIds.forEach { changed(it); rowOwners.remove(it); PendingToolTurns.forget(it) }
@@ -114,7 +116,7 @@ internal object ReplyRunRegistry {
     }
 
     /** The whole chat set was replaced (a restore): every reply stops and writes nothing more. */
-    fun discardAll() {
+    fun discardAll() = synchronized(ChatPreferences.CHAT_LIST_LOCK) {
         val stopped = synchronized(lock) {
             generation += 1
             runs.keys.forEach(::changed)

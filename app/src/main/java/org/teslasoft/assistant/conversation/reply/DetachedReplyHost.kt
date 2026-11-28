@@ -28,6 +28,7 @@ import org.teslasoft.assistant.preferences.MessageIdentity
 import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 import org.teslasoft.assistant.preferences.memory.scan.ScanMessageScope
+import org.teslasoft.assistant.usage.TokenUsageAccounting
 
 /** An immutable transaction: update the reply and its usage carrier, and/or remove
  * the empty reply, together. It never replaces an unrelated conversation row. */
@@ -46,6 +47,21 @@ internal data class ReplyEdits(
                 val fields = if (row["isBot"] == true) ChatAdapter.VARIANT_FIELDS
                     else listOf(ChatAdapter.KEY_TOKEN_USAGE_RECORDS, ScanMessageScope.KEY)
                 for (field in fields) {
+                    if (row["isBot"] != true && field == ChatAdapter.KEY_TOKEN_USAGE_RECORDS) {
+                        // Several tool selections can charge the same initiating
+                        // message. A late receipt must not erase a newer one.
+                        val existing = TokenUsageAccounting.decodeRecords(current[field]?.toString())
+                        val incoming = TokenUsageAccounting.decodeRecords(row[field]?.toString())
+                        val combined = existing.toMutableList()
+                        incoming.forEach { record ->
+                            val index = combined.indexOfFirst { old ->
+                                if (record.requestId != null) old.requestId == record.requestId else old == record
+                            }
+                            if (index < 0) combined.add(record) else combined[index] = record
+                        }
+                        if (combined.isNotEmpty()) current[field] = TokenUsageAccounting.encodeRecords(combined)
+                        continue
+                    }
                     if (row.containsKey(field)) current[field] = row.getValue(field)
                     else if (row["isBot"] == true) current.remove(field)
                 }

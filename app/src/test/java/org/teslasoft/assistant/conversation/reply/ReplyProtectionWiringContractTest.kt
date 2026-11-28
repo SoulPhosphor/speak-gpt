@@ -96,13 +96,13 @@ class ReplyProtectionWiringContractTest {
     @Test fun aMessageDeletionDetachesTheOldDisplayBeforeTheNextTurn() {
         val retire = chat.substringAfter("private fun retireRunningWorkForDeletion() {")
         assertTrue(retire.indexOf("attachedReply = null") < retire.indexOf("run.stopByUser()"))
-        assertTrue(retire.contains("run.detachScreen()"))
+        assertTrue(retire.contains("detachReplyDisplay?.invoke()"))
         assertTrue(chat.contains("if (attachedReply !== run || isFinishing || isDestroyed) return"))
     }
 
     @Test fun reattachingDoesNotTransferTheReplysRowsOrPersistenceOwner() {
         val run = source("conversation/reply/ReplyRun.kt")
-        val attach = run.substringAfter("fun attach(next: ReplyRunHost) {").substringBefore("\n    }")
+        val attach = run.substringAfter("fun attach(next: ReplyRunHost): () -> Unit {").substringBefore("\n    }")
         assertTrue(attach.contains("screenObserver = next"))
         assertFalse(attach.contains("host ="))
         assertTrue(run.contains("screenReleased?.await()"))

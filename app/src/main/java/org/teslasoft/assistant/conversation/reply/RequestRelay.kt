@@ -17,19 +17,24 @@
 package org.teslasoft.assistant.conversation.reply
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Runs a provider request in [scope] (the reply's own scope) and hands its
  * items, and its failure, to whoever reads the returned flow. While
  * [keepRunning] is false, a reader that stops early also stops the request,
  * so Stop still ends it. Once [keepRunning] is true, the request continues
- * and the rest of its output stays buffered for the next reader.
+ * and keeps recording output in ReplyRun. The closed screen's delivery
+ * buffer is discarded; reopened screens observe the run's accumulated state.
  */
 internal class RequestRelay(private val scope: CoroutineScope) {
 
@@ -58,12 +63,24 @@ internal class RequestRelay(private val scope: CoroutineScope) {
         requestContext: CoroutineContext,
         keepRunning: () -> Boolean
     ): Flow<T> {
-        val channel = Channel<T>(Channel.UNLIMITED)
+        // A slow screen cannot accumulate an unlimited second copy of output.
+        val channel = Channel<T>(64)
+        val readerGone = AtomicBoolean(false)
         val started = kotlinx.coroutines.CompletableDeferred<Current>()
         val producer = scope.launch(requestContext, start = kotlinx.coroutines.CoroutineStart.LAZY) {
             val call = started.await()
             try {
-                source.collect { channel.send(it) }
+                source.collect { item ->
+                    currentCoroutineContext().ensureActive()
+                    if (!readerGone.get()) {
+                        try { channel.send(item) } catch (cancelled: CancellationException) {
+                            // Closing the display wakes a producer waiting on its
+                            // bounded buffer, without cancelling the paid request.
+                            currentCoroutineContext().ensureActive()
+                            if (!readerGone.get()) throw cancelled
+                        }
+                    }
+                }
                 channel.close()
             } catch (e: Throwable) {
                 call.failure = e
@@ -81,6 +98,8 @@ internal class RequestRelay(private val scope: CoroutineScope) {
                 finished = true
             } finally {
                 if (!finished && !keepRunning()) producer.cancel()
+                readerGone.set(true)
+                channel.cancel()
             }
         }
     }

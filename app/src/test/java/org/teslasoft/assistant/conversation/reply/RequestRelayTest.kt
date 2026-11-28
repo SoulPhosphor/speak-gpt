@@ -99,6 +99,25 @@ class RequestRelayTest {
         assertEquals("reply", result)
     }
 
+    @Test fun aSlowScreensBufferIsBoundedAndClosingItStillRecordsTheEntireRequest() = runBlocking {
+        val atCapacity = CompletableDeferred<Unit>()
+        val recorded = AtomicInteger(0)
+        val output = relay.relay(flow {
+            repeat(1000) { index ->
+                recorded.incrementAndGet()
+                if (index == 64) atCapacity.complete(Unit)
+                emit(index)
+            }
+        }, EmptyCoroutineContext) { true }
+        withTimeout(5000) { atCapacity.await() }
+        // The producer stops at the bounded delivery queue until the screen
+        // reads or closes. Its ReplyRun recording happened before this emit.
+        assertEquals(65, recorded.get())
+        assertEquals(listOf(0), withTimeout(5000) { output.take(1).toList() })
+        assertEquals(null, withTimeout(5000) { relay.awaitCurrent() })
+        assertEquals(1000, recorded.get())
+    }
+
     @Test fun waitingForTheRequestInFlightGivesItsFailureOrNothing() = runBlocking {
         val relayA = RequestRelay(CoroutineScope(SupervisorJob() + Dispatchers.IO))
         assertEquals(null, relayA.awaitCurrent())
