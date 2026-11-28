@@ -531,6 +531,62 @@ class ReplyHandOffInstrumentedTest {
         assertEquals("Preserved reasoning", stored(f.chatId).last()[ChatAdapter.KEY_MESSAGE_REASONING])
     }
 
+    private fun lateReasoning(f: Fixture) = ReasoningObservationContext(
+        org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator().apply {
+            acceptLine("data: {\"choices\":[{\"delta\":{\"reasoning\":\"Late reasoning\"}}]}")
+        }, "fixture", "model-x", true, MessageIdentity.idOf(f.rows.last()), null, { true }, { _, _ -> })
+
+    @Test fun lateReasoningCannotRevertAnEditedCompletedReplyOrItsUsage() = runBlocking {
+        val f = fixture()
+        usage(f).release()
+        val finish = CompletableDeferred<Unit>()
+        readThenClose(f, flow { emit("Answer"); finish.await() }, "Answer")
+        finish.complete(Unit)
+        awaitEnded(f.run)
+        val edited = stored(f.chatId)
+        edited.last()["message"] = "edited answer"
+        edited.last()["bookmark"] = true
+        chats.saveChatHistory(context, f.chatId, edited, synchronous = true)
+        withContext(Dispatchers.Main) { f.run.host.reasoningObserved(lateReasoning(f), null) }
+        withTimeout(5000) { f.run.host.awaitSaved() }
+        val after = stored(f.chatId).last()
+        assertEquals("edited answer", after["message"])
+        assertEquals("Late reasoning", after[ChatAdapter.KEY_MESSAGE_REASONING])
+        assertEquals(13, receipt(after).single().totalTokens)
+        assertEquals(true, after["bookmark"])
+    }
+
+    @Test fun lateReasoningUpdatesItsGeneratedVersionWithoutChangingThePromotedVersion() = runBlocking {
+        val f = fixture()
+        val finish = CompletableDeferred<Unit>()
+        readThenClose(f, flow { emit("Answer"); finish.await() }, "Answer")
+        finish.complete(Unit)
+        awaitEnded(f.run)
+        val edited = stored(f.chatId)
+        val reply = edited.last()
+        val newest = ChatAdapter.snapshotVariant(reply).apply { put("message", "edited newest version") }
+        val older = HashMap(newest).apply {
+            put("message", "older promoted version")
+            put(ChatAdapter.KEY_MESSAGE_REASONING, "older reasoning")
+        }
+        reply[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(mutableListOf(older, newest))
+        reply[ChatAdapter.KEY_CANONICAL_VARIANT] = "0"
+        reply[ChatAdapter.KEY_DISPLAY_VARIANT] = "0"
+        reply["message"] = "older promoted version"
+        reply[ChatAdapter.KEY_MESSAGE_REASONING] = "older reasoning"
+        chats.saveChatHistory(context, f.chatId, edited, synchronous = true)
+        withContext(Dispatchers.Main) { f.run.host.reasoningObserved(lateReasoning(f), null) }
+        withTimeout(5000) { f.run.host.awaitSaved() }
+        val after = stored(f.chatId).last()
+        val versions = ChatAdapter.parseVariants(after[ChatAdapter.KEY_VARIANTS]?.toString())
+        assertEquals("older promoted version", after["message"])
+        assertEquals("older reasoning", after[ChatAdapter.KEY_MESSAGE_REASONING])
+        assertEquals("0", after[ChatAdapter.KEY_CANONICAL_VARIANT])
+        assertEquals("0", after[ChatAdapter.KEY_DISPLAY_VARIANT])
+        assertEquals("edited newest version", versions.last()["message"])
+        assertEquals("Late reasoning", versions.last()[ChatAdapter.KEY_MESSAGE_REASONING])
+    }
+
     @Test fun replyTransactionsPreserveConcurrentUserEditsVisibilityAndBookmarks() {
         val f = fixture()
         val carrier = HashMap(f.rows.first()).apply {

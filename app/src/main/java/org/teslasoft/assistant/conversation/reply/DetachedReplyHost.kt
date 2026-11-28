@@ -34,14 +34,38 @@ import org.teslasoft.assistant.usage.TokenUsageAccounting
  * the empty reply, together. It never replaces an unrelated conversation row. */
 internal data class ReplyEdits(
     val rows: List<HashMap<String, Any>>,
-    val removed: Set<String> = emptySet()
+    val removed: Set<String> = emptySet(),
+    val reasoningOnly: Boolean = false
 ) {
+    private fun mergeReasoning(current: HashMap<String, Any>, row: Map<String, Any>) {
+        val fields = listOf(ChatAdapter.KEY_MESSAGE_REASONING, ChatAdapter.KEY_MESSAGE_REASONING_FORMAT,
+            ChatAdapter.KEY_MESSAGE_REASONING_SUMMARY, ChatAdapter.KEY_MESSAGE_REASONING_TOKENS,
+            ChatAdapter.KEY_MESSAGE_REASONING_LEVEL)
+        val variants = ChatAdapter.parseVariants(current[ChatAdapter.KEY_VARIANTS]?.toString())
+        if (variants.isNotEmpty()) {
+            // A new regeneration takes the row lease. While this owner still
+            // holds it, its version is the captured canonical version, or the
+            // newest one folded in by the reopened screen after completion.
+            val target = row[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull() ?: variants.lastIndex
+            val version = variants.getOrNull(target) ?: return
+            fields.forEach { field -> row[field]?.let { version[field] = it.toString() } }
+            current[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(variants)
+            val canonical = current[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull() ?: variants.lastIndex
+            if (canonical != target) return
+        }
+        fields.forEach { field -> row[field]?.let { current[field] = it } }
+    }
+
     fun mergeInto(history: MutableList<HashMap<String, Any>>) {
         history.removeAll { MessageIdentity.idOf(it) in removed }
         for (row in rows) {
             val index = history.indexOfFirst { MessageIdentity.idOf(it) == MessageIdentity.idOf(row) }
             if (index >= 0) {
                 val current = history[index]
+                if (reasoningOnly) {
+                    mergeReasoning(current, row)
+                    continue
+                }
                 // Generation owns response fields. Bookmarks, visibility, display
                 // choices, user text and attachments still belong to the conversation.
                 val fields = if (row["isBot"] == true) ChatAdapter.VARIANT_FIELDS
@@ -132,6 +156,7 @@ internal class DetachedReplyHost(
     private val changed = LinkedHashMap<String, HashMap<String, Any>>()
     private val removed = LinkedHashSet<String>()
     private var lastSaveUptime = 0L
+    private var finished = false
     private val saves = ReplyWriteQueue<ReplyEdits>(CoroutineScope(SupervisorJob() + Dispatchers.IO)) { edits, wanted ->
         val target = chatId()
         if (!ownerWanted()) ReplyWriteQueue.Result.GONE else when (ReplyRowWriter.apply(
@@ -150,7 +175,7 @@ internal class DetachedReplyHost(
         MessageIdentity.idOf(row) !in removed && rows.any { it === row }
     override fun usageCarrier(): HashMap<String, Any> = row
     override fun lifecycleTurnId(): String = turnId
-    override fun replyFinished() {}
+    override fun replyFinished() { finished = true }
 
     override fun replyUpdated(text: String) {
         if (MessageIdentity.idOf(row) in removed) return
@@ -161,7 +186,11 @@ internal class DetachedReplyHost(
 
     override fun reasoningObserved(observation: ReasoningObservationContext, learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?) {
         if (MessageIdentity.idOf(row) !in removed && ObservedReasoning.belongsTo(row, observation) &&
-            ObservedReasoning.applyTo(row, observation, learnedCapability)) saveInBackground()
+            ObservedReasoning.applyTo(row, observation, learnedCapability)) {
+            val patch = ReplyEdits(ChatHistoryWriteOrder.snapshotOf(listOf(row)), reasoningOnly = true)
+            patch.mergeInto(mutableListOf(row))
+            if (finished) saves.submit(patch) else saveInBackground()
+        }
     }
 
     private fun snapshot(): ReplyEdits {
