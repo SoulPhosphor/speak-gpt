@@ -139,7 +139,7 @@ class ReplyHandOffInstrumentedTest {
         }
         withTimeout(10_000) { received.await(); while (f.run.text != until) delay(10) }
         withContext(Dispatchers.Main) {
-            f.run.handOff(owner ?: DetachedReplyHost(context, { f.chatId }, "model-x", ArrayList(f.rows), f.rows.last(), "T-test", label, f.run::ownsRow))
+            f.run.handOff(owner ?: DetachedReplyHost(context, { f.run.state.chatId }, "model-x", ArrayList(f.rows), f.rows.last(), "T-test", label, f.run::ownsRow))
             reader.cancel()
         }
     }
@@ -418,6 +418,46 @@ class ReplyHandOffInstrumentedTest {
         }
         awaitEnded(f.run)
         assertEquals("original-receipt", receipt(stored(f.chatId).last()).single().requestId)
+    }
+
+    @Test fun aLegacyRenameDuringAccountingMovesTheReplyAndItsCapturedSettingsTogether() = runBlocking {
+        val global = Preferences.getPreferences(context, "")
+        val oldAsk = global.getAskBeforeAiImages()
+        global.setAskBeforeAiImages(true)
+        try {
+            val f = fixture()
+            val price = usage(f)
+            val finish = CompletableDeferred<Unit>()
+            readThenClose(f, flow {
+                emit(""); finish.await()
+                f.run.toolCalls.accept(0, "fixture-call", "create_image", "{\"prompt\":\"a lighthouse\"}")
+            }, "")
+            finish.complete(Unit)
+            withTimeout(5000) { price.waiting.await() }
+            val renamed = newChat()
+            val capturedSettings = f.run.state.chatPreferences
+            synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+                chats.saveChatHistory(context, renamed, stored(f.chatId), synchronous = true)
+                ReplyRunRegistry.rename(f.chatId, renamed)
+                org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared.rename(f.chatId, renamed)
+                SecurePrefs.get(context, "chat_${f.chatId}").edit().clear().commit()
+                SecurePrefs.get(context, "settings.${f.chatId}").edit().clear().commit()
+            }
+            withContext(Dispatchers.Main) { price.release() }
+            awaitEnded(f.run)
+            assertTrue(capturedSettings === f.run.state.chatPreferences)
+            assertEquals(renamed, f.run.state.chatId)
+            assertEquals(1, stored(renamed).size)
+            assertEquals(false, stored(renamed).single()["isBot"])
+            assertEquals(13, receipt(stored(renamed).last()).single().totalTokens)
+            assertTrue(Preferences.getPreferences(context, renamed).getUsageLog().isNotBlank())
+            assertEquals("", Preferences.getPreferences(context, f.chatId).getUsageLog())
+            assertTrue(stored(f.chatId).isEmpty())
+            val newSettings = Preferences.getPreferences(context, renamed)
+            val approval = org.teslasoft.assistant.imagegen.PendingImageApproval.decode(newSettings.getPendingImageApproval())!!
+            assertTrue(PendingToolTurns.take(renamed, approval.id) != null)
+            assertEquals("", Preferences.getPreferences(context, f.chatId).getPendingImageApproval())
+        } finally { global.setAskBeforeAiImages(oldAsk) }
     }
 
     @Test fun restoringDuringToolAccountingCannotWriteOldUsageOrAnApprovalIntoTheRestoredChat() = runBlocking {

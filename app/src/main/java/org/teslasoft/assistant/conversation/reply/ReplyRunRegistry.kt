@@ -98,7 +98,7 @@ internal object ReplyRunRegistry {
     /** A legacy chat moved to a new id; its reply follows it. */
     fun rename(oldId: String, newId: String) {
         if (oldId == newId) return
-        synchronized(lock) {
+        synchronized(ChatPreferences.CHAT_LIST_LOCK) { synchronized(lock) {
             changed(oldId)
             changed(newId)
             PendingToolTurns.rename(oldId, newId)
@@ -108,11 +108,10 @@ internal object ReplyRunRegistry {
             }
             runs.remove(oldId)?.let { run ->
                 runs[newId] = run
-                // A run still shown by its own screen follows the screen's rename.
-                if (run.handedOff) run.state.chatId = newId
+                run.followRename(newId)
             }
             screens.remove(oldId)?.let { screens[newId] = it }
-        }
+        } }
     }
 
     /** The whole chat set was replaced (a restore): every reply stops and writes nothing more. */

@@ -130,7 +130,19 @@ internal class ReplyRun(
     val screenCompletion = CompletableDeferred<Unit>()
     private val ownership = ownerships.incrementAndGet()
     fun claimRow(rowId: String) = ReplyRunRegistry.claimRow(state.chatId, rowId, ownership)
-    fun ownsRow(): Boolean = !retired && ReplyRunRegistry.ownsRow(state.chatId, replyRowId, ownership)
+    fun ownsRow(): Boolean = synchronized(org.teslasoft.assistant.preferences.ChatPreferences.CHAT_LIST_LOCK) {
+        !retired && ReplyRunRegistry.ownsRow(state.chatId, replyRowId, ownership)
+    }
+
+    fun followRename(newId: String) {
+        // Keep captured Preferences references pointed at the moved settings,
+        // including accounting already waiting on IO or a price lookup.
+        state.chatPreferences?.let {
+            it.setPreferences(newId, app)
+            state.chatPreferences = it
+        }
+        state.chatId = newId
+    }
     private var screenObserver: ReplyRunHost? = null
     private var recordedFailure: FailureRecord? = null
 
