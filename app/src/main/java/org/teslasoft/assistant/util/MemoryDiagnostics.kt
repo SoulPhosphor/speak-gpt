@@ -121,9 +121,11 @@ object MemoryDiagnostics {
 
             // Debug.getMemoryInfo fills PSS without the ActivityManager round-trip;
             // getTotalPss() is in KB. Cheap enough for a 60s cadence.
+            var stats: Map<String, String> = emptyMap()
             val pssStr = try {
                 val dmi = Debug.MemoryInfo()
                 Debug.getMemoryInfo(dmi)
+                stats = try { dmi.memoryStats } catch (_: Throwable) { emptyMap() }
                 "${(dmi.totalPss + 512) / 1024}MB"
             } catch (_: Throwable) { "?" }
 
@@ -135,11 +137,17 @@ object MemoryDiagnostics {
             "uptime=${processUptimeMinutes()}m pss=$pssStr heap=$javaUsed/$javaTotal/${javaMax}MB " +
                 "native=$nativeAlloc/${nativeSize}MB threads=${threadCount()} " +
                 "avail=$availStr low=$lowStr lowThreshold=$thresholdStr " +
-                "thermal=${thermalStatus(context)}"
+                "thermal=${thermalStatus(context)} | ${MemoryFields.breakdown(stats)}"
         } catch (_: Throwable) {
             "mem=unavailable"
         }
     }
+
+    /** `heap=<in use>/<limit>MB` for the Java heap right now. */
+    fun javaHeapField(): String = try {
+        val rt = Runtime.getRuntime()
+        MemoryFields.javaHeap(rt.totalMemory() - rt.freeMemory(), rt.maxMemory())
+    } catch (_: Throwable) { "heap=?" }
 
     private fun systemMemoryInfo(context: Context): ActivityManager.MemoryInfo? {
         return try {
