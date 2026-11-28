@@ -56,6 +56,10 @@ internal object ReplyRowWriter {
                 outcome = Outcome.CHAT_GONE
                 return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
             }
+            // A whole-history save of this chat that has not landed yet (for
+            // example a confirmed deletion) is newer than storage: wait for it
+            // and retry, never write a change of the older stored copy over it.
+            if (order.hasPending(chatId)) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
             val chats = ChatPreferences.getChatPreferences()
             val stored = chats.getChatByIdResult(app, chatId, detectedDuring)
             if (!ChatStorageHealth.isAuthoritative(stored.state)) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
@@ -84,6 +88,7 @@ internal object ReplyRowWriter {
                 gone = true
                 return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
             }
+            if (order.hasPending(chatId)) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
             val chats = ChatPreferences.getChatPreferences()
             val stored = chats.getChatByIdResult(app, chatId, detectedDuring)
             if (!ChatStorageHealth.isAuthoritative(stored.state)) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
@@ -141,6 +146,14 @@ internal class DetachedReplyHost(
     }
 
     override fun replyFinished() {}
+
+    override fun reasoningObserved(
+        observation: ReasoningObservationContext,
+        learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
+    ) {
+        if (!ObservedReasoning.belongsTo(row, observation)) return
+        if (ObservedReasoning.applyTo(row, observation, learnedCapability)) saveInBackground()
+    }
 
     override fun released() {
         synchronized(saveLock) { stopped = true }

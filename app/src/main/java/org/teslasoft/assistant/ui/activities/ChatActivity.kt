@@ -589,6 +589,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 selectionMode.rebuild(messages)
                 saveSettingsInBackground()
             }
+            override fun reasoningObserved(
+                observation: ReasoningObservationContext,
+                learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
+            ) = deliverObservedReasoning(observation, learnedCapability)
             override fun replyFinished() {
                 if (attachedReply === run) attachedReply = null
                 val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
@@ -597,6 +601,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 setGenerationProgressVisible(false)
                 restoreUIState()
                 calculateCost()
+                // The reply may have ended asking to create an image.
+                resumeWaitingImageApproval()
             }
         })
     }
@@ -672,6 +678,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             selectionMode.rebuild(messages)
             saveSettingsInBackground()
         }
+        override fun reasoningObserved(
+            observation: ReasoningObservationContext,
+            learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
+        ) = deliverObservedReasoning(observation, learnedCapability)
         override fun lifecycleTurnId(): String {
             if (currentLifecycleTurnId.isBlank()) beginLifecycleTurn()
             return currentLifecycleTurnId
@@ -8445,31 +8455,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         observation: ReasoningObservationContext,
         learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
     ) {
-        val acc = observation.accumulator
-        if (!acc.hasReasoning()) return
-        val snapshot = acc.snapshot()
-        if (snapshot.text.isBlank()) return
         runOnUiThread {
             if (isFinishing || isDestroyed || !observation.canDeliver()) return@runOnUiThread
             val index = messages.indexOfFirst {
-                it["isBot"] == true && org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == observation.messageId
+                org.teslasoft.assistant.conversation.reply.ObservedReasoning.belongsTo(it, observation)
             }
             if (index < 0) return@runOnUiThread
-            val msg = messages[index]
-            msg[ChatAdapter.KEY_MESSAGE_REASONING] = snapshot.text
-            msg[ChatAdapter.KEY_MESSAGE_REASONING_FORMAT] =
-                LegacyReasoningRepair.FORMAT_VERSION
-            msg[ChatAdapter.KEY_MESSAGE_REASONING_SUMMARY] = snapshot.isSummary.toString()
-            if (!msg.containsKey(ChatAdapter.KEY_MESSAGE_REASONING_LEVEL)) {
-                org.teslasoft.assistant.reasoning.ReasoningIndicator
-                    .forGeneration(
-                        learnedCapability ?: org.teslasoft.assistant.reasoning.ReasoningCapability.UNKNOWN,
-                        org.teslasoft.assistant.reasoning.ReasoningEffort.AUTO
-                    )
-                    ?.let { msg[ChatAdapter.KEY_MESSAGE_REASONING_LEVEL] = it.token }
-            }
-            snapshot.reasoningTokens?.let {
-                msg[ChatAdapter.KEY_MESSAGE_REASONING_TOKENS] = it.toString()
+            if (!org.teslasoft.assistant.conversation.reply.ObservedReasoning.applyTo(messages[index], observation, learnedCapability)) {
+                return@runOnUiThread
             }
             adapter?.notifyItemChanged(index)
             saveSettings()
@@ -9829,7 +9822,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             reasoningAccumulator = currentTurnReasoning,
             reasoningObserved = currentTurnReasoningObserved,
             canDeliver = turnFence.deliveryGuard(),
-            reasoningSink = ::deliverObservedReasoning
+            reasoningSink = replyRun.let { run -> { observation, capability -> run.deliverReasoning(observation, capability) } }
         )
         return try {
             kotlinx.coroutines.withContext(generationRequestContext.asContextElement(context)) {

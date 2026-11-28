@@ -99,6 +99,10 @@ class ReplyHandOffInstrumentedTest {
         override fun replyFinished() {}
         override fun saveRow(row: HashMap<String, Any>) {}
         override fun removeRow(row: HashMap<String, Any>) {}
+        override fun reasoningObserved(
+            observation: ReasoningObservationContext,
+            learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
+        ) {}
     }
 
     private class Fixture(val chatId: String, val rows: ArrayList<HashMap<String, Any>>, val run: ReplyRun)

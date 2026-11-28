@@ -101,6 +101,11 @@ internal interface ReplyRunHost {
     fun saveRow(row: HashMap<String, Any>)
     /** Removes [row] from the conversation and its storage. */
     fun removeRow(row: HashMap<String, Any>)
+    /** The provider's reasoning for this reply arrived. Main thread. */
+    fun reasoningObserved(
+        observation: ReasoningObservationContext,
+        learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
+    )
 }
 
 /**
@@ -1017,6 +1022,20 @@ internal class ReplyRun(
         handedOff = true
         ended = true
         ReplyRunRegistry.unregister(state.chatId, this)
+    }
+
+    /**
+     * The response observer finished reading this reply's reasoning. It goes
+     * to whichever host has the reply now (the screen, a reopened screen, or
+     * no screen), so it is kept even when the screen that sent it closed.
+     */
+    fun deliverReasoning(
+        observation: ReasoningObservationContext,
+        learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
+    ) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (observation.canDeliver()) host.reasoningObserved(observation, learnedCapability)
+        }
     }
 
     /** Stop: the request ends now; the text received so far is kept as stopped. */
