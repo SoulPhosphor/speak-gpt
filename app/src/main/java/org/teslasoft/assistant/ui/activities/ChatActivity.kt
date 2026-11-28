@@ -11386,6 +11386,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Mark the last assistant reply as completed normally. The caller's
      *  existing completion saveSettings() persists it alongside the final text. */
     private suspend fun markLastAssistantDone() {
+        val replyRun = this.replyRun
         val last = messages.lastOrNull() ?: return
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
@@ -11406,6 +11407,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // Once taken, the completed request's usage is recorded even if a
             // message deletion cancels this reply while its price loads.
             replyRun.recordTakenUsageSafely(last) { listOfNotNull(replyRun.completePendingUsageRecord()) }
+            if (replyRun.handedOff) throw CancellationException("Reply continued without this screen")
             // A regeneration folds this finished reply into the turn's version
             // list. Runs after the metadata above so the new version captures
             // the final model, tokens, and state.
@@ -11423,15 +11425,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * durable records on either role, while legacy estimation remains
      * assistant-only. */
     private suspend fun carryPendingUsageFromEmptyAssistant() {
+        val replyRun = this.replyRun
         val carrier = messages.dropLast(1).lastOrNull { it["isBot"] != true }
         if (carrier == null) {
             // As before: with no carrier the pending record is taken and not kept.
             replyRun.completePendingUsageRecord()
+            if (replyRun.handedOff) throw CancellationException("Reply continued without this screen")
             return
         }
         replyRun.recordTakenUsageSafely(carrier, mirrorCompactMetadata = false) {
             listOfNotNull(replyRun.completePendingUsageRecord())
         }
+        if (replyRun.handedOff) throw CancellationException("Reply continued without this screen")
     }
 
     private suspend fun attachUsageRecords(
