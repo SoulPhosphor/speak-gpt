@@ -1072,7 +1072,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val apiEndpointObject: ApiEndpointObject,
         val historyResult: ChatPreferences.ChatHistoryResult,
         val pendingConversation: Boolean,
-        val conversationMode: ConversationMode
+        val conversationMode: ConversationMode,
+        /** The reply that was being received with no screen when the history was read. */
+        val replyRunAtRead: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
     )
 
     private data class ChatStartupResult(
@@ -3301,6 +3303,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // chat finishes first and never writes while the chat is open.
         DefaultUsernameFill.markOpen(preparedChatId)
         fillOpenChatId = preparedChatId
+        val replyRunAtRead = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(preparedChatId)
+            ?.takeIf { !it.ended }
         val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId, DamagedChatOperation.OPENING_A_CHAT)
         // Saving the start date reads the whole chat list; once every chat's date
         // has been filled in, there is nothing left to save.
@@ -3371,7 +3375,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 preparedEndpoint,
                 historyResult,
                 preparedPending,
-                preparedMode
+                preparedMode,
+                replyRunAtRead
             )
         )
     }
@@ -3491,7 +3496,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
         val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
 
-        initSettings(prepared.historyResult)
+        initSettings(prepared.historyResult, prepared.replyRunAtRead)
 
         // The Activity window may already be attached because startup storage
         // now loads on a worker. Apply insets explicitly once the chat views
@@ -3737,16 +3742,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val appContext = applicationContext
         val currentChatId = chatId
         Thread {
+            val replyRunAtRead = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(currentChatId)
+                ?.takeIf { !it.ended }
             val historyResult = ChatPreferences.getChatPreferences()
                 .getChatByIdResult(appContext, currentChatId, DamagedChatOperation.OPENING_A_CHAT)
             runOnUiThread {
-                if (!isFinishing && !isDestroyed) initSettings(historyResult)
+                if (!isFinishing && !isDestroyed) initSettings(historyResult, replyRunAtRead)
             }
         }.start()
     }
 
     @Suppress("unchecked")
-    private fun initSettings(historyResult: ChatPreferences.ChatHistoryResult) {
+    private fun initSettings(
+        historyResult: ChatPreferences.ChatHistoryResult,
+        replyRunAtRead: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
+    ) {
         // Brand-new chat: adopt the provider/model/routing the last conversation
         // successfully used, before the endpoint/key below are read. Updates
         // apiEndpointObject when it restores; otherwise records what the UI must
@@ -3797,6 +3807,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // to "interrupted" once so it can't masquerade as a finished reply,
             // and persist. Idempotent; the partial text is untouched.
             var reconciledStreaming = false
+            // A reply that was still being received when the history was read
+            // and has finished since: its finished row replaces the copy read
+            // before it ended, so the finished reply is never saved over.
+            replyRunAtRead?.takeIf { it.ended && it.state.chatId == chatId }
+                ?.let { run -> run.host.lastRow()?.let { HashMap(it) } }
+                ?.let { finished ->
+                    val id = org.teslasoft.assistant.preferences.MessageIdentity.idOf(finished)
+                    val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == id }
+                    if (id.isNotBlank() && index >= 0) messages[index] = finished
+                }
             // A reply still being received (with no screen) keeps its row as is.
             val liveReplyRowId = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(chatId)
                 ?.takeIf { !it.ended }?.replyRowId.orEmpty()

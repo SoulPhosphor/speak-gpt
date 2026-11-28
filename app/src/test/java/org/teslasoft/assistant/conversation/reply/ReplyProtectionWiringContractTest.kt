@@ -102,4 +102,20 @@ class ReplyProtectionWiringContractTest {
         val handOff = chat.substringAfter("private fun handOffRunningReply() {")
         assertTrue(handOff.contains("(attachedReply ?: releasedReply)?.takeIf { !it.ended }"))
     }
+
+    @Test fun finishingWritesTheRowOfTheHostThatHasTheReplyNow() {
+        val run = source("conversation/reply/ReplyRun.kt")
+        for (finish in listOf("private suspend fun finishCompleted()", "private suspend fun finishStopped()")) {
+            val body = run.substringAfter(finish).substringBefore("\n    }\n")
+            assertTrue("$finish uses the current host's row", body.contains("currentRow(row)"))
+            assertTrue(body.indexOf("currentRow(row)") < body.lastIndexOf("host.saveInBackground()"))
+        }
+    }
+
+    @Test fun aReplyThatFinishedAfterTheHistoryWasReadIsNotSavedOver() {
+        val prepare = chat.substringAfter("val replyRunAtRead = org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(preparedChatId)")
+        assertTrue(prepare.indexOf("getChatByIdResult(") in 0 until 400)
+        val init = chat.substringAfter("var reconciledStreaming = false")
+        assertTrue(init.indexOf("replyRunAtRead?.takeIf { it.ended") in 0 until init.indexOf("if (reconciledStreaming) saveSettings()"))
+    }
 }

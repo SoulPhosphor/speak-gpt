@@ -1008,6 +1008,19 @@ internal class ReplyRun(
         next.replyUpdated(text)
     }
 
+    /**
+     * The reply's row as its current host has it, carrying what was written
+     * to [row] while finishing waited (a screen may have reconnected, with
+     * its own copy, during that wait). Main thread.
+     */
+    private fun currentRow(row: HashMap<String, Any>): HashMap<String, Any> {
+        val current = host.lastRow()?.takeIf { it["isBot"] == true } ?: return row
+        if (current === row) return current
+        current.putAll(row)
+        if (!row.containsKey(MessageCompletionState.KEY_STATE_DETAIL)) current.remove(MessageCompletionState.KEY_STATE_DETAIL)
+        return current
+    }
+
     /** The permanent ID of the reply's row, or blank. */
     val replyRowId: String
         get() = host.lastRow()?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }.orEmpty()
@@ -1117,6 +1130,7 @@ internal class ReplyRun(
             org.teslasoft.assistant.preferences.ChatPreferences.getChatPreferences()
                 .putTimestampToChatById(app, state.chatId)
         } catch (_: Exception) { }
+        currentRow(row)
         recordTurnMemoryScope()
         host.saveInBackground()
     }
@@ -1165,6 +1179,7 @@ internal class ReplyRun(
             row[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             row.remove(MessageCompletionState.KEY_STATE_DETAIL)
             recordTakenUsageSafely(row) { listOfNotNull(completePendingUsageRecord()) }
+            currentRow(row)
             host.saveInBackground()
         }
         if (retired || fence.isStale()) return
@@ -1211,12 +1226,13 @@ internal class ReplyRun(
             keepCompletedUsage = true
         )
         if (retired || fence.isStale() || row == null) return
-        row["message"] = text
-        val existing = row[MessageCompletionState.KEY_STATE]?.toString()
+        val target = currentRow(row)
+        target["message"] = text
+        val existing = target[MessageCompletionState.KEY_STATE]?.toString()
         if (existing == MessageCompletionState.STREAMING || existing.isNullOrBlank()) {
-            row[MessageCompletionState.KEY_STATE] = plan.state
-            row[MessageCompletionState.KEY_STATE_DETAIL] = plan.detail
-            if (!plan.reason.isNullOrBlank()) row[MessageCompletionState.KEY_ERROR_TEXT] = plan.reason
+            target[MessageCompletionState.KEY_STATE] = plan.state
+            target[MessageCompletionState.KEY_STATE_DETAIL] = plan.detail
+            if (!plan.reason.isNullOrBlank()) target[MessageCompletionState.KEY_ERROR_TEXT] = plan.reason
         }
         if (plan.logAsError) {
             try {
