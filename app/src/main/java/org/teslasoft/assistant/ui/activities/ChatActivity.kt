@@ -3340,7 +3340,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         " handsFreePref=${preferences?.getHandsFreeMode() == true}" +
                         " handsFreeService=${HandsFreeService.isRunning}" +
                         " turn=${currentLifecycleTurnId.ifBlank { "none" }}" +
-                        " action=$teardownAction"
+                        " action=$teardownAction" +
+                        " " + org.teslasoft.assistant.util.MemoryDiagnostics.javaHeapField()
             )
             // Route snapshot at destruction, in the separate AudioRoute family. Pairs
             // with the "readback start" snapshot and any device add/remove lines so a

@@ -28,6 +28,9 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 
 class Logger {
+    /** One saved memory reading: when, which process, and the MemSample fields. */
+    internal data class MemorySample(val timeMs: Long, val pid: Int, val snapshot: String)
+
     companion object {
         /**
          * Persistent voice/process-exit diagnostics must never make the UI wait
@@ -964,8 +967,6 @@ class Logger {
                 )
             } catch (_: Throwable) { /* diagnostics must never disturb the app */ }
         }
-
-        internal data class MemorySample(val timeMs: Long, val pid: Int, val snapshot: String)
 
         internal fun encodeMemorySample(timeMs: Long, pid: Int, snapshot: String): String =
             "$timeMs|$pid|$snapshot"
