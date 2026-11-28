@@ -214,6 +214,7 @@ internal class ReplyRun(
      * items, after they are recorded, and the request's failure.
      */
     fun <T> relay(source: kotlinx.coroutines.flow.Flow<T>, piece: (T) -> ReplyPiece): kotlinx.coroutines.flow.Flow<T> {
+        requireScreenRequestOwner()
         beginReceiving()
         return requests.relay(
             source.onEach { accept(piece(it)) },
@@ -223,11 +224,17 @@ internal class ReplyRun(
 
     /** A completed (non-streaming) provider call, run and recorded like [relay]. */
     suspend fun <T> relayCall(call: suspend () -> T, piece: (T) -> ReplyPiece): T {
+        requireScreenRequestOwner()
         beginReceiving()
         return requests.relayCall(
             { call().also { accept(piece(it)) } },
             state.requestContext.asContextElement(state.requestContext.get())
         ) { handedOff }
+    }
+
+    private fun requireScreenRequestOwner() {
+        if (handedOff || retired || fence.isStale())
+            throw CancellationException("This reply no longer accepts requests from its original screen")
     }
 
     /** One reply's usage and lifecycle state, taken off the screen's fields. */
@@ -250,8 +257,10 @@ internal class ReplyRun(
         // A reply retired by a message deletion never starts another request
         // phase, even if a setup step swallowed its cancellation.
         if (fence.isStale()) throw CancellationException("Retired by message deletion")
+        requireScreenRequestOwner()
         dispatched = false
         org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared.awaitSaved(state.chatId)
+        requireScreenRequestOwner()
         if (fence.isStale()) throw CancellationException("Retired by message deletion")
         state.currentLifecycle?.let {
             if (!it.finalized) finalizeLifecycleTerminal(

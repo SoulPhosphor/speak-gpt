@@ -34,6 +34,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -183,6 +184,28 @@ class ReplyHandOffInstrumentedTest {
         assertEquals(MessageCompletionState.DONE, reply[MessageCompletionState.KEY_STATE])
         assertEquals(2, stored(f.chatId).size)
         assertFalse(ReplyRunRegistry.active(f.chatId) === f.run)
+    }
+
+    @Test fun theOriginalScreenCannotDispatchAnotherProviderPhaseAfterHandOff() = runBlocking {
+        val f = fixture()
+        var sent = 0
+        withContext(Dispatchers.Main) {
+            f.run.handOff(DetachedReplyHost(context, { f.chatId }, "model-x", f.rows, f.rows.last(), "T-test", label, f.run::ownsRow))
+            try {
+                f.run.startLifecycle("late retry", null)
+                fail("A handed-off run must reject a new request phase")
+            } catch (_: kotlinx.coroutines.CancellationException) { }
+            try {
+                f.run.relay(flow { sent++; emit("late retry") }) { piece(it) }
+                fail("A handed-off run must reject a streamed retry")
+            } catch (_: kotlinx.coroutines.CancellationException) { }
+            try {
+                f.run.relayCall({ sent++; "late follow-up" }) { piece(it) }
+                fail("A handed-off run must reject a completed follow-up")
+            } catch (_: kotlinx.coroutines.CancellationException) { }
+        }
+        awaitEnded(f.run)
+        assertEquals(0, sent)
     }
 
     @Test fun stopOnAHandedOffReplyKeepsTheTextReceivedSoFarAsStopped() = runBlocking {

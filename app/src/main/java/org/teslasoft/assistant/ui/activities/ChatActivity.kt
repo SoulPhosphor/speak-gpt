@@ -9594,6 +9594,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
          *  text row was already finished when it was saved. */
         resumed: Boolean = false
     ) {
+        val owner = replyRun
         if (!resumed) {
             if (streamedText.isEmpty()) {
                 carryPendingUsageFromEmptyAssistant()
@@ -9607,6 +9608,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             saveSettings()
         }
+        if (owner.handedOff || turnFence.isStale())
+            throw CancellationException("Reply continued without this screen")
         currentToolTurn = ToolTurnSnapshot(
             calls, originalRequest, streamedText, streamingEnabled, activeMemoryReferences
         )
