@@ -25,11 +25,12 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.conversation.responsegroups.*
 import org.teslasoft.assistant.preferences.MessageCompletionState
@@ -109,6 +110,27 @@ internal class ReplyRun(
     /** The turn's reasoning accumulator and the end of its observation. */
     @Volatile var turnReasoning: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator? = null
     @Volatile var turnReasoningObserved: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    /** Runs this reply's provider requests in the reply's own scope, never a screen's. */
+    private val requests = RequestRelay(
+        CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+    )
+
+    /**
+     * While false, a reader that stops (Stop, or the screen closing) also
+     * stops the provider request. Once true, the request continues and its
+     * remaining output stays readable from the same relay.
+     */
+    @Volatile var handedOff: Boolean = false
+
+    /** Runs [source] through [RequestRelay] with the current request context,
+     *  which the request hooks read. */
+    fun <T> relay(source: kotlinx.coroutines.flow.Flow<T>): kotlinx.coroutines.flow.Flow<T> =
+        requests.relay(source, state.requestContext.asContextElement(state.requestContext.get())) { handedOff }
+
+    /** A completed (non-streaming) provider call, run like [relay]. */
+    suspend fun <T> relayCall(call: suspend () -> T): T =
+        requests.relayCall(call, state.requestContext.asContextElement(state.requestContext.get())) { handedOff }
 
     /** One reply's usage and lifecycle state, taken off the screen's fields. */
     internal class ClaimedTerminal(

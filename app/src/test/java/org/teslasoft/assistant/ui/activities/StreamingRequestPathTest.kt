@@ -27,7 +27,9 @@ class StreamingRequestPathTest {
         assertTrue(region.contains("val streamingEnabled = preferences?.getStreaming() ?: true"))
         assertTrue(region.contains("if (streamingEnabled)"))
         assertTrue(region.contains("ai!!.chatCompletions(chatCompletionRequest)"))
-        assertTrue(region.contains("ai!!.chatCompletion(chatCompletionRequest)"))
+        // Both reply calls run through the reply's relay (ReplyRun).
+        assertTrue(region.contains("replyRun.relay(ai!!.chatCompletions(chatCompletionRequest))"))
+        assertTrue(region.contains("replyRun.relayCall { client.chatCompletion(chatCompletionRequest) }"))
         assertTrue(
             region.contains(
                 "streamOptions = if (streamingEnabled) StreamOptions(includeUsage = true) else null"
@@ -47,7 +49,7 @@ class StreamingRequestPathTest {
         assertTrue(hooksSource.contains(".noteHttpResponse(response.status.value, body)"))
         assertTrue(!hooksSource.contains("capturedProviderErrorBody"))
         assertTrue(!source.contains("capturedProviderErrorBody"))
-        assertTrue(source.contains("ai!!.chatCompletion(chatCompletionRequest)"))
+        assertTrue(source.contains("replyRun.relayCall { client.chatCompletion(chatCompletionRequest) }"))
         assertTrue(source.contains("stream_options"))
     }
 

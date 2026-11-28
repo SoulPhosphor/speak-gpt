@@ -9503,12 +9503,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             generationRequestActive = true
             try {
                 withGenerationRequestContext {
-                    val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(request)
+                    val completions: Flow<ChatCompletionChunk> = replyRun.relay(ai!!.chatCompletions(request))
                     // Dispatch begins at collection; a failure past this point is a real
                     // provider/network end, not a pre-dispatch one.
                     startGenerationNetworkDiagnostics()
                     providerRequestDispatched = true
-                    completions.flowOn(Dispatchers.IO).collect { v ->
+                    completions.collect { v ->
                         if (!currentCoroutineContext().isActive) throw CancellationException()
                         val choice = v.choices.firstOrNull()
                         noteLifecycleChunk(
@@ -9545,7 +9545,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             providerRequestDispatched = true
             val completion = try {
                 generationRequestActive = true
-                withGenerationRequestContext { ai!!.chatCompletion(request) }
+                withGenerationRequestContext {
+                    val client = ai!!
+                    replyRun.relayCall { client.chatCompletion(request) }
+                }
             } finally {
                 if (!turnFence.isStale()) generationRequestActive = false
             }
@@ -11789,14 +11792,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
 
                 withGenerationRequestContext {
-                    val completions: Flow<TextCompletion> = ai!!.completions(completionRequest)
+                    val completions: Flow<TextCompletion> = replyRun.relay(ai!!.completions(completionRequest))
 
                     // Dispatch begins at collection; a failure past this point is a
                     // real provider/network end, not a pre-dispatch one.
                     startGenerationNetworkDiagnostics()
                     providerRequestDispatched = true
                     recordRecentChatModel(completionRequest.model.id)
-                    completions.flowOn(Dispatchers.IO).collect { v ->
+                    completions.collect { v ->
                         run {
                             if (!currentCoroutineContext().isActive) throw CancellationException()
                             val choice = v.choices.firstOrNull()
@@ -13408,7 +13411,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             try {
                 withGenerationRequestContext {
                     val completions: Flow<ChatCompletionChunk> =
-                        ai!!.chatCompletions(chatCompletionRequest)
+                        replyRun.relay(ai!!.chatCompletions(chatCompletionRequest))
 
                     // The provider request begins dispatch here; from this point a
                     // failure is a genuine provider/network/stream end, not a
@@ -13416,7 +13419,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     startGenerationNetworkDiagnostics()
                     providerRequestDispatched = true
                     recordRecentChatModel(chatCompletionRequest.model.id)
-                    completions.flowOn(Dispatchers.IO).collect { v ->
+                    completions.collect { v ->
                         run {
                             if (!currentCoroutineContext().isActive) throw CancellationException()
                             val choice = v.choices.firstOrNull()
@@ -13473,7 +13476,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             recordRecentChatModel(chatCompletionRequest.model.id)
             val completion = try {
                 generationRequestActive = true
-                withGenerationRequestContext { ai!!.chatCompletion(chatCompletionRequest) }
+                withGenerationRequestContext {
+                    val client = ai!!
+                    replyRun.relayCall { client.chatCompletion(chatCompletionRequest) }
+                }
             } finally {
                 if (!turnFence.isStale()) generationRequestActive = false
             }
