@@ -66,20 +66,23 @@ import java.security.Security
  * @see [DynamicColors.applyToActivitiesIfAvailable]
  */
 class MainApplication : Application() {
-    // Opt-in app-wide memory heartbeat (Memory usage logging, off by default).
-    // A dedicated background thread so the sample — which reads /proc and PSS —
-    // never touches the main thread. The runnable always re-posts and only
-    // *writes* when the toggle is on, so flipping the switch mid-session starts
-    // logging without an app restart, and flipping it off stops the writes.
+    // App-wide memory heartbeat. A dedicated background thread so the sample —
+    // which reads /proc and PSS — never touches the main thread. Each minute it
+    // keeps the newest reading for a memory-kill report on the next start, and
+    // writes it to the Performance Log only while Memory usage logging is on,
+    // so flipping that switch takes effect without an app restart.
     private var memSampleThread: HandlerThread? = null
     private var memSampleHandler: Handler? = null
     private val memSampleRunnable = object : Runnable {
         override fun run() {
             try {
+                val sample = MemoryDiagnostics.snapshotFull(this@MainApplication) + " | " +
+                    org.teslasoft.assistant.util.ResourceDiagnostics.fields()
+                // Always kept (replacing the previous one) so a memory kill
+                // can be reported with it on the next start.
+                Logger.saveLastMemorySample(this@MainApplication, sample)
                 if (Preferences.getPreferences(this@MainApplication, "").getMemoryUsageLogging()) {
-                    Logger.log(this@MainApplication, "memory_usage", "MemSample", "info",
-                        MemoryDiagnostics.snapshotFull(this@MainApplication) + " | " +
-                            org.teslasoft.assistant.util.ResourceDiagnostics.fields())
+                    Logger.log(this@MainApplication, "memory_usage", "MemSample", "info", sample)
                 }
             } catch (_: Throwable) { /* a diagnostic must never crash the app */ }
             memSampleHandler?.postDelayed(this, MEM_SAMPLE_INTERVAL_MS)
@@ -369,9 +372,9 @@ class MainApplication : Application() {
             .apply()
 
         // Start the memory heartbeat. It runs process-wide (not tied to a chat)
-        // so a leak that grows while the app sits idle is still captured; the
-        // runnable is a no-op while the toggle is off, so this costs nothing in
-        // normal use beyond a parked thread.
+        // so a leak that grows while the app sits idle is still captured. With
+        // the toggle off it only keeps the newest reading (one small value,
+        // replaced each minute) for the memory-kill report.
         try {
             val t = HandlerThread("mem-sampler").apply { start() }
             memSampleThread = t

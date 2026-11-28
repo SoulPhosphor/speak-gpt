@@ -948,6 +948,69 @@ class Logger {
         internal fun systemProcessExitEntry(exitMessage: String, nextStart: String): String =
             "Exit: $exitMessage\nNext: app session started at $nextStart"
 
+        private const val LAST_MEMORY_SAMPLE_KEY = "last_memory_sample"
+
+        /**
+         * Keeps the newest memory reading (numbers and resource states only,
+         * the same fields as a MemSample line), replacing the previous one,
+         * whether or not Memory usage logging is on. Read on the next start
+         * when Android killed the app to free memory. Call off the main thread.
+         */
+        fun saveLastMemorySample(context: Context, snapshot: String) {
+            try {
+                EncryptedPreferences.setEncryptedPreference(
+                    context.applicationContext, "logs", LAST_MEMORY_SAMPLE_KEY,
+                    encodeMemorySample(System.currentTimeMillis(), android.os.Process.myPid(), snapshot)
+                )
+            } catch (_: Throwable) { /* diagnostics must never disturb the app */ }
+        }
+
+        internal data class MemorySample(val timeMs: Long, val pid: Int, val snapshot: String)
+
+        internal fun encodeMemorySample(timeMs: Long, pid: Int, snapshot: String): String =
+            "$timeMs|$pid|$snapshot"
+
+        internal fun decodeMemorySample(raw: String): MemorySample? {
+            val parts = raw.split('|', limit = 3)
+            if (parts.size != 3) return null
+            val time = parts[0].toLongOrNull() ?: return null
+            val pid = parts[1].toIntOrNull() ?: return null
+            if (parts[2].isBlank()) return null
+            return MemorySample(time, pid, parts[2])
+        }
+
+        /**
+         * The memory lines added to a "killed by the system to free memory"
+         * entry: Android's own figures at the kill (kilobytes; 0 = not
+         * reported, left out) and the last reading the killed session saved.
+         * A reading from another process, or taken after the kill, is never
+         * shown. Empty when there is nothing to show. Pure so it is unit-tested.
+         */
+        internal fun lowMemoryExitLines(
+            pssKb: Long,
+            rssKb: Long,
+            sample: MemorySample?,
+            exitPid: Int,
+            exitTimeMs: Long,
+            zone: ZoneId
+        ): String {
+            val lines = ArrayList<String>(2)
+            val figures = listOfNotNull(
+                pssKb.takeIf { it > 0 }?.let { "pss=${kbToMb(it)}MB" },
+                rssKb.takeIf { it > 0 }?.let { "rss=${kbToMb(it)}MB" }
+            )
+            if (figures.isNotEmpty()) lines.add("Memory at exit: " + figures.joinToString(" "))
+            if (sample != null && sample.pid == exitPid && sample.timeMs <= exitTimeMs) {
+                val sampleTime = LocalDateTime
+                    .ofInstant(Instant.ofEpochMilli(sample.timeMs), zone)
+                    .format(LOG_TIME_FORMAT)
+                lines.add("Last sample ($sampleTime): ${sample.snapshot}")
+            }
+            return lines.joinToString("\n")
+        }
+
+        private fun kbToMb(kb: Long): Long = (kb + 512L) / 1024L
+
         @RequiresApi(Build.VERSION_CODES.R)
         private fun collectAndLogLastExitReason(context: Context) {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
@@ -966,7 +1029,17 @@ class Logger {
                 .ofInstant(Instant.ofEpochMilli(info.timestamp), ZoneId.systemDefault())
                 .format(LOG_TIME_FORMAT)
             val detail = info.description?.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""
-            val message = "previous app session ended at $whenStr: ${describeExitReason(info.reason)}$detail"
+            val exitLine = "previous app session ended at $whenStr: ${describeExitReason(info.reason)}$detail"
+            // A memory kill carries the memory it was killed at, whether or
+            // not Memory usage logging is on.
+            val memoryLines = if (info.reason == ApplicationExitInfo.REASON_LOW_MEMORY) {
+                lowMemoryExitLines(
+                    info.pss, info.rss,
+                    decodeMemorySample(EncryptedPreferences.getEncryptedPreference(context, "logs", LAST_MEMORY_SAMPLE_KEY)),
+                    info.pid, info.timestamp, ZoneId.systemDefault()
+                )
+            } else ""
+            val message = if (memoryLines.isEmpty()) exitLine else "$exitLine\n$memoryLines"
 
             // Low-memory / signaled / crash deaths are the ones that silently cut
             // off a readback; flag them as warnings so they stand out from a clean
