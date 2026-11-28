@@ -1043,6 +1043,17 @@ internal class ReplyRun(
     val replyRowId: String
         get() = host.lastRow()?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }.orEmpty()
 
+    private fun releaseRequestPayload() {
+        toolTurnRequest = null
+        toolTurnMemoryReferences = emptyList()
+        requests.release()
+    }
+
+    fun finishWithScreen() {
+        ended = true
+        releaseRequestPayload()
+    }
+
     /**
      * The chat screen closed while this reply waits for an image approval:
      * nothing is being received and nothing is sent until the user answers
@@ -1052,6 +1063,7 @@ internal class ReplyRun(
     fun park() {
         handedOff = true
         ended = true
+        releaseRequestPayload()
         ReplyRunRegistry.unregister(state.chatId, this)
     }
 
@@ -1106,6 +1118,7 @@ internal class ReplyRun(
             host.awaitSaved()
         } finally {
             ended = true
+            releaseRequestPayload()
             ReplyRunRegistry.unregister(state.chatId, this)
             org.teslasoft.assistant.service.GenerationForegroundService.end(app)
             host.replyFinished()

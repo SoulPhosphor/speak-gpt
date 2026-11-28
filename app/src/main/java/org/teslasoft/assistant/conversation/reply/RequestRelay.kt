@@ -58,6 +58,17 @@ internal class RequestRelay(private val scope: CoroutineScope) {
         current?.job?.cancel()
     }
 
+    /** The terminal owner no longer needs the completed coroutine's inputs. */
+    fun release() {
+        val call = current ?: return
+        if (call.job.isCompleted) {
+            if (current === call) current = null
+        } else scope.launch {
+            call.job.join()
+            if (current === call) current = null
+        }
+    }
+
     fun <T> relay(
         source: Flow<T>,
         requestContext: CoroutineContext,

@@ -73,6 +73,8 @@ class ReplyHandOffInstrumentedTest {
     }
 
     @After fun cleanup() {
+        ReplyRunRegistry.markChatsDeleted(ids.toSet())
+        org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared.discard(ids)
         ids.forEach { id ->
             SecurePrefs.get(context, "chat_$id").edit().clear().commit()
             SecurePrefs.get(context, "settings.$id").edit().clear().commit()
@@ -122,6 +124,8 @@ class ReplyHandOffInstrumentedTest {
             chatPreferences = Preferences.getPreferences(context, chatId)
         }
         val run = ReplyRun(context, state, ChatRequestHooks(context, state), ConversationTurnFence(), ScreenHost("model-x", rows))
+        run.toolTurnRequest = com.aallam.openai.api.chat.ChatCompletionRequest(
+            model = com.aallam.openai.api.model.ModelId("model-x"), messages = emptyList())
         run.dispatched = true
         return Fixture(chatId, rows, run)
     }
@@ -244,6 +248,7 @@ class ReplyHandOffInstrumentedTest {
             price.release()
         }
         awaitEnded(f.run)
+        assertEquals(null, f.run.toolTurnRequest)
         for (reply in listOf(stored(f.chatId).last(), second.last())) {
             assertEquals(MessageCompletionState.DONE, reply[MessageCompletionState.KEY_STATE])
             assertEquals("Answer\n", reply["message"])
@@ -321,7 +326,10 @@ class ReplyHandOffInstrumentedTest {
                 assertEquals(false, history.single()["isBot"])
                 assertEquals(13, receipt(history.single()).single().totalTokens)
             }
-            assertTrue(f.run.state.chatPreferences!!.getPendingImageApproval().isNotBlank())
+            val approval = org.teslasoft.assistant.imagegen.PendingImageApproval.decode(
+                f.run.state.chatPreferences!!.getPendingImageApproval())!!
+            assertEquals("model-x", PendingToolTurns.take(f.chatId, approval.id)!!.request.model.id)
+            assertEquals(null, f.run.toolTurnRequest)
         } finally { prefs.setAskBeforeAiImages(previous) }
     }
 

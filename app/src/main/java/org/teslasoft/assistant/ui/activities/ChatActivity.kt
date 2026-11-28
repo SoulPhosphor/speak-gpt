@@ -535,8 +535,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** A reply sent before this chat was closed, still arriving, shown here. */
     private var attachedReply: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
     private var detachReplyDisplay: (() -> Unit)? = null
-    /** A reconnected reply a message deletion stopped, still writing its stopped ending. */
-    private var releasedReply: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
 
     /**
      * This chat was reopened while a reply sent before it closed is still
@@ -594,6 +592,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (attachedReply !== run || isFinishing || isDestroyed) return
                 run.reconcileInto(messages)
                 attachedReply = null
+                detachReplyDisplay = null
                 selectionMode.rebuild(messages)
                 adapter?.notifyDataSetChanged()
                 settlePendingRegeneration()
@@ -638,7 +637,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         detachReplyDisplay?.invoke()
         detachReplyDisplay = null
         attachedReply = null
-        releasedReply = null
         val run = currentReplyRun ?: return
         if (run.handedOff || run.ended || run.screenCompletion.isCompleted) return
         // Waiting for an image approval: nothing is being received. The
@@ -12289,6 +12287,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             generationNetworkMonitor = null
             run.screenCompletion.complete(Unit)
             if (!run.handedOff) {
+                run.finishWithScreen()
+                if (currentReplyRun === run) currentToolTurn = null
                 org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.unregister(run.state.chatId, run)
             }
             // A message deletion that retired this reply already did the rest;
@@ -14779,7 +14779,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // ending, and its finish no longer touches this screen's next turn.
         attachedReply?.let { run ->
             attachedReply = null
-            releasedReply = run
             detachReplyDisplay?.invoke()
             detachReplyDisplay = null
             run.stopByUser()
