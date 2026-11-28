@@ -94,7 +94,9 @@ class UsageCostStructureTest {
         assertTrue(chat.contains("TokenPricingDetailsActivity.EXTRA_USAGE_SUMMARY"))
         assertTrue(chat.contains("TokenPricingDetailsActivity.EXTRA_USAGE_SECTIONS"))
         assertTrue(chat.contains("completeTerminalUsageRecord"))
-        assertTrue(chat.contains("!snapshot.counts.hasAnyValue() && !snapshot.providerCost.hasAnyValue()"))
+        // A stopped or failed request's usage record is made in ReplyRun.
+        val run = source("src/main/java/org/teslasoft/assistant/conversation/reply/ReplyRun.kt")
+        assertTrue(run.contains("!snapshot.counts.hasAnyValue() && !snapshot.providerCost.hasAnyValue()"))
         val activity = source(
             "src/main/java/org/teslasoft/assistant/ui/activities/TokenPricingDetailsActivity.kt"
         )

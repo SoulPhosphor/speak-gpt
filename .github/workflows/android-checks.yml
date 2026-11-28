@@ -221,6 +221,7 @@ jobs:
         # Test failures, app crashes and timeouts are never retried.
         run: |
           .github/scripts/emulator-suite.sh run-suite \
+            org.teslasoft.assistant.conversation.reply.ReplyHandOffInstrumentedTest \
             org.teslasoft.assistant.preferences.memory.Step2RecallInstrumentedTest \
             org.teslasoft.assistant.preferences.memory.MemoryLengthInstrumentedTest \
             org.teslasoft.assistant.ui.widgets.MemoryTokenMeterTest \

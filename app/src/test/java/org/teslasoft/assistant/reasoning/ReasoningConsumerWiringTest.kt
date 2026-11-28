@@ -31,9 +31,11 @@ class ReasoningConsumerWiringTest {
 
     @Test
     fun observedReasoningPromotesCapabilityAndStampsTheStoredMessage() {
+        // The request hooks observe and promote; the chat screen stamps the message.
+        val hooks = source("conversation/reply/ChatRequestHooks.kt")
         val chat = source("ui/activities/ChatActivity.kt")
-        assertTrue(chat.contains("ReasoningSupport.UNKNOWN"))
-        assertTrue(chat.contains("learnFromObservedResponse"))
+        assertTrue(hooks.contains("ReasoningSupport.UNKNOWN"))
+        assertTrue(hooks.contains("learnFromObservedResponse"))
         assertTrue(chat.contains("KEY_MESSAGE_REASONING_LEVEL"))
     }
 

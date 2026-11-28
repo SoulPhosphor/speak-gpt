@@ -362,6 +362,84 @@ seconds of the screen turning off.
   shutdown, model preparation/loading, transcription-lock wait and native
   decoding time.
 
+### Next work, in this order (each needs the owner's go-ahead)
+
+Reply protection (Phase 1) keeps a reply already sent when the chat screen
+closes (Back, another chat, or Android closing it to free memory): the reply
+is received to the end and saved by `conversation/reply/ReplyRun`, and
+reopening the chat reconnects to it. Two pieces of work follow. Each is one
+session and one pull request. Read `CLAUDE.md` first; the owner approves
+the start of each.
+
+#### 1. Free Whisper's working memory between transcriptions
+
+Why: with small.en, Whisper holds about 1.17-1.21 GB while loaded (weights
+473 MB; working memory about 690-730 MB after the first beam-search turn),
+the whole time, also while the AI replies and while the reply is read
+aloud. That is the main reason Android kills the app during long hands-free
+sessions. Measured with whisper.cpp v1.7.4, the same model file and the
+app's settings (beam 5, previous context off): freeing only the working
+memory drops it to 473 MB; rebuilding it took about 30 ms on a PC (estimate
+about 0.1 s on a Pixel 8).
+
+What to build:
+- `app/src/main/cpp/phosphor_whisper_jni.cpp`: load the model with
+  `whisper_init_from_file_with_params_no_state`; in `transcribeNative`
+  create a state with `whisper_init_state`, run `whisper_full_with_state`,
+  read segments with `whisper_full_n_segments_from_state` /
+  `whisper_full_get_segment_text_from_state`, then `whisper_free_state`
+  (also on failure and abort).
+- Keep the state between turns when "use previous context" is on
+  (`noContext == false`): the carried text (`prompt_past`) lives in the
+  state and is not rebuilt exactly from the public API. Only free it when
+  previous context is off (the default). Whisper resets its decoder
+  (including the random seed) on every call, so transcripts are identical.
+- `LocalWhisperEngine` / its model context: create and free the state under
+  the same transcription lock that guards the handle; a model switch,
+  uninstall or release during a transcription must still free everything
+  once.
+- Do not change the model, quantization, decoder or any setting.
+
+Tests: a device test that the same audio gives the same transcript with the
+old and new handling; native memory (existing `nativeHeapMb`) drops after a
+transcription; abort during transcription frees the state; a model switch
+during transcription; previous context on keeps the state.
+
+Expected effect: about 690 MB less for most of a hands-free turn; about
+0.1 s more after the user stops speaking.
+
+#### 2. The conversation continues when the chat screen closes (Phase 2)
+
+Why: Phase 1 saves the reply when the chat screen closes, but the voice
+conversation itself still lives in the chat screen (`ChatActivity`), so
+the hands-free call ends with the screen: the saved reply is not read
+aloud and the mic does not reopen.
+
+Scope: move the hands-free loop out of `ChatActivity` into the hands-free
+service (`service/HandsFreeService`): listening and end-of-turn detection
+(Whisper capture, VAD, Google recognizer), transcription, sending the
+transcribed message, readback (device TTS and API voices), and re-arming
+the mic. The chat screen then only shows the conversation and its
+controls, and attaches to the running loop the way it attaches to a
+running reply (`ReplyRunRegistry`).
+
+Depends on: Phase 1 (the reply to read back comes from `ReplyRun`, not the
+screen); item 1 above is recommended first, because a hands-free call that
+outlives the screen keeps Whisper loaded and is otherwise the first thing
+Android kills.
+
+Risks: hands-free works well today and has many timing rules (readback
+watchdogs, wake locks, Bluetooth routing, the spoken image approval);
+sending a message with no screen means request building (prompt,
+memories, lorebook, attachments) must also run without the screen, which
+is larger than Phase 1. Behavior changes need the owner's approval first:
+what the notification shows, Hang Up, and what happens on reopen.
+
+Tests: device tests that a hands-free turn completes and is read aloud
+after the chat screen is destroyed; Hang Up from the notification; reopen
+during readback; Bluetooth route changes; Stop; the spoken image approval;
+no duplicate send.
+
 ---
 
 ## Files we expect to touch

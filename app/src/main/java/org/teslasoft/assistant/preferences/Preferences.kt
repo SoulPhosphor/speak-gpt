@@ -4087,6 +4087,15 @@ class Preferences internal constructor(
     }
 
     /** Number of oldest canonical messages through the latest manual marker. */
+    /** This chat's image request waiting for the user's Create or Cancel
+     *  (PendingImageApproval, encoded), or "" when none is waiting. */
+    fun getPendingImageApproval(): String = getString("pending_image_approval", "")
+
+    /** Saves this chat's waiting image request; "" removes it. */
+    fun setPendingImageApproval(encoded: String) {
+        putString("pending_image_approval", encoded)
+    }
+
     fun getManualCompactionBoundary(): Int =
         getString("manual_compaction_boundary", "0")
             .toIntOrNull()?.coerceAtLeast(0) ?: 0
