@@ -45,6 +45,8 @@ class PreDispatchLifecycleTest {
 
     private val chatActivity =
         "src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt"
+    private val replyRun =
+        "src/main/java/org/teslasoft/assistant/conversation/reply/ReplyRun.kt"
 
     /** The body of one method, from its signature up to the next top-level
      *  member, so ordering asserts stay scoped to that method. */
@@ -130,11 +132,12 @@ class PreDispatchLifecycleTest {
 
     @Test
     fun preDispatchExceptionIsClassifiedRequestNotSent() {
-        val chat = source(chatActivity)
+        // A failed reply is recorded by ReplyRun.recordFailure.
+        val run = source(replyRun)
         assertTrue(
             "a pre-dispatch exception must be recorded as request_not_sent",
-            chat.contains("if (!providerRequestDispatched) {") &&
-                chat.contains("ResponseLifecycle.Termination.REQUEST_NOT_SENT")
+            run.contains("if (!dispatched) {") &&
+                run.contains("ResponseLifecycle.Termination.REQUEST_NOT_SENT")
         )
     }
 
@@ -147,7 +150,7 @@ class PreDispatchLifecycleTest {
         val plan = source("src/main/java/org/teslasoft/assistant/ui/chat/CancelledReplyTerminal.kt")
         assertTrue(
             "request_not_sent must classify the pre-dispatch exception path",
-            chat.contains("Termination.REQUEST_NOT_SENT")
+            source(replyRun).contains("Termination.REQUEST_NOT_SENT")
         )
         assertTrue(
             "request_not_sent must classify the pre-dispatch cancellation path",
@@ -158,10 +161,9 @@ class PreDispatchLifecycleTest {
 
     @Test
     fun preDispatchFailureSkipsTheProviderFailureLog() {
-        val chat = source(chatActivity)
         assertTrue(
             "the Provider Failure Log write must be gated on the request having been dispatched",
-            chat.contains("genError.reachedServer() && providerRequestDispatched")
+            source(replyRun).contains("genError.reachedServer() && dispatched")
         )
     }
 }

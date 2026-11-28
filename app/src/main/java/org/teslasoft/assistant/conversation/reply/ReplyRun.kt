@@ -25,6 +25,13 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import org.teslasoft.assistant.util.chatMessage
+import org.teslasoft.assistant.util.providerDetailBlock
+import org.teslasoft.assistant.util.providerLimitMessage
+import org.teslasoft.assistant.util.reachedServer
+import org.teslasoft.assistant.R
+import org.teslasoft.assistant.usage.GenerationAttemptFailureException
+import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.imagegen.StreamedToolCallAssembler
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -764,5 +771,115 @@ internal class ReplyRun(
         return endpoint?.provider?.trim()?.ifBlank { null }
             ?: endpoint?.label?.trim()?.ifBlank { null }
             ?: TokenUsageAccounting.PROVIDER_NOT_REPORTED
+    }
+
+    /** A failed reply's shared record: its classification and the failure text shown with its row. */
+    internal class FailureRecord(
+        val genError: org.teslasoft.assistant.util.GenErrorResult,
+        val text: String,
+        val providerEvidence: ProviderDiagnosticSnapshot?
+    )
+
+    /**
+     * Records a failed reply: classifies [e] from the request's own evidence,
+     * writes the Error Log entry through [logError], the Response Lifecycle
+     * entry and the usage the provider reported, and the Provider Failure Log
+     * entry when that log is on. Returns the failure text for the reply's row.
+     */
+    internal suspend fun recordFailure(
+        e: Throwable,
+        logError: (org.teslasoft.assistant.util.GenErrorResult, ProviderDiagnosticSnapshot?) -> Unit
+    ): FailureRecord {
+        val evidenceOwner =
+            (e as? org.teslasoft.assistant.preferences.ProviderStreamTerminalException)?.attempt
+                ?: (e as? GenerationAttemptFailureException)?.attempt
+                ?: state.currentUsageAttempt
+        val providerEvidence = evidenceOwner?.diagnosticSnapshot()
+        val genError = GenerationErrorClassifier.classify(e, providerEvidence)
+        logError(genError, providerEvidence)
+
+        // Owner ruling (July 31 2026): beneath the app's own explanation,
+        // always show the raw provider detail — the server's error and the
+        // provider name (or a truthful placeholder for each).
+        val appExplanation = genError.providerLimitMessage(app)
+            ?: genError.chatMessage(app)
+        // Error responses and failed SSE streams use the same immutable
+        // request snapshot. The serving provider is response-derived only.
+        state.currentLifecycle?.noteActualModelProvider(providerEvidence?.actualServingProvider)
+        // Expanded provider detail (owner ruling, Aug 1 2026): the connection
+        // profile's name, the upstream model service the server reported (or
+        // "Not Reported" for a direct provider that names none), the model,
+        // and the function. Resolved once so the on-screen block and the
+        // Provider Failure Log entry are identical.
+        val notReported = app.getString(R.string.provider_value_not_reported)
+        val apiProviderName = state.endpoint?.label?.trim()?.ifBlank { null }
+            ?: state.endpoint?.host?.trim()?.ifBlank { null } ?: notReported
+        val modelServiceProvider = providerEvidence?.actualServingProvider
+            ?.trim()?.ifBlank { null } ?: notReported
+        val requestedRoutedProvider = requestedRoutedProviderForDiagnostics(host.model)
+        val modelName = host.model.trim().ifBlank { null }
+            ?: state.endpoint?.model?.trim()?.ifBlank { null } ?: notReported
+        val functionLabel = app.getString(R.string.provider_function_chat)
+        val response = appExplanation + "\n" +
+            genError.providerDetailBlock(
+                app, e.message, apiProviderName, modelServiceProvider, modelName,
+                functionLabel,
+                rawProviderMessage = providerEvidence?.errorMessages?.joinToString("\n"),
+                providerEvidence = providerEvidence,
+                requestedRoutedProvider = requestedRoutedProvider
+            )
+
+        // Lifecycle: an errored reply is Incomplete. The termination source
+        // separates a provider error (the server answered with an error)
+        // from a dropped connection, a timeout, or a parse failure. The
+        // error text is the raw server error / exception, verbatim.
+        val lifecycleTermination = if (!dispatched) {
+            // Nothing was dispatched to the provider — the attempt ended
+            // during request construction. Record only that fact; never a
+            // provider, network, parser, or timeout category.
+            ResponseLifecycle.Termination.REQUEST_NOT_SENT
+        } else when {
+            genError.reachedServer() -> ResponseLifecycle.Termination.PROVIDER_ERROR
+            (e::class.java.name + " " + (e.message ?: "")).contains("timeout", ignoreCase = true) ->
+                ResponseLifecycle.Termination.CLIENT_TIMEOUT
+            (e::class.java.name).contains("Serialization", ignoreCase = true) ->
+                ResponseLifecycle.Termination.PARSER_ERROR
+            else -> ResponseLifecycle.Termination.NETWORK_ERROR
+        }
+        val lifecycleError = providerEvidence?.errorMessages?.joinToString("\n")
+            ?.ifBlank { null } ?: e.message ?: "error"
+        finalizeLifecycleTerminal(
+            ResponseLifecycle.Outcome.INCOMPLETE,
+            providerEvidence?.finishReason ?: state.currentLifecycle?.lastFinishReason ?: "missing",
+            true,
+            lifecycleTermination, lifecycleError,
+            keepCompletedUsage = true
+        )
+
+        // Record to the Provider Failure Log when enabled AND the server
+        // actually answered — a user stop or a request that never reached a
+        // server is not a provider fault and is never logged. The same
+        // expanded fields the user sees, plus the server's own error.
+        // A pre-dispatch failure contacted no provider, so it is never a
+        // provider fault: skip the Provider Failure Log even if a local
+        // exception happened to classify as one that "reached" a server.
+        if (state.chatPreferences?.getLogChatFailures() == true && genError.reachedServer() && dispatched) {
+            val providerErrorRaw = providerEvidence?.errorMessages?.joinToString("\n")
+                ?.ifBlank { null } ?: e.message?.trim()?.ifBlank { null } ?: "(no message)"
+            org.teslasoft.assistant.preferences.Logger
+                .logProviderFailure(
+                    app, apiProviderName, modelServiceProvider, modelName,
+                    functionLabel, providerErrorRaw,
+                    requestedRoutedProvider = requestedRoutedProvider,
+                    outerHttpStatus = providerEvidence?.outerHttpStatus,
+                    embeddedProviderStatus = providerEvidence?.embeddedHttpStatus,
+                    providerCode = providerEvidence?.providerCode,
+                    providerType = providerEvidence?.providerType,
+                    providerErrorType = providerEvidence?.providerErrorType,
+                    contentFilterSide = providerEvidence?.contentFilterSide?.wire,
+                    attemptId = providerEvidence?.attemptId
+                )
+        }
+        return FailureRecord(genError, response, providerEvidence)
     }
 }

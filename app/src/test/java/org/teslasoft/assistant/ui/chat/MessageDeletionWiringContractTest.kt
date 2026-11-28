@@ -142,10 +142,14 @@ class MessageDeletionWiringContractTest {
     @Test fun theErrorHandlerRechecksTheFenceAfterItsWaitAndTouchesOnlyItsOwnRow() {
         val handler = activity.substringAfter("            if (turnFence.isStale()) return\n            // This handler now writes")
             .substringBefore("        } finally {")
-        assertTrue(handler.indexOf("replyTerminalPending = false") < handler.indexOf("finalizeLifecycleTerminal("))
-        assertTrue(handler.indexOf("val failedRowBefore = messages.lastOrNull()") < handler.indexOf("finalizeLifecycleTerminal("))
+        // The wait (the usage record and lifecycle entry) is inside ReplyRun.recordFailure.
+        assertTrue(runFunction("recordFailure").contains("finalizeLifecycleTerminal("))
+        val wait = handler.indexOf("replyRun.recordFailure(e)")
+        assertTrue(wait >= 0)
+        assertTrue(handler.indexOf("replyTerminalPending = false") < wait)
+        assertTrue(handler.indexOf("val failedRowBefore = messages.lastOrNull()") < wait)
         val stale = handler.indexOf("if (turnFence.isStale()) {")
-        assertTrue(stale > handler.indexOf("finalizeLifecycleTerminal("))
+        assertTrue(stale > wait)
         // Rechecked before any row is added or the last row is marked.
         assertTrue(stale < handler.indexOf("putMessage(\"\", true)"))
         assertTrue(stale < handler.indexOf("val failedIndex = messages.size - 1"))
@@ -167,7 +171,7 @@ class MessageDeletionWiringContractTest {
         assertTrue(complete.contains("completeUsageRecordFrom("))
         // Deletion and both terminal handlers keep it; mid-turn hand-offs do not.
         assertTrue(function("retireRunningWorkForDeletion").contains("claimTerminalState(keepCompletedUsage = true)"))
-        assertTrue(activity.split("keepCompletedUsage = true\n").size - 1 >= 2)
+        assertTrue((activity + run).split("keepCompletedUsage = true\n").size - 1 >= 2)
         val superseded = run.substringAfter("internal suspend fun startLifecycle(").substringBefore("pricingCatalog")
         assertFalse(superseded.contains("keepCompletedUsage"))
     }
