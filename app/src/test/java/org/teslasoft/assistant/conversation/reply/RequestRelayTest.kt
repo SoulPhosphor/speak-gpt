@@ -98,4 +98,31 @@ class RequestRelayTest {
         val result = withTimeout(5_000) { relay.relayCall({ "reply" }, EmptyCoroutineContext) { false } }
         assertEquals("reply", result)
     }
+
+    @Test fun waitingForTheRequestInFlightGivesItsFailureOrNothing() = runBlocking {
+        val relayA = RequestRelay(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+        assertEquals(null, relayA.awaitCurrent())
+        withTimeout(5_000) { relayA.relay(flow { emit(1) }, EmptyCoroutineContext) { false }.toList() }
+        assertEquals(null, withTimeout(5_000) { relayA.awaitCurrent() })
+
+        val relayB = RequestRelay(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+        try {
+            withTimeout(5_000) {
+                relayB.relay(flow<Int> { throw ProviderFailure("overloaded") }, EmptyCoroutineContext) { false }.toList()
+            }
+        } catch (_: ProviderFailure) { }
+        val failure = withTimeout(5_000) { relayB.awaitCurrent() }
+        assertTrue(failure is ProviderFailure)
+    }
+
+    @Test fun stopEndsTheRequestInFlightAsStopped() = runBlocking {
+        val relayC = RequestRelay(CoroutineScope(SupervisorJob() + Dispatchers.IO))
+        val started = CompletableDeferred<Unit>()
+        // Handed off: nobody reads, the request keeps running until stopped.
+        relayC.relay(flow<Int> { started.complete(Unit); awaitCancellation() }, EmptyCoroutineContext) { true }
+        withTimeout(5_000) { started.await() }
+        relayC.cancelCurrent()
+        val failure = withTimeout(5_000) { relayC.awaitCurrent() }
+        assertTrue(failure is kotlinx.coroutines.CancellationException)
+    }
 }

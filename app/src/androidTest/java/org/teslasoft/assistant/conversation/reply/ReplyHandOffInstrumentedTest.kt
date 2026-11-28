@@ -1,0 +1,190 @@
+/**************************************************************************
+ * Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ **************************************************************************/
+
+package org.teslasoft.assistant.conversation.reply
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.ChatStorageHealth
+import org.teslasoft.assistant.preferences.MessageCompletionState
+import org.teslasoft.assistant.preferences.MessageIdentity
+import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.SecurePrefs
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
+import org.teslasoft.assistant.preferences.chatstore.ChatStorageAuthority
+import org.teslasoft.assistant.preferences.damaged.DamagedChatOperation
+import org.teslasoft.assistant.ui.chat.ConversationTurnFence
+import java.util.UUID
+
+/**
+ * A reply already sent keeps going when its chat screen closes: it is
+ * received to the end and saved into the chat by its own permanent ID, with
+ * no screen. Stop keeps the text received so far; deleting the chat writes
+ * nothing more.
+ */
+@RunWith(AndroidJUnit4::class)
+class ReplyHandOffInstrumentedTest {
+    private val context: Context = ApplicationProvider.getApplicationContext()
+    private val chats get() = ChatPreferences.getChatPreferences()
+    private val ids = ArrayList<String>()
+    private val label = DamagedChatOperation.OPENING_A_CHAT
+
+    @Before fun setup() {
+        PortableRestoreProcessGate.clear(context)
+        ChatStorageAuthority.clearForTest(context)
+    }
+
+    @After fun cleanup() {
+        ids.forEach { id ->
+            SecurePrefs.get(context, "chat_$id").edit().clear().commit()
+            SecurePrefs.get(context, "settings.$id").edit().clear().commit()
+        }
+    }
+
+    private fun newChat() = UUID.randomUUID().toString().also(ids::add)
+
+    private fun row(text: String, bot: Boolean, state: String? = null) = hashMapOf<String, Any>(
+        "message" to text, "isBot" to bot, MessageIdentity.KEY to UUID.randomUUID().toString()
+    ).also { if (state != null) it[MessageCompletionState.KEY_STATE] = state }
+
+    private fun stored(chatId: String) = chats.getChatByIdResult(context, chatId, label).messages
+
+    private fun piece(text: String) = ReplyPiece(
+        content = text, contentLength = text.length, finishReason = null, id = null,
+        promptTokens = null, completionTokens = null, totalTokens = null
+    )
+
+    /** The chat screen's part before it closes: rows it shows and saves. */
+    private class ScreenHost(override val model: String, val rows: ArrayList<HashMap<String, Any>>) : ReplyRunHost {
+        override val storageUnavailable: Boolean get() = false
+        override fun conversationSnapshot(): List<Map<String, Any>> = rows
+        override fun lastRow(): HashMap<String, Any>? = rows.lastOrNull()
+        override fun containsRow(row: Map<String, Any>?): Boolean = row != null && rows.any { it === row }
+        override fun saveInBackground() {}
+        override fun usageCarrier(): HashMap<String, Any>? = rows.lastOrNull()
+        override fun lifecycleTurnId(): String = "T-test"
+        override fun replyUpdated(text: String) {}
+        override fun replyFinished() {}
+        override fun saveRow(row: HashMap<String, Any>) {}
+        override fun removeRow(row: HashMap<String, Any>) {}
+    }
+
+    private class Fixture(val chatId: String, val rows: ArrayList<HashMap<String, Any>>, val run: ReplyRun)
+
+    private fun fixture(): Fixture {
+        val chatId = newChat()
+        val rows = arrayListOf(row("Hello?", bot = false), row("", bot = true, state = MessageCompletionState.STREAMING))
+        assertEquals(ChatStorageHealth.WriteOutcome.OK, chats.saveChatHistory(context, chatId, rows, synchronous = true))
+        val state = ChatRequestState().apply {
+            this.chatId = chatId
+            chatPreferences = Preferences.getPreferences(context, chatId)
+        }
+        val run = ReplyRun(context, state, ChatRequestHooks(context, state), ConversationTurnFence(), ScreenHost("model-x", rows))
+        run.dispatched = true
+        return Fixture(chatId, rows, run)
+    }
+
+    /** Reads the relay as a screen would, then closes: hands off, stops reading. */
+    private suspend fun readThenClose(f: Fixture, source: Flow<String>, until: String) {
+        val reader = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
+            f.run.relay(source) { piece(it) }.collect { }
+        }
+        withTimeout(10_000) { while (f.run.text != until) delay(10) }
+        withContext(Dispatchers.Main) {
+            f.run.handOff(DetachedReplyHost(context, { f.chatId }, "model-x", ArrayList(f.rows), f.rows.last(), "T-test", label))
+            reader.cancel()
+        }
+    }
+
+    private suspend fun awaitEnded(run: ReplyRun) = withTimeout(20_000) { while (!run.ended) delay(20) }
+
+    @Test fun theRowWriterChangesOnlyItsOwnRowAndStopsForAGoneRowOrChat() {
+        val chatId = newChat()
+        val user = row("Question", bot = false)
+        val reply = row("partial", bot = true, state = MessageCompletionState.STREAMING)
+        chats.saveChatHistory(context, chatId, arrayListOf(user, reply), synchronous = true)
+        val changed = HashMap(reply).apply { put("message", "partial and more") }
+        assertEquals(ReplyRowWriter.Outcome.SAVED, ReplyRowWriter.write(context, chatId, changed, label))
+        val after = stored(chatId)
+        assertEquals("Question", after[0]["message"])
+        assertEquals("partial and more", after[1]["message"])
+        assertEquals(2, after.size)
+
+        val unknown = row("x", bot = true)
+        assertEquals(ReplyRowWriter.Outcome.ROW_GONE, ReplyRowWriter.write(context, chatId, unknown, label))
+        assertEquals(2, stored(chatId).size)
+
+        val deletedChat = newChat()
+        chats.saveChatHistory(context, deletedChat, arrayListOf(row("q", false), reply), synchronous = true)
+        ReplyRunRegistry.markChatsDeleted(setOf(deletedChat))
+        assertEquals(ReplyRowWriter.Outcome.CHAT_GONE, ReplyRowWriter.write(context, deletedChat, changed, label))
+    }
+
+    @Test fun aHandedOffReplyIsReceivedToTheEndAndSavedWithNoScreen() = runBlocking {
+        val f = fixture()
+        val gate = CompletableDeferred<Unit>()
+        readThenClose(f, flow { emit("Hel"); gate.await(); emit("lo "); emit("there") }, until = "Hel")
+        assertTrue(f.run.handedOff)
+        gate.complete(Unit)
+        awaitEnded(f.run)
+        val reply = stored(f.chatId).last()
+        assertEquals("Hello there\n", reply["message"])
+        assertEquals(MessageCompletionState.DONE, reply[MessageCompletionState.KEY_STATE])
+        assertEquals(2, stored(f.chatId).size)
+        assertFalse(ReplyRunRegistry.active(f.chatId) === f.run)
+    }
+
+    @Test fun stopOnAHandedOffReplyKeepsTheTextReceivedSoFarAsStopped() = runBlocking {
+        val f = fixture()
+        readThenClose(f, flow { emit("Part"); awaitCancellation() }, until = "Part")
+        withContext(Dispatchers.Main) { f.run.stopByUser() }
+        awaitEnded(f.run)
+        val reply = stored(f.chatId).last()
+        assertEquals("Part", reply["message"])
+        assertEquals(MessageCompletionState.STOPPED, reply[MessageCompletionState.KEY_STATE])
+    }
+
+    @Test fun deletingTheChatWhileTheReplyRunsWritesNothingMore() = runBlocking {
+        val f = fixture()
+        val gate = CompletableDeferred<Unit>()
+        readThenClose(f, flow { emit("Hel"); gate.await(); emit("lo") }, until = "Hel")
+        withContext(Dispatchers.Main) { ReplyRunRegistry.markChatsDeleted(setOf(f.chatId)) }
+        gate.complete(Unit)
+        awaitEnded(f.run)
+        assertTrue(f.run.retired)
+        val reply = stored(f.chatId).last()
+        assertFalse(reply["message"].toString().startsWith("Hello"))
+    }
+}

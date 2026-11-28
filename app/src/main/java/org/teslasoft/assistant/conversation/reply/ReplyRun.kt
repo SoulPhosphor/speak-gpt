@@ -97,6 +97,10 @@ internal interface ReplyRunHost {
     fun replyFinished()
     /** Another host took over this reply: stop saving it. Main thread. */
     fun released() {}
+    /** Saves [row] (another row of the conversation, by its permanent ID). */
+    fun saveRow(row: HashMap<String, Any>)
+    /** Removes [row] from the conversation and its storage. */
+    fun removeRow(row: HashMap<String, Any>)
 }
 
 /**
@@ -962,6 +966,11 @@ internal class ReplyRun(
     /** True when the request carried tool definitions (records tool support on success). */
     @Volatile var requestCarriedTools: Boolean = false
 
+    /** The primary request and its settings, for a tool call that arrives with no screen. */
+    @Volatile var toolTurnRequest: com.aallam.openai.api.chat.ChatCompletionRequest? = null
+    @Volatile var toolTurnStreaming: Boolean = true
+    @Volatile var toolTurnMemoryReferences: List<org.teslasoft.assistant.preferences.memory.ActiveMemoryReference> = emptyList()
+
     /** The chat's display name, for the reply notification. */
     @Volatile var chatName: String = ""
 
@@ -997,6 +1006,18 @@ internal class ReplyRun(
     /** The permanent ID of the reply's row, or blank. */
     val replyRowId: String
         get() = host.lastRow()?.let { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) }.orEmpty()
+
+    /**
+     * The chat screen closed while this reply waits for an image approval:
+     * nothing is being received and nothing is sent until the user answers
+     * (the approval is saved with the chat). The reply ends here, holding no
+     * connection, service or screen.
+     */
+    fun park() {
+        handedOff = true
+        ended = true
+        ReplyRunRegistry.unregister(state.chatId, this)
+    }
 
     /** Stop: the request ends now; the text received so far is kept as stopped. */
     fun stopByUser() {
@@ -1051,6 +1072,11 @@ internal class ReplyRun(
         if (retired || fence.isStale()) return
         applyProviderWarnings(diagnostics)
         if (requestCarriedTools) recordChatToolCapability(host.model, org.teslasoft.assistant.imagegen.ToolCapability.SUPPORTED)
+        val calls = toolCalls.assembled()
+        if (calls.isNotEmpty()) {
+            finishToolCallsWithoutScreen(calls)
+            return
+        }
         val row = host.lastRow()?.takeIf { it["isBot"] == true } ?: return
         row["message"] = "$text\n"
         row[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
@@ -1088,6 +1114,70 @@ internal class ReplyRun(
         row[MessageCompletionState.KEY_ERROR_TEXT] = failure.text
         recordTurnMemoryScope()
         host.saveInBackground()
+    }
+
+    /**
+     * The model asked to use a tool while no screen showed the reply. Its
+     * text is finished as the chat screen would (an empty reply is not kept;
+     * its usage goes on the user's message). With Ask Before Creating on, the
+     * image request is saved waiting for the user's Create or Cancel, and
+     * nothing is generated or sent. With it off, the image is created as it
+     * would be on screen; the follow-up request needs the screen and is not
+     * sent.
+     */
+    private suspend fun finishToolCallsWithoutScreen(calls: List<StreamedToolCallAssembler.AssembledToolCall>) {
+        val row = host.lastRow()?.takeIf { it["isBot"] == true }
+        if (text.isEmpty()) {
+            val rows = host.conversationSnapshot()
+            val replyIndex = rows.indexOfFirst { it === row }.let { if (it < 0) rows.size else it }
+            @Suppress("UNCHECKED_CAST")
+            val userRow = rows.take(replyIndex).lastOrNull { it["isBot"] != true } as? HashMap<String, Any>
+            if (userRow != null) {
+                recordTakenUsageSafely(userRow, mirrorCompactMetadata = false) {
+                    listOfNotNull(completePendingUsageRecord())
+                }
+                host.saveRow(userRow)
+            } else {
+                completePendingUsageRecord()
+            }
+            row?.let { host.removeRow(it) }
+        } else if (row != null) {
+            row["message"] = "$text\n"
+            row[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
+            row.remove(MessageCompletionState.KEY_STATE_DETAIL)
+            recordTakenUsageSafely(row) { listOfNotNull(completePendingUsageRecord()) }
+            host.saveInBackground()
+        }
+        if (retired || fence.isStale()) return
+        try {
+            org.teslasoft.assistant.preferences.ChatPreferences.getChatPreferences()
+                .putTimestampToChatById(app, state.chatId)
+        } catch (_: Exception) { }
+        recordTurnMemoryScope()
+
+        val global = org.teslasoft.assistant.preferences.Preferences.getPreferences(app, "")
+        if (global.getAskBeforeAiImages()) {
+            val endpointId = state.endpoint?.id.orEmpty()
+            val approval = org.teslasoft.assistant.imagegen.PendingImageApproval.of(
+                java.util.UUID.randomUUID().toString(), calls, text, host.model, endpointId
+            )
+            state.chatPreferences?.setPendingImageApproval(approval.encode())
+            toolTurnRequest?.let { request ->
+                PendingToolTurns.keep(
+                    state.chatId,
+                    ToolTurnContext(approval.id, endpointId, request, toolTurnStreaming, toolTurnMemoryReferences, turnReasoning)
+                )
+            }
+        } else {
+            val call = calls.firstOrNull { it.name == org.teslasoft.assistant.imagegen.CreateImageTool.NAME } ?: return
+            val valid = org.teslasoft.assistant.imagegen.CreateImageTool.validate(call.arguments)
+                as? org.teslasoft.assistant.imagegen.CreateImageTool.Validation.Valid ?: return
+            val request = org.teslasoft.assistant.imagegen.CreateImageTool.requestFor(valid, global) ?: return
+            org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.start(
+                app, state.chatId, chatName, request,
+                org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.Origin.TOOL
+            )
+        }
     }
 
     /** Stop pressed on a reopened chat (or the request ended without a provider result). */
@@ -1133,8 +1223,10 @@ internal class ReplyRun(
             org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.stamp(rows, scope)
             val personaId = scope.companionPersonaId
             scopeForBackground.launch {
-                org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.ensureCompanion(app, personaId)
-                org.teslasoft.assistant.service.MemoryScanAutoResume.onChatReplyFinished(app)
+                try {
+                    org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.ensureCompanion(app, personaId)
+                    org.teslasoft.assistant.service.MemoryScanAutoResume.onChatReplyFinished(app)
+                } catch (_: Exception) { }
             }
         } catch (_: Exception) { }
     }

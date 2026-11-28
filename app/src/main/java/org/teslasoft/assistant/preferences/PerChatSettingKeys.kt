@@ -136,6 +136,7 @@ object PerChatSettingKeys {
         "summarizer_errors",
         "summarizer_errors_unseen",
         "manual_compaction_boundary",
+        "pending_image_approval",
         "use_summarized_conversation_projection",
         "hide_uncompact_hint",
         "hide_recompact_hint",

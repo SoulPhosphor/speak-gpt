@@ -436,6 +436,102 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         this, requestState, requestHooks, turnFence, replyRunHost
     )
 
+    /** The tool calls of the turn being handled, while they are handled. */
+    private class ToolTurnSnapshot(
+        val calls: List<StreamedToolCallAssembler.AssembledToolCall>,
+        val originalRequest: ChatCompletionRequest?,
+        val streamedText: String,
+        val streamingEnabled: Boolean,
+        val memoryReferences: List<ActiveMemoryReference>
+    )
+
+    private var currentToolTurn: ToolTurnSnapshot? = null
+
+    /** The screen closed while an image approval waited: keep it saved. */
+    private var imageApprovalParked = false
+
+    /** An image request saved while waiting, continued in this screen. */
+    private class ResumedToolTurn(
+        val approval: org.teslasoft.assistant.imagegen.PendingImageApproval,
+        val context: org.teslasoft.assistant.conversation.reply.ToolTurnContext?
+    )
+
+    /** Saves the image request now waiting for Create or Cancel, with the
+     *  turn's tool calls; the exact original request stays in memory only. */
+    private fun saveWaitingImageApproval() {
+        val turn = currentToolTurn ?: return
+        if (chatStorageUnavailable) return
+        val endpointId = apiEndpointObject?.id.orEmpty()
+        val approval = org.teslasoft.assistant.imagegen.PendingImageApproval.of(
+            java.util.UUID.randomUUID().toString(), turn.calls, turn.streamedText,
+            model, endpointId
+        )
+        preferences?.setPendingImageApproval(approval.encode())
+        val request = turn.originalRequest
+        if (request != null) {
+            org.teslasoft.assistant.conversation.reply.PendingToolTurns.keep(
+                chatId,
+                org.teslasoft.assistant.conversation.reply.ToolTurnContext(
+                    approval.id, endpointId, request, turn.streamingEnabled,
+                    turn.memoryReferences, currentTurnReasoning
+                )
+            )
+        } else {
+            org.teslasoft.assistant.conversation.reply.PendingToolTurns.forget(chatId)
+        }
+    }
+
+    private fun forgetWaitingImageApproval() {
+        preferences?.setPendingImageApproval("")
+        org.teslasoft.assistant.conversation.reply.PendingToolTurns.forget(chatId)
+    }
+
+    /**
+     * An image request was waiting for approval when this chat was last
+     * closed: show its card again. Nothing is generated or sent until the
+     * user answers. Its follow-up request is sent only when the exact
+     * original request is still in memory and the chat still uses the same
+     * endpoint; otherwise no follow-up is made.
+     */
+    private fun resumeWaitingImageApproval() {
+        if (chatStorageUnavailable) return
+        if (org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.active(chatId)?.ended == false) return
+        val approval = org.teslasoft.assistant.imagegen.PendingImageApproval.decode(
+            preferences?.getPendingImageApproval()
+        ) ?: return
+        val context = org.teslasoft.assistant.conversation.reply.PendingToolTurns.take(chatId, approval.id)
+            ?.takeIf { it.endpointId == apiEndpointObject?.id }
+        disableTurnControlsUnlessTheyAreStops()
+        setGenerationProgressVisible(true)
+        parseMessageScope = CoroutineScope(Dispatchers.Main + turnFence.element())
+        parseMessageScope?.launch {
+            progress?.setOnClickListener {
+                userRequestedStop = true
+                cancel()
+                restoreUIState()
+            }
+            try {
+                generateResponse("", false, resumedToolTurn = ResumedToolTurn(approval, context))
+            } catch (_: CancellationException) {
+                restoreUIState()
+            }
+        }
+    }
+
+    private suspend fun resumeToolTurn(resumed: ResumedToolTurn) {
+        val context = resumed.context
+        context?.reasoning?.let { currentTurnReasoning = it }
+        handleAssistantToolCalls(
+            resumed.approval.toAssembledCalls(),
+            context?.request,
+            resumed.approval.streamedText,
+            shouldPronounce = false,
+            streamingEnabled = context?.streamingEnabled ?: (preferences?.getStreaming() ?: true),
+            activeMemoryReferences = context?.memoryReferences.orEmpty(),
+            resumed = true
+        )
+    }
+
     /** A reply sent before this chat was closed, still arriving, shown here. */
     private var attachedReply: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
 
@@ -484,6 +580,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     saveSettingsInBackground()
                 }
             }
+            override fun saveRow(row: HashMap<String, Any>) = saveSettingsInBackground()
+            override fun removeRow(row: HashMap<String, Any>) {
+                val index = messages.indexOfFirst { it === row }
+                if (index < 0) return
+                messages.removeAt(index)
+                adapter?.notifyItemRemoved(index)
+                selectionMode.rebuild(messages)
+                saveSettingsInBackground()
+            }
             override fun replyFinished() {
                 if (attachedReply === run) attachedReply = null
                 val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
@@ -520,7 +625,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             attachedReply = null
         }
         val run = currentReplyRun ?: return
-        if (!replyTerminalPending || userRequestedStop || !run.dispatched || run.handedOff || run.ended) return
+        if (!replyTerminalPending || userRequestedStop || run.handedOff || run.ended) return
+        // Waiting for an image approval: nothing is being received. The
+        // approval stays saved and returns when the chat is opened again.
+        if (pendingImageConfirmation != null && currentToolTurn != null) {
+            imageApprovalParked = true
+            run.park()
+            return
+        }
+        // Approved and creating the image: the image job already continues
+        // without the screen (ImageGenerationJobRegistry); its follow-up is
+        // not sent yet, so no received reply can be lost here.
+        if (currentToolTurn != null) return
+        if (!run.dispatched) return
         val row = messages.lastOrNull()?.takeIf { it["isBot"] == true } ?: return
         // The conversation as it stands, including the reply's row, is saved
         // first; the reply then writes only its own row.
@@ -546,6 +663,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // continued with no screen and was reopened (see attachToRunningReply).
         override fun replyUpdated(text: String) {}
         override fun replyFinished() {}
+        override fun saveRow(row: HashMap<String, Any>) = saveSettingsInBackground()
+        override fun removeRow(row: HashMap<String, Any>) {
+            val index = messages.indexOfFirst { it === row }
+            if (index < 0) return
+            messages.removeAt(index)
+            adapter?.notifyItemRemoved(index)
+            selectionMode.rebuild(messages)
+            saveSettingsInBackground()
+        }
         override fun lifecycleTurnId(): String {
             if (currentLifecycleTurnId.isBlank()) beginLifecycleTurn()
             return currentLifecycleTurnId
@@ -3705,6 +3831,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // surfaced (a dialog + Summoning Circle, or the API Endpoints screen).
             handleProviderRestoreOutcome()
             attachToRunningReply()
+            resumeWaitingImageApproval()
         }
     }
 
@@ -9383,6 +9510,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (!globalPreferences.getAskBeforeAiImages()) return true
         val decision = CompletableDeferred<Boolean>()
         pendingImageConfirmation = decision
+        saveWaitingImageApproval()
         runOnUiThread { showImageConfirmationCard(prompt) }
         pronounce(
             shouldPronounce,
@@ -9394,6 +9522,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         try {
             return decision.await()
         } finally {
+            // Answered, stopped or deleted: no longer waiting. Closing the
+            // screen keeps it saved (parked) for the next opening.
+            if (!imageApprovalParked) forgetWaitingImageApproval()
             // Deletion may have withdrawn this decision and a newer turn may
             // already own another confirmation card by the time we unwind.
             runOnUiThread {
@@ -9414,23 +9545,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  cannot loop. */
     private suspend fun handleAssistantToolCalls(
         calls: List<StreamedToolCallAssembler.AssembledToolCall>,
-        originalRequest: ChatCompletionRequest,
+        originalRequest: ChatCompletionRequest?,
         streamedText: String,
         shouldPronounce: Boolean,
         streamingEnabled: Boolean,
-        activeMemoryReferences: List<ActiveMemoryReference>
+        activeMemoryReferences: List<ActiveMemoryReference>,
+        /** Continuing a turn saved while waiting for an image approval: its
+         *  text row was already finished when it was saved. */
+        resumed: Boolean = false
     ) {
-        if (streamedText.isEmpty()) {
-            carryPendingUsageFromEmptyAssistant()
-            if (messages.isNotEmpty() && messages.last()["isBot"] == true) {
-                messages.removeAt(messages.size - 1)
-                adapter?.notifyItemRemoved(messages.size)
-                selectionMode.rebuild(messages)
+        if (!resumed) {
+            if (streamedText.isEmpty()) {
+                carryPendingUsageFromEmptyAssistant()
+                if (messages.isNotEmpty() && messages.last()["isBot"] == true) {
+                    messages.removeAt(messages.size - 1)
+                    adapter?.notifyItemRemoved(messages.size)
+                    selectionMode.rebuild(messages)
+                }
+            } else {
+                markLastAssistantDone()
             }
-        } else {
-            markLastAssistantDone()
+            saveSettings()
         }
-        saveSettings()
+        currentToolTurn = ToolTurnSnapshot(
+            calls, originalRequest, streamedText, streamingEnabled, activeMemoryReferences
+        )
 
         val globalPreferences = Preferences.getPreferences(this, "")
         var executedImageCall = false
@@ -9490,6 +9629,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 toolCallId = ToolId(pair.first.id ?: "call_${resultCallId++}")
             )
         }
+        currentToolTurn = null
+        // A turn resumed after the app was closed has no exact original
+        // request: no follow-up is rebuilt from anything else.
+        if (originalRequest == null) return
         val followUpRequest = rebuildRequestWithoutTools(
             originalRequest,
             originalRequest.messages + assistantToolCallMessage + toolResultMessages,
@@ -9522,23 +9665,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         val valid = validation as CreateImageTool.Validation.Valid
 
-        val endpointId = globalPreferences.getImageGeneratorEndpointId()
-        val generatorModelId = globalPreferences.getImageGeneratorModel()
-        if (endpointId.isBlank() || generatorModelId.isBlank()) {
-            return CreateImageTool.errorResult("no image generator is configured")
-        }
-
-        val request = ImageGenerationRequest(
-            prompt = valid.prompt,
-            shape = valid.shapeOverride ?: ImageShape.AUTOMATIC,
-            quality = ImageQuality.AUTOMATIC,
-            endpointId = endpointId,
-            modelId = generatorModelId,
-            description = valid.description,
-            parameters = globalPreferences.getImageGeneratorParameters().toMap(),
-            defaultShape = globalPreferences.getImageGeneratorShape(),
-            defaultQuality = globalPreferences.getImageGeneratorQuality()
-        )
+        val request = CreateImageTool.requestFor(valid, globalPreferences)
+            ?: return CreateImageTool.errorResult("no image generator is configured")
 
         if (!requestImageConfirmation(valid.prompt, globalPreferences, shouldPronounce)) {
             return CreateImageTool.cancelledResult()
@@ -11762,13 +11890,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private suspend fun generateResponse(
         request: String,
         shouldPronounce: Boolean,
-        preparedTurn: PreparedRegularTurn? = null
+        preparedTurn: PreparedRegularTurn? = null,
+        resumedToolTurn: ResumedToolTurn? = null
     ) {
         // Typed, voice and activation-prompt replies each run in their own
         // scope; a message deletion stops whichever one is generating.
         replyJob = currentCoroutineContext()[kotlinx.coroutines.Job]
         try {
-            generateResponseUnsettled(request, shouldPronounce, preparedTurn)
+            generateResponseUnsettled(request, shouldPronounce, preparedTurn, resumedToolTurn)
         } catch (e: CancellationException) {
             // Preflight can suspend before the request's terminal handler exists.
             if (userRequestedStop) {
@@ -11792,7 +11921,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private suspend fun generateResponseUnsettled(
         request: String,
         shouldPronounce: Boolean,
-        preparedTurn: PreparedRegularTurn?
+        preparedTurn: PreparedRegularTurn?,
+        resumedToolTurn: ResumedToolTurn? = null
     ) {
         // The single generation funnel is also the single guard point: no
         // generation into a chat whose stored history is locked or
@@ -11809,19 +11939,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val run = newReplyRun()
         currentReplyRun = run
         replyReadbackEnded = false
-        // Known from the start, so a screen opening this chat meanwhile leaves
-        // the reply's row alone (ReplyRunRegistry).
-        org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.register(chatId, run)
+        currentToolTurn = null
+        imageApprovalParked = false
 
         // Silent retry point: any completed image still missing its summary
-        // gets one before this turn's history is projected to the model.
-        ensureImageSummaries()
+        // gets one before this turn's history is projected to the model. A
+        // resumed image approval sends nothing before the user answers.
+        if (resumedToolTurn == null) ensureImageSummaries()
 
         // Mint the turn id every streamed request in this visible turn (primary
         // plus any tool continuation) shares in the Response Lifecycle Log.
         beginLifecycleTurn()
 
-        if (preparedTurn == null && !awaitVisionCapabilityCheck()) {
+        if (preparedTurn == null && resumedToolTurn == null && !awaitVisionCapabilityCheck()) {
             restoreUIState()
             return
         }
@@ -11829,7 +11959,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Capture the user's message here, the single point every input method flows
         // through (typing, voice recognition, and Whisper transcription), so the
         // lorebook matches triggers regardless of how the message was entered.
-        lastUserMessageForLore = request
+        if (resumedToolTurn == null) lastUserMessageForLore = request
 
         // Keep the app at foreground importance for the whole generation so the
         // stream survives the screen turning off or the user switching apps
@@ -11837,13 +11967,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // socket, and the request dies with "Software caused connection abort").
         GenerationForegroundService.begin(this, chatId, chatName)
 
+        // Known from here (and forgotten in the finally below), so a screen
+        // opening this chat meanwhile leaves the reply's row alone.
+        org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.register(chatId, run)
+
         // From here the cancellation handler below writes this reply's
         // terminal state; a message deletion that comes first writes it instead.
         replyTerminalPending = true
         try {
             var response = ""
 
-            if (model.contains(":ft") || model.contains("ft:")) {
+            if (resumedToolTurn != null) {
+                // An image request saved while waiting for approval continues
+                // from its saved tool calls; nothing new is sent before Create.
+                resumeToolTurn(resumedToolTurn)
+            } else if (model.contains(":ft") || model.contains("ft:")) {
                 val manualIds = MemoryAttachmentController.fromMessage(
                     messages.lastOrNull { it["isBot"] != true && !MessageVisibility.isHidden(it) }
                 )
@@ -13360,6 +13498,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // judged as a tools rejection by the wrapper in generateResponse.
         lastRegularRequestCarriedImageTools = chatCompletionRequest.tools != null
         replyRun.requestCarriedTools = chatCompletionRequest.tools != null
+        replyRun.toolTurnRequest = chatCompletionRequest
+        replyRun.toolTurnStreaming = streamingEnabled
+        replyRun.toolTurnMemoryReferences = activeMemoryReferences
 
         // §7.1: tool-call fragments accumulate until the name and JSON
         // arguments are complete. Providers stream them differently — many

@@ -178,4 +178,26 @@ object CreateImageTool {
         result.put("error", message)
         return result.toString()
     }
+
+    /** The image request for a valid create_image call, from the app-wide
+     *  generator settings, or null when no generator is configured. */
+    fun requestFor(
+        valid: Validation.Valid,
+        globalPreferences: org.teslasoft.assistant.preferences.Preferences
+    ): ImageGenerationRequest? {
+        val endpointId = globalPreferences.getImageGeneratorEndpointId()
+        val generatorModelId = globalPreferences.getImageGeneratorModel()
+        if (endpointId.isBlank() || generatorModelId.isBlank()) return null
+        return ImageGenerationRequest(
+            prompt = valid.prompt,
+            shape = valid.shapeOverride ?: ImageShape.AUTOMATIC,
+            quality = ImageQuality.AUTOMATIC,
+            endpointId = endpointId,
+            modelId = generatorModelId,
+            description = valid.description,
+            parameters = globalPreferences.getImageGeneratorParameters().toMap(),
+            defaultShape = globalPreferences.getImageGeneratorShape(),
+            defaultQuality = globalPreferences.getImageGeneratorQuality()
+        )
+    }
 }

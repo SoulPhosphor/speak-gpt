@@ -71,6 +71,33 @@ internal object ReplyRowWriter {
         if (written == ChatStorageHealth.WriteOutcome.OK) outcome = Outcome.SAVED
         return outcome
     }
+
+    /** Removes the stored row with [rowId]; true when it is gone afterwards. */
+    fun remove(context: Context, chatId: String, rowId: String, detectedDuring: DamagedChatOperation): Boolean {
+        val app = context.applicationContext
+        if (rowId.isBlank() || chatId.isBlank()) return true
+        val order = ChatHistoryWriteOrder.shared
+        var gone = false
+        val seq = order.claim(chatId)
+        val written = order.writeIfNewest(chatId, seq, { it == ChatStorageHealth.WriteOutcome.OK }) {
+            if (ReplyRunRegistry.isDeleted(chatId)) {
+                gone = true
+                return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
+            }
+            val chats = ChatPreferences.getChatPreferences()
+            val stored = chats.getChatByIdResult(app, chatId, detectedDuring)
+            if (!ChatStorageHealth.isAuthoritative(stored.state)) return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
+            val history = stored.messages
+            val index = history.indexOfFirst { MessageIdentity.idOf(it) == rowId }
+            if (index < 0) {
+                gone = true
+                return@writeIfNewest ChatStorageHealth.WriteOutcome.FAILED
+            }
+            history.removeAt(index)
+            chats.saveChatHistory(app, chatId, history, synchronous = true)
+        }
+        return gone || written == ChatStorageHealth.WriteOutcome.OK
+    }
 }
 
 /**
@@ -117,6 +144,29 @@ internal class DetachedReplyHost(
 
     override fun released() {
         synchronized(saveLock) { stopped = true }
+    }
+
+    override fun saveRow(row: HashMap<String, Any>) {
+        val snapshot = HashMap(row)
+        saves.launch {
+            var delayMs = FIRST_RETRY_MS
+            while (ReplyRowWriter.write(app, chatId(), snapshot, detectedDuring) == ReplyRowWriter.Outcome.NOT_SAVED) {
+                delay(delayMs)
+                delayMs = (delayMs * 2).coerceAtMost(MAX_RETRY_MS)
+            }
+        }
+    }
+
+    override fun removeRow(row: HashMap<String, Any>) {
+        synchronized(saveLock) { stopped = true }
+        val rowId = MessageIdentity.idOf(row)
+        saves.launch {
+            var delayMs = FIRST_RETRY_MS
+            while (!ReplyRowWriter.remove(app, chatId(), rowId, detectedDuring)) {
+                delay(delayMs)
+                delayMs = (delayMs * 2).coerceAtMost(MAX_RETRY_MS)
+            }
+        }
     }
 
     /** Saves a copy of the row as it is now; a save already running saves again after. */

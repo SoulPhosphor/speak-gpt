@@ -31,10 +31,10 @@ class MessageDeletionWiringContractTest {
     private val run by lazy { source("src/main/java/org/teslasoft/assistant/conversation/reply/ReplyRun.kt") }
 
     private fun runFunction(name: String): String {
-        val start = listOf("internal fun $name(", "internal suspend fun $name(")
+        val start = listOf("internal fun $name(", "internal suspend fun $name(", "private fun $name(", "private suspend fun $name(")
             .map { run.indexOf(it) }.filter { it >= 0 }.minOrNull() ?: -1
         assertTrue("$name not found", start >= 0)
-        val next = Regex("\n    internal (suspend )?(fun|class) ").find(run, start + 1)?.range?.first
+        val next = Regex("\n    (internal|private) (suspend )?(fun|class) ").find(run, start + 1)?.range?.first
         return run.substring(start, next ?: run.length)
     }
 
@@ -121,8 +121,9 @@ class MessageDeletionWiringContractTest {
         assertFalse(activity.contains("parseMessageScope = CoroutineScope(Dispatchers.Main)\n"))
         assertTrue(activity.contains("parseMessageScope = CoroutineScope(Dispatchers.Main + turnFence.element())"))
         val replyLaunches = Regex("\\n([ ]*)(\\w+)\\?\\.launch \\{[\\s\\S]{0,600}?generateResponse\\(").findAll(activity).toList()
-        // Typed, two voice paths, and the activation prompt.
-        assertEquals(4, replyLaunches.size)
+        // Typed, two voice paths, the activation prompt, and an image
+        // approval resumed when the chat is opened again.
+        assertEquals(5, replyLaunches.size)
         for (call in replyLaunches) {
             val scope = call.groupValues[2]
             val created = activity.substring(0, call.range.first).lastIndexOf("$scope = CoroutineScope(")
@@ -203,10 +204,12 @@ class MessageDeletionWiringContractTest {
     @Test fun usageTakenByTheCompletionPathIsRecordedEvenIfCancelled() {
         // Every taker of the pending completed usage goes through the safe recorder.
         val takers = (activity + run).split("completePendingUsageRecord()").size - 1
-        // The definition, two safe callers on the chat screen, the safe caller
-        // that ends a reply with no screen open, and the no-carrier drop.
-        assertEquals(5, takers)
+        // The definition; on the chat screen two safe callers and the
+        // no-carrier drop; with no screen open, the safe caller ending a reply,
+        // the two safe callers ending a tool-call reply, and its no-carrier drop.
+        assertEquals(8, takers)
         assertTrue(run.contains("recordTakenUsageSafely(row) { listOfNotNull(completePendingUsageRecord()) }"))
+        assertTrue(runFunction("finishToolCallsWithoutScreen").split("recordTakenUsageSafely(").size - 1 == 2)
         val safe = runFunction("recordTakenUsageSafely")
         assertTrue(safe.contains("ReplyUsageCompletion.finish"))
         assertTrue(runFunction("completeClaimedTerminal").contains("ReplyUsageCompletion.finish"))
