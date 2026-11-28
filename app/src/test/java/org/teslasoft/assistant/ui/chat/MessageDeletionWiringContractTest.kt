@@ -203,7 +203,10 @@ class MessageDeletionWiringContractTest {
     @Test fun usageTakenByTheCompletionPathIsRecordedEvenIfCancelled() {
         // Every taker of the pending completed usage goes through the safe recorder.
         val takers = (activity + run).split("completePendingUsageRecord()").size - 1
-        assertEquals(4, takers) // the definition, two safe callers, and the no-carrier drop
+        // The definition, two safe callers on the chat screen, the safe caller
+        // that ends a reply with no screen open, and the no-carrier drop.
+        assertEquals(5, takers)
+        assertTrue(run.contains("recordTakenUsageSafely(row) { listOfNotNull(completePendingUsageRecord()) }"))
         val safe = runFunction("recordTakenUsageSafely")
         assertTrue(safe.contains("ReplyUsageCompletion.finish"))
         assertTrue(runFunction("completeClaimedTerminal").contains("ReplyUsageCompletion.finish"))

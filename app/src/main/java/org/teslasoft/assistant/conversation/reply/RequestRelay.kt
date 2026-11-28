@@ -33,20 +33,47 @@ import kotlin.coroutines.CoroutineContext
  */
 internal class RequestRelay(private val scope: CoroutineScope) {
 
+    /** The request most recently started, and how it ended (null: completed or still running). */
+    private class Current(val job: kotlinx.coroutines.Job) {
+        @Volatile var failure: Throwable? = null
+    }
+
+    @Volatile private var current: Current? = null
+
+    /** Waits for the request most recently started to end; returns its failure, or null. */
+    suspend fun awaitCurrent(): Throwable? {
+        val call = current ?: return null
+        call.job.join()
+        // Stopped before it could record anything: still a stopped request.
+        return call.failure ?: if (call.job.isCancelled) kotlinx.coroutines.CancellationException("Request stopped") else null
+    }
+
+    /** Stops the request most recently started, if it is still running. */
+    fun cancelCurrent() {
+        current?.job?.cancel()
+    }
+
     fun <T> relay(
         source: Flow<T>,
         requestContext: CoroutineContext,
         keepRunning: () -> Boolean
     ): Flow<T> {
         val channel = Channel<T>(Channel.UNLIMITED)
-        val producer = scope.launch(requestContext) {
+        val started = kotlinx.coroutines.CompletableDeferred<Current>()
+        val producer = scope.launch(requestContext, start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            val call = started.await()
             try {
                 source.collect { channel.send(it) }
                 channel.close()
             } catch (e: Throwable) {
+                call.failure = e
                 channel.close(e)
             }
         }
+        val call = Current(producer)
+        current = call
+        started.complete(call)
+        producer.start()
         return flow {
             var finished = false
             try {

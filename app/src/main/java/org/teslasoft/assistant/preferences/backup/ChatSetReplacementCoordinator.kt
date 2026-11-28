@@ -219,6 +219,8 @@ object ChatSetReplacementCoordinator {
         // A message-deletion save kept from before the swap would overwrite a
         // restored chat; the restored set is the new authority.
         runCatching { org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared.discardAll() }
+        // Nor may a reply still being received with no screen write to it.
+        runCatching { org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.discardAll() }
 
         // Step 10: evict cached handles for every replaced name (the chat list
         // plus each restored chat's history and settings).

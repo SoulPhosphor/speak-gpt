@@ -25,6 +25,11 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import org.teslasoft.assistant.imagegen.ToolCapabilityStore
+import org.teslasoft.assistant.imagegen.ToolCapabilityScope
+import org.teslasoft.assistant.imagegen.ToolCapability
+import org.teslasoft.assistant.preferences.PersonaPreferences
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.util.chatMessage
 import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
@@ -86,6 +91,10 @@ internal interface ReplyRunHost {
     fun usageCarrier(): HashMap<String, Any>?
     /** The id shared by this turn's requests in the Response Lifecycle Log. */
     fun lifecycleTurnId(): String
+    /** Shows (and, when due, saves) the reply's text as it arrives. Main thread. */
+    fun replyUpdated(text: String)
+    /** The reply's ending was written. Main thread. */
+    fun replyFinished()
 }
 
 /**
@@ -99,10 +108,11 @@ internal class ReplyRun(
     val state: ChatRequestState,
     val hooks: ChatRequestHooks,
     val fence: org.teslasoft.assistant.ui.chat.ConversationTurnFence,
-    var host: ReplyRunHost,
-    /** Runs the price lookups for this reply's requests. */
-    private val scope: CoroutineScope
+    var host: ReplyRunHost
 ) {
+    /** Runs the price lookups for this reply's requests: the reply's own scope, never a screen's. */
+    private val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
     private val app: Context = context.applicationContext
 
     var pricingCatalog: Deferred<TokenPricingCatalog>? = null
@@ -881,5 +891,303 @@ internal class ReplyRun(
                 )
         }
         return FailureRecord(genError, response, providerEvidence)
+    }
+
+    /** Writes the Error Log entry for a failed reply (the GenError entry). */
+    internal fun logGenerationError(
+        result: org.teslasoft.assistant.util.GenErrorResult,
+        e: Throwable,
+        trigger: String,
+        failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot?,
+        providerEvidence: ProviderDiagnosticSnapshot?,
+        voiceLive: Boolean,
+        voiceContext: String?
+    ) {
+        try {
+            val sb = StringBuilder()
+            if (result.code == org.teslasoft.assistant.util.GenErrorCode.U0) {
+                sb.append("[U0] Unclassified generation failure.")
+            } else {
+                // Error Log copy: no sentence telling the reader that details
+                // were saved to the Error Log they are already reading.
+                sb.append(
+                    result.providerLimitMessage(app, forErrorLog = true)
+                        ?: result.chatMessage(app, forErrorLog = true)
+                )
+            }
+            sb.append('\n')
+            sb.append("Application Classification: ").append(result.code.code).append('\n')
+            sb.append("Profile: ${state.endpoint?.label ?: "unknown"}\n")
+            sb.append("Base URL: ${state.endpoint?.host ?: "unknown"}\n")
+            sb.append("Model: ${host.model.ifBlank { "unknown" }}\n")
+            sb.append("Voice: ${if (voiceLive) "active" else "inactive"}\n")
+            sb.append("Trigger: $trigger\n")
+            sb.append("Screen: ${org.teslasoft.assistant.util.DeviceStateDiagnostics.screen(app)}\n")
+            if (failureSnapshot != null) {
+                failureSnapshot.asLogLines().forEach { line ->
+                    sb.append(line).append('\n')
+                }
+            } else {
+                sb.append("Network: ${org.teslasoft.assistant.util.DeviceStateDiagnostics.network(app)}\n")
+            }
+            sb.append("Power save: ${org.teslasoft.assistant.util.DeviceStateDiagnostics.powerSave(app)}")
+            sb.append('\n')
+            appendProviderEvidence(sb, providerEvidence)
+            if (voiceLive && voiceContext != null) sb.append('\n').append(voiceContext)
+            if (result.code.includeStackTrace) {
+                sb.append("\n\n").append(e.stackTraceToString())
+            } else {
+                e.message?.takeIf { it.isNotBlank() }?.let { sb.append("\nDetail: $it") }
+            }
+            org.teslasoft.assistant.preferences.Logger.log(app, "crash", "GenError", "error", sb.toString())
+        } catch (_: Throwable) { /* never let diagnostics crash the error path */ }
+    }
+
+    // ---- Continuing with no chat screen -------------------------------
+
+    /** True when Stop was pressed for this reply. */
+    @Volatile var userStopped: Boolean = false
+        private set
+
+    /** True once the chat or this reply's message was removed: nothing more is written. */
+    @Volatile var retired: Boolean = false
+        private set
+
+    /** True once the reply's ending was written (or it was retired). */
+    @Volatile var ended: Boolean = false
+        private set
+
+    /** True when the request carried tool definitions (records tool support on success). */
+    @Volatile var requestCarriedTools: Boolean = false
+
+    /** The chat's display name, for the reply notification. */
+    @Volatile var chatName: String = ""
+
+    /**
+     * The chat screen showing this reply closed before the reply ended. The
+     * reply keeps receiving, saves itself through [detached] and finishes on
+     * its own; a reopened chat screen reconnects with [attach].
+     */
+    fun handOff(detached: ReplyRunHost) {
+        if (handedOff || ended) return
+        handedOff = true
+        host = detached
+        // The reply's own hold keeps the app running until the reply is saved;
+        // the closing screen releases its hold separately.
+        org.teslasoft.assistant.service.GenerationForegroundService.begin(app, state.chatId, chatName)
+        ReplyRunRegistry.register(state.chatId, this)
+        // Carries the reply's deletion fence, so a deletion that retired it is still seen.
+        kotlinx.coroutines.MainScope().launch(fence.element()) { finishOnOwn() }
+    }
+
+    /** A reopened chat screen shows this reply and becomes its host. Main thread. */
+    fun attach(screen: ReplyRunHost) {
+        host = screen
+        screen.replyUpdated(text)
+    }
+
+    /** Stop: the request ends now; the text received so far is kept as stopped. */
+    fun stopByUser() {
+        userStopped = true
+        requests.cancelCurrent()
+    }
+
+    /** The chat or this reply's message was removed: stop and write nothing more. */
+    fun retire() {
+        retired = true
+        requests.cancelCurrent()
+    }
+
+    private suspend fun finishOnOwn() {
+        try {
+            val failure = followRequest()
+            if (retired || fence.isStale()) return
+            when {
+                failure == null -> finishCompleted()
+                failure is kotlinx.coroutines.CancellationException -> finishStopped()
+                else -> finishFailed(failure)
+            }
+        } finally {
+            ended = true
+            ReplyRunRegistry.unregister(state.chatId, this)
+            org.teslasoft.assistant.service.GenerationForegroundService.end(app)
+            host.replyFinished()
+        }
+    }
+
+    /** Shows and saves the text as it arrives until the request ends; returns its failure. */
+    private suspend fun followRequest(): Throwable? = kotlinx.coroutines.coroutineScope {
+        val follower = launch {
+            var shown: String? = null
+            while (true) {
+                val current = text
+                if (current != shown) {
+                    shown = current
+                    host.replyUpdated(current)
+                }
+                kotlinx.coroutines.delay(FOLLOW_INTERVAL_MS)
+            }
+        }
+        val failure = requests.awaitCurrent()
+        follower.cancel()
+        host.replyUpdated(text)
+        failure
+    }
+
+    private suspend fun finishCompleted() {
+        val diagnostics = finalizeLifecycleSuccess()
+        if (retired || fence.isStale()) return
+        applyProviderWarnings(diagnostics)
+        if (requestCarriedTools) recordChatToolCapability(host.model, org.teslasoft.assistant.imagegen.ToolCapability.SUPPORTED)
+        val row = host.lastRow()?.takeIf { it["isBot"] == true } ?: return
+        row["message"] = "$text\n"
+        row[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
+        row.remove(MessageCompletionState.KEY_STATE_DETAIL)
+        val visibleText = text
+        if (visibleText.isNotBlank() && !visibleText.trim().startsWith("~file:")) {
+            val estimate = try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    com.aallam.ktoken.Tokenizer.of(com.aallam.ktoken.Encoding.CL100K_BASE).encode(visibleText).size
+                }
+            } catch (_: Exception) {
+                null
+            }
+            estimate?.let { row[org.teslasoft.assistant.ui.adapters.chat.ChatAdapter.KEY_MESSAGE_TOKEN_ESTIMATE] = it.toString() }
+        }
+        recordTakenUsageSafely(row) { listOfNotNull(completePendingUsageRecord()) }
+        recordLastSuccessfulConfig()
+        try {
+            org.teslasoft.assistant.preferences.ChatPreferences.getChatPreferences()
+                .putTimestampToChatById(app, state.chatId)
+        } catch (_: Exception) { }
+        recordTurnMemoryScope()
+        host.saveInBackground()
+    }
+
+    private suspend fun finishFailed(e: Throwable) {
+        val failure = recordFailure(e) { genError, evidence ->
+            logGenerationError(genError, e, "message", null, evidence, voiceLive = false, voiceContext = null)
+        }
+        if (retired || fence.isStale()) return
+        val row = host.lastRow()?.takeIf { it["isBot"] == true } ?: return
+        row["message"] = text
+        row[MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
+        row[MessageCompletionState.KEY_STATE_DETAIL] = failure.genError.code.code
+        row[MessageCompletionState.KEY_ERROR_TEXT] = failure.text
+        recordTurnMemoryScope()
+        host.saveInBackground()
+    }
+
+    /** Stop pressed on a reopened chat (or the request ended without a provider result). */
+    private suspend fun finishStopped() {
+        val row = host.lastRow()?.takeIf { it["isBot"] == true }
+        val plan = org.teslasoft.assistant.ui.chat.CancelledReplyTerminal.plan(
+            userStopped, destroying = false, replyStarted = row != null, requestDispatched = dispatched,
+            screenClosedReason = app.getString(R.string.gen_interrupt_reason_screen_closed)
+        )
+        finalizeLifecycleTerminal(
+            plan.outcome, "missing", true, plan.termination, plan.lifecycleError,
+            keepCompletedUsage = true
+        )
+        if (retired || fence.isStale() || row == null) return
+        row["message"] = text
+        val existing = row[MessageCompletionState.KEY_STATE]?.toString()
+        if (existing == MessageCompletionState.STREAMING || existing.isNullOrBlank()) {
+            row[MessageCompletionState.KEY_STATE] = plan.state
+            row[MessageCompletionState.KEY_STATE_DETAIL] = plan.detail
+            if (!plan.reason.isNullOrBlank()) row[MessageCompletionState.KEY_ERROR_TEXT] = plan.reason
+        }
+        if (plan.logAsError) {
+            try {
+                org.teslasoft.assistant.preferences.Logger.log(
+                    app, "crash", plan.errorTag, "error",
+                    plan.errorSummary +
+                        "\nModel: ${host.model.ifBlank { "unknown" }}" +
+                        "\nScreen: ${org.teslasoft.assistant.util.DeviceStateDiagnostics.screen(app)}" +
+                        "\nNetwork: ${org.teslasoft.assistant.util.DeviceStateDiagnostics.network(app)}"
+                )
+            } catch (_: Throwable) { }
+        }
+        recordTurnMemoryScope()
+        host.saveInBackground()
+    }
+
+    /** The finished turn's memory scope, as the chat screen records it at the end of every turn. */
+    private fun recordTurnMemoryScope() {
+        try {
+            val scope = org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.current(state.chatPreferences)
+            @Suppress("UNCHECKED_CAST")
+            val rows = host.conversationSnapshot().filterIsInstance<HashMap<String, Any>>()
+            org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.stamp(rows, scope)
+            val personaId = scope.companionPersonaId
+            scopeForBackground.launch {
+                org.teslasoft.assistant.ui.chat.ChatTurnMemoryScope.ensureCompanion(app, personaId)
+                org.teslasoft.assistant.service.MemoryScanAutoResume.onChatReplyFinished(app)
+            }
+        } catch (_: Exception) { }
+    }
+
+    /** Persist a learned tool capability for this chat's exact
+     *  endpoint/model pair — same persistence shape as vision capability.
+     *  Learning must never break a turn. */
+    internal fun recordChatToolCapability(selectedModel: String, capability: ToolCapability) {
+        try {
+            val chatEndpointId = state.chatPreferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty() || selectedModel.isBlank()) return
+            val prefs = ApiEndpointPreferences.getApiEndpointPreferences(app)
+            val endpoint = prefs.getApiEndpoint(app, chatEndpointId)
+            val updated =
+                ToolCapabilityStore.set(
+                    endpoint.toolCapabilityByModel,
+                    chatToolCapabilityScopeKey(selectedModel),
+                    capability
+                )
+            if (updated != endpoint.toolCapabilityByModel) {
+                endpoint.toolCapabilityByModel = updated
+                prefs.setApiEndpoint(app, endpoint)
+            }
+        } catch (_: Exception) { /* capability learning must never break a turn */ }
+    }
+
+    /** §8: UNKNOWN tries the tool, SUPPORTED keeps sending it, UNSUPPORTED
+     *  withholds it until the endpoint editor's reset forgets the record. */
+    internal fun chatToolCapabilityScopeKey(selectedModel: String): String {
+        val endpoint = state.endpoint
+        val favorite = hooks.favorite(selectedModel)
+        return ToolCapabilityScope.key(
+            selectedModel,
+            openRouterRouting = endpoint?.isOpenRouterRouting() == true,
+            routingType = favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC,
+            selectedProvider = favorite?.selectedProvider.orEmpty(),
+            allowFallbacks = favorite?.allowFallbacks != false,
+            providerOrder = favorite?.providerOrder ?: emptyList(),
+            ignoredProviders = favorite?.ignoredProviders ?: emptyList()
+        )
+    }
+
+    /** Remember the provider, model, routing, and companion that just produced
+     *  a successful reply. All values must come from this same chat; an empty or
+     *  deleted companion leaves the prior complete snapshot unchanged. */
+    internal fun recordLastSuccessfulConfig() {
+        val endpointId = state.endpoint?.id?.takeIf { it.isNotBlank() }
+            ?: state.chatPreferences?.getApiEndpointId().orEmpty()
+        val usedModel = host.model.ifBlank { state.chatPreferences?.getModel().orEmpty() }
+        val personaId = state.chatPreferences?.getPersonaId().orEmpty()
+        val personaExists = personaId.isNotBlank() &&
+            PersonaPreferences.getPersonaPreferences(app).getPersona(personaId).label.isNotBlank()
+        if (endpointId.isBlank() || usedModel.isBlank() || !personaExists) return
+        val routing = hooks.favorite(usedModel)?.routingType
+            ?: FavoriteModelObject.ROUTING_AUTOMATIC
+        val routingOverride = state.chatPreferences?.takeIf {
+            org.teslasoft.assistant.preferences.ChatModelRouting.overrideFor(it, endpointId, usedModel) != null
+        }?.let { org.teslasoft.assistant.preferences.ChatModelRouting.storedOverride(it) }.orEmpty()
+        state.chatPreferences?.setLastSuccessfulConfig(endpointId, usedModel, routing, personaId, routingOverride)
+    }
+
+    private val scopeForBackground = CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
+    private companion object {
+        /** How often the reply's text is shown and saved while it arrives with no screen. */
+        const val FOLLOW_INTERVAL_MS = 250L
     }
 }

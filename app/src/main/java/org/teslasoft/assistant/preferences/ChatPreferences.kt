@@ -1079,6 +1079,7 @@ class ChatPreferences private constructor() {
         // one chat from the old fallback hash to the new fallback hash.
         try {
             ImageGenerationJobRegistry.rename(oldId, newId)
+            org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.rename(oldId, newId)
             ChatHistoryWriteOrder.shared.rename(oldId, newId)
             org.teslasoft.assistant.conversation.parallel.ParallelChatScopes.rename(oldId, newId)
             ImageGenerationJobRegistry.updateOriginChatName(newId, chatName)

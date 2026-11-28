@@ -433,8 +433,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         get() = currentReplyRun ?: newReplyRun().also { currentReplyRun = it }
 
     private fun newReplyRun() = org.teslasoft.assistant.conversation.reply.ReplyRun(
-        this, requestState, requestHooks, turnFence, replyRunHost, lifecycleScope
+        this, requestState, requestHooks, turnFence, replyRunHost
     )
+
     private val replyRunHost = object : org.teslasoft.assistant.conversation.reply.ReplyRunHost {
         override val model: String get() = this@ChatActivity.model
         override val storageUnavailable: Boolean get() = chatStorageUnavailable
@@ -443,6 +444,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         override fun containsRow(row: Map<String, Any>?): Boolean = row != null && messages.any { it === row }
         override fun saveInBackground() = saveSettingsInBackground()
         override fun usageCarrier(): HashMap<String, Any>? = this@ChatActivity.usageCarrier()
+        // This screen shows its own replies directly; these serve a reply that
+        // continued with no screen and was reopened (see attachToRunningReply).
+        override fun replyUpdated(text: String) {}
+        override fun replyFinished() {}
         override fun lifecycleTurnId(): String {
             if (currentLifecycleTurnId.isBlank()) beginLifecycleTurn()
             return currentLifecycleTurnId
@@ -9118,21 +9123,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  tools rejection at all. */
     private var lastRegularRequestCarriedImageTools = false
 
-    /** §8: UNKNOWN tries the tool, SUPPORTED keeps sending it, UNSUPPORTED
-     *  withholds it until the endpoint editor's reset forgets the record. */
-    private fun chatToolCapabilityScopeKey(selectedModel: String): String {
-        val endpoint = apiEndpointObject
-        val favorite = favoriteForActiveEndpoint(selectedModel)
-        return ToolCapabilityScope.key(
-            selectedModel,
-            openRouterRouting = endpoint?.isOpenRouterRouting() == true,
-            routingType = favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC,
-            selectedProvider = favorite?.selectedProvider.orEmpty(),
-            allowFallbacks = favorite?.allowFallbacks != false,
-            providerOrder = favorite?.providerOrder ?: emptyList(),
-            ignoredProviders = favorite?.ignoredProviders ?: emptyList()
-        )
-    }
+    private fun chatToolCapabilityScopeKey(selectedModel: String): String =
+        replyRun.chatToolCapabilityScopeKey(selectedModel)
 
     private fun chatModelMayReceiveImageTool(selectedModel: String): Boolean {
         return try {
@@ -9150,27 +9142,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /** Persist a learned tool capability for this chat's exact
-     *  endpoint/model pair — same persistence shape as vision capability.
-     *  Learning must never break a turn. */
-    private fun recordChatToolCapability(selectedModel: String, capability: ToolCapability) {
-        try {
-            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
-            if (chatEndpointId.isEmpty() || selectedModel.isBlank()) return
-            val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
-            val endpoint = prefs.getApiEndpoint(this, chatEndpointId)
-            val updated =
-                ToolCapabilityStore.set(
-                    endpoint.toolCapabilityByModel,
-                    chatToolCapabilityScopeKey(selectedModel),
-                    capability
-                )
-            if (updated != endpoint.toolCapabilityByModel) {
-                endpoint.toolCapabilityByModel = updated
-                prefs.setApiEndpoint(this, endpoint)
-            }
-        } catch (_: Exception) { /* capability learning must never break a turn */ }
-    }
+    private fun recordChatToolCapability(selectedModel: String, capability: ToolCapability) =
+        replyRun.recordChatToolCapability(selectedModel, capability)
 
     /** The §8 UNSUPPORTED transition: record it, drop the dead streaming
      *  placeholder so the retry doesn't stack empty bubbles, and show the
@@ -11268,24 +11241,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /** Remember the provider, model, routing, and companion that just produced
-     *  a successful reply. All values must come from this same chat; an empty or
-     *  deleted companion leaves the prior complete snapshot unchanged. */
-    private fun recordLastSuccessfulConfig() {
-        val endpointId = apiEndpointObject?.id?.takeIf { it.isNotBlank() }
-            ?: preferences?.getApiEndpointId().orEmpty()
-        val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
-        val personaId = preferences?.getPersonaId().orEmpty()
-        val personaExists = personaId.isNotBlank() &&
-            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).label.isNotBlank()
-        if (endpointId.isBlank() || usedModel.isBlank() || !personaExists) return
-        val routing = favoriteForActiveEndpoint(usedModel)?.routingType
-            ?: FavoriteModelObject.ROUTING_AUTOMATIC
-        val routingOverride = preferences?.takeIf {
-            org.teslasoft.assistant.preferences.ChatModelRouting.overrideFor(it, endpointId, usedModel) != null
-        }?.let { org.teslasoft.assistant.preferences.ChatModelRouting.storedOverride(it) }.orEmpty()
-        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing, personaId, routingOverride)
-    }
+    private fun recordLastSuccessfulConfig() = replyRun.recordLastSuccessfulConfig()
 
     /** Stamp a terminal state onto the last assistant message ONLY if it is
      *  still marked streaming, and persist immediately. No-op otherwise, so it
@@ -11673,9 +11629,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             throw e
         } finally {
             // Every way a regeneration can end passes here; one that produced
-            // no reply puts the removed reply back.
-            settlePendingRegeneration()
-            showPendingContextHelperFailure()
+            // no reply puts the removed reply back. A handed-off reply is still
+            // being received: its regeneration stays saved for the next opening.
+            if (currentReplyRun?.handedOff != true) {
+                settlePendingRegeneration()
+                showPendingContextHelperFailure()
+            }
         }
     }
 
@@ -11696,7 +11655,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         userRequestedStop = false
 
         // This reply's own bookkeeping and provider requests.
-        currentReplyRun = newReplyRun()
+        val run = newReplyRun()
+        currentReplyRun = run
 
         // Silent retry point: any completed image still missing its summary
         // gets one before this turn's history is projected to the model.
@@ -11876,8 +11836,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // No suspension points below, so this runs even though the coroutine
             // is already cancelled.
             // A message deletion that retired this reply has already settled
-            // its row, usage and screen; nothing here may touch them now.
-            if (!turnFence.isStale()) {
+            // its row, usage and screen; nothing here may touch them now. A
+            // reply handed off when this screen closed ends on its own.
+            if (!turnFence.isStale() && !run.handedOff) {
                 val destroying = isFinishing || isDestroyed
                 val replyStarted = messages.isNotEmpty() &&
                     messages[messages.size - 1]["isBot"] == true
@@ -11898,6 +11859,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         } catch (e: Exception) {
+            // A handed-off reply records its own failure (ReplyRun).
+            if (run.handedOff) return
             if (turnFence.isStale()) return
             // This handler now writes the reply's terminal state; a message
             // deletion during its waits must not write a second one.
@@ -11983,10 +11946,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 setGenerationProgressVisible(false)
             }
         } finally {
-            // Reference counted, so a retired reply still releases its own hold.
+            // Reference counted, so a retired reply still releases its own hold
+            // (a handed-off reply holds the service itself until it is saved).
             GenerationForegroundService.end(this)
-            // A message deletion that retired this reply already did the rest.
-            if (!turnFence.isStale()) {
+            // A message deletion that retired this reply already did the rest;
+            // a handed-off reply records its own turn when it ends.
+            if (!turnFence.isStale() && !run.handedOff) {
                 replyTerminalPending = false
                 try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
                 generationNetworkMonitor = null
@@ -12111,60 +12076,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             failureSnapshot,
             isVoiceLive()
         )
-        try {
-            val sb = StringBuilder()
-            if (result.code == GenErrorCode.U0) {
-                sb.append("[U0] Unclassified generation failure.")
-            } else {
-                // Error Log copy: no sentence telling the reader that details
-                // were saved to the Error Log they are already reading.
-                sb.append(
-                    result.providerLimitMessage(this, forErrorLog = true)
-                        ?: result.chatMessage(this, forErrorLog = true)
-                )
-            }
-            sb.append('\n')
-            sb.append("Application Classification: ").append(result.code.code).append('\n')
-            sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
-            sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
-            sb.append("Model: ${model.ifBlank { "unknown" }}\n")
-            sb.append("Voice: ${if (voiceLive) "active" else "inactive"}\n")
-            sb.append("Trigger: $trigger\n")
-            sb.append("Screen: ${screenState()}\n")
-            if (failureSnapshot != null) {
-                failureSnapshot.asLogLines().forEach { line ->
-                    sb.append(line).append('\n')
-                }
-            } else {
-                sb.append("Network: ${networkState()}\n")
-            }
-            sb.append("Power save: ${powerSaveState()}")
-            sb.append('\n')
-            appendProviderEvidence(sb, providerEvidence)
-            if (voiceLive) sb.append('\n').append(compactVoiceContext())
-            if (result.code.includeStackTrace) {
-                sb.append("\n\n").append(e.stackTraceToString())
-            } else {
-                e.message?.takeIf { it.isNotBlank() }?.let { sb.append("\nDetail: $it") }
-            }
-            org.teslasoft.assistant.preferences.Logger.log(this, "crash", "GenError", "error", sb.toString())
-        } catch (_: Throwable) { /* never let diagnostics crash the error path */ }
-
-        // Failure clue into the Voice Debug Log even when per-turn voice logging is
-        // off (ERROR_CODES.md section 5). No-op when voice wasn't live.
+        replyRun.logGenerationError(
+            result, e, trigger, failureSnapshot, providerEvidence, voiceLive,
+            voiceContext = if (voiceLive) compactVoiceContext() else null
+        )
         logVoiceFailureSnapshot(result.code.code, voiceLive)
     }
 
     /** "on"/"off"/"unknown" — whether the screen was interactive at failure time.
      *  Key signal for the screen-off/Wi-Fi-sleep hypothesis (ERROR_CODES.md E1). */
-    private fun screenState(): String = try {
-        if ((getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive) "on" else "off"
-    } catch (_: Throwable) { "unknown" }
+    private fun screenState(): String = org.teslasoft.assistant.util.DeviceStateDiagnostics.screen(this)
 
     /** "on"/"off"/"unknown" — battery power-save mode at failure time. */
-    private fun powerSaveState(): String = try {
-        if ((getSystemService(POWER_SERVICE) as android.os.PowerManager).isPowerSaveMode) "on" else "off"
-    } catch (_: Throwable) { "unknown" }
+    private fun powerSaveState(): String = org.teslasoft.assistant.util.DeviceStateDiagnostics.powerSave(this)
 
     /** Short name for an AudioDeviceInfo type, for the AudioRoute diagnostics. */
     private fun audioDeviceTypeName(type: Int): String = when (type) {
@@ -12264,20 +12188,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Active transport: wifi/cellular/ethernet/other/none/unknown. Best-effort;
      *  any failure (e.g. missing permission) is reported as "unknown". */
-    private fun networkState(): String = try {
-        val cm = getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        val net = cm.activeNetwork
-        if (net == null) "none" else {
-            val caps = cm.getNetworkCapabilities(net)
-            when {
-                caps == null -> "unknown"
-                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
-                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
-                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
-                else -> "other"
-            }
-        }
-    } catch (_: Throwable) { "unknown" }
+    private fun networkState(): String = org.teslasoft.assistant.util.DeviceStateDiagnostics.network(this)
 
     /** Compact voice snapshot appended to the Error Log entry when voice is live —
      *  a short state summary, not the per-turn firehose (ERROR_CODES.md section 5). */
@@ -13290,6 +13201,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // §8 retry support: remembered so a failure of THIS request can be
         // judged as a tools rejection by the wrapper in generateResponse.
         lastRegularRequestCarriedImageTools = chatCompletionRequest.tools != null
+        replyRun.requestCarriedTools = chatCompletionRequest.tools != null
 
         // §7.1: tool-call fragments accumulate until the name and JSON
         // arguments are complete. Providers stream them differently — many
