@@ -83,4 +83,23 @@ class ReplyProtectionWiringContractTest {
         assertTrue(attach.contains("progress?.setOnClickListener { run.stopByUser() }"))
         assertTrue(attach.contains("run.attach("))
     }
+
+    @Test fun aReconnectedRegenerationKeepsItsEarlierVersions() {
+        val attach = chat.substringAfter("private fun attachToRunningReply() {").substringBefore("\n    }\n")
+        assertTrue(attach.contains("takeOverRegenerationOf(rowId)"))
+        val finished = attach.substringAfter("override fun replyFinished() {")
+        assertTrue(finished.indexOf("settlePendingRegeneration()") in 0 until finished.indexOf("restoreUIState()"))
+        val takeOver = chat.substringAfter("private fun takeOverRegenerationOf(rowId: String) {").substringBefore("\n    }\n")
+        assertTrue(takeOver.contains("pendingRetryVariants = org.teslasoft.assistant.ui.chat.RegenerationRecovery.historyOf(pending.original)"))
+    }
+
+    @Test fun aMessageDeletionLetsGoOfAReconnectedReplyBeforeTheNextTurn() {
+        val retire = chat.substringAfter("private fun retireRunningWorkForDeletion() {")
+        val letGo = retire.indexOf("attachedReply = null")
+        assertTrue(letGo in 0 until retire.indexOf("run.stopByUser()"))
+        val finished = chat.substringAfter("override fun replyFinished() {\n                // A message deletion")
+        assertTrue(finished.contains("if (!stillAttached || isFinishing || isDestroyed) return"))
+        val handOff = chat.substringAfter("private fun handOffRunningReply() {")
+        assertTrue(handOff.contains("(attachedReply ?: releasedReply)?.takeIf { !it.ended }"))
+    }
 }

@@ -534,6 +534,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** A reply sent before this chat was closed, still arriving, shown here. */
     private var attachedReply: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
+    /** A reconnected reply a message deletion stopped, still writing its stopped ending. */
+    private var releasedReply: org.teslasoft.assistant.conversation.reply.ReplyRun? = null
 
     /**
      * This chat was reopened while a reply sent before it closed is still
@@ -552,6 +554,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val rowId = run.replyRowId
         if (rowId.isBlank() || messages.none { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }) return
         attachedReply = run
+        takeOverRegenerationOf(rowId)
         val previous = run.host
         val turnId = previous.lifecycleTurnId()
         val replyModel = previous.model
@@ -594,10 +597,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 learnedCapability: org.teslasoft.assistant.reasoning.ReasoningCapability?
             ) = deliverObservedReasoning(observation, learnedCapability)
             override fun replyFinished() {
-                if (attachedReply === run) attachedReply = null
+                // A message deletion let go of this reply: it has settled the
+                // turn and the next one may already be running.
+                val stillAttached = attachedReply === run
+                if (stillAttached) attachedReply = null
                 val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
                 if (index >= 0) adapter?.notifyItemChanged(index)
-                if (isFinishing || isDestroyed) return
+                if (!stillAttached || isFinishing || isDestroyed) return
+                // A regeneration this reply belongs to keeps its earlier versions.
+                settlePendingRegeneration()
                 setGenerationProgressVisible(false)
                 restoreUIState()
                 calculateCost()
@@ -608,6 +616,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
+     * The reply being reconnected to is a regeneration whose saved journal
+     * (written when Retry was pressed) is still waiting: this screen settles
+     * it when the reply ends, as it does for its own regenerations, so the
+     * earlier versions are never lost.
+     */
+    private fun takeOverRegenerationOf(rowId: String) {
+        if (pendingRetryVariants != null) return
+        val pending = org.teslasoft.assistant.ui.chat.RegenerationRecovery
+            .decode(preferences?.getPendingRegeneration()) ?: return
+        val index = messages.indexOfFirst { org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == rowId }
+        if (index != messages.size - 1 || index < 1) return
+        if (org.teslasoft.assistant.preferences.MessageIdentity.idOf(messages[index - 1]) != pending.precedingMessageId) return
+        pendingRetryOriginal = pending
+        pendingRetryVariants = org.teslasoft.assistant.ui.chat.RegenerationRecovery.historyOf(pending.original)
+        pendingRetryMessageId = if (pending.replyKeepsId) {
+            org.teslasoft.assistant.preferences.MessageIdentity.idOf(pending.original).ifBlank { null }
+        } else {
+            null
+        }
+    }
+
+    /**
      * This screen is closing while a reply it sent is still being received
      * (Back, another chat, or Android closing the screen). The reply keeps
      * going in its ReplyRun and saves itself; Stop and a message deletion are
@@ -615,7 +645,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun handOffRunningReply() {
         org.teslasoft.assistant.conversation.reply.ReplyRunRegistry.unwatch(chatId, onReplyHandedOff)
-        attachedReply?.takeIf { !it.ended }?.let { run ->
+        (attachedReply ?: releasedReply)?.takeIf { !it.ended }?.let { run ->
             val row = messages.firstOrNull {
                 org.teslasoft.assistant.preferences.MessageIdentity.idOf(it) == run.replyRowId
             }
@@ -630,6 +660,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             attachedReply = null
         }
+        releasedReply = null
         val run = currentReplyRun ?: return
         if (!replyTerminalPending || userRequestedStop || run.handedOff || run.ended) return
         // Waiting for an image approval: nothing is being received. The
@@ -14724,7 +14755,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * conversation, the composer and the next turn's state.
      */
     private fun retireRunningWorkForDeletion() {
-        attachedReply?.stopByUser()
+        // A reconnected reply is stopped and let go of: it saves its stopped
+        // ending, and its finish no longer touches this screen's next turn.
+        attachedReply?.let { run ->
+            attachedReply = null
+            releasedReply = run
+            run.stopByUser()
+        }
         parallelChat.abandonForDeletion()
         val generationJobs = listOfNotNull(
             parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),
