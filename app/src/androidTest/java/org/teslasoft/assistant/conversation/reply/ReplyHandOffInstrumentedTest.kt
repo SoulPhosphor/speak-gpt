@@ -291,12 +291,16 @@ class ReplyHandOffInstrumentedTest {
         }
         readThenClose(f, flow { emit("Answer"); finish.await() }, "Answer", delayedAcknowledgment)
         finish.complete(Unit)
-        withTimeout(10_000) { awaitingCommit.await() }
-        val loaded = stored(f.chatId)
-        withContext(Dispatchers.Main) {
-            f.run.attach(observe(f, loaded))
-            assertFalse(f.run.ended)
-            assertTrue(ReplyRunRegistry.active(f.chatId) === f.run)
+        val loaded = try {
+            withTimeout(10_000) { awaitingCommit.await() }
+            stored(f.chatId).also { history ->
+                withContext(Dispatchers.Main) {
+                    f.run.attach(observe(f, history))
+                    assertFalse(f.run.ended)
+                    assertTrue(ReplyRunRegistry.active(f.chatId) === f.run)
+                }
+            }
+        } finally {
             acknowledgeCommit.complete(Unit)
         }
         awaitEnded(f.run)
