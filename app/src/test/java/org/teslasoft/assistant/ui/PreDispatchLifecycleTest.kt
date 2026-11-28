@@ -103,10 +103,13 @@ class PreDispatchLifecycleTest {
 
     @Test
     fun dispatchBoundaryIsResetPerAttempt() {
-        val region = methodRegion(source(chatActivity), "private suspend fun startLifecycle(")
+        // The reply's lifecycle bookkeeping lives in ReplyRun.
+        val run = source("src/main/java/org/teslasoft/assistant/conversation/reply/ReplyRun.kt")
+        val region = run.substringAfter("internal suspend fun startLifecycle(")
+            .substringBefore("\n    internal ")
         assertTrue(
             "startLifecycle must reset the dispatch boundary for each attempt",
-            region.contains("providerRequestDispatched = false")
+            region.contains("dispatched = false")
         )
     }
 

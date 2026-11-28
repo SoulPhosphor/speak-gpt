@@ -188,6 +188,7 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.ResponseLifecycle
 import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
 import org.teslasoft.assistant.conversation.reply.GenerationRequestContext
+import org.teslasoft.assistant.conversation.reply.ReplyRun.ClaimedTerminal
 import org.teslasoft.assistant.conversation.reply.ReasoningObservationContext
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.RecentModelsPreferences
@@ -423,6 +424,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val requestState = org.teslasoft.assistant.conversation.reply.ChatRequestState()
     private val requestHooks by lazy {
         org.teslasoft.assistant.conversation.reply.ChatRequestHooks(this, requestState)
+    }
+    // The reply's usage, pricing and lifecycle bookkeeping (see ReplyRun).
+    private val replyRun by lazy {
+        org.teslasoft.assistant.conversation.reply.ReplyRun(
+            this, requestState, requestHooks, turnFence, replyRunHost, lifecycleScope
+        )
+    }
+    private val replyRunHost = object : org.teslasoft.assistant.conversation.reply.ReplyRunHost {
+        override val model: String get() = this@ChatActivity.model
+        override val storageUnavailable: Boolean get() = chatStorageUnavailable
+        override fun conversationSnapshot(): List<Map<String, Any>> = messages
+        override fun lastRow(): HashMap<String, Any>? = messages.lastOrNull()
+        override fun containsRow(row: Map<String, Any>?): Boolean = row != null && messages.any { it === row }
+        override fun saveInBackground() = saveSettingsInBackground()
+        override fun usageCarrier(): HashMap<String, Any>? = this@ChatActivity.usageCarrier()
+        override fun lifecycleTurnId(): String {
+            if (currentLifecycleTurnId.isBlank()) beginLifecycleTurn()
+            return currentLifecycleTurnId
+        }
     }
 
 
@@ -9622,8 +9642,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  cancellation while this is false ended before anything reached the
      *  provider, so it is recorded as request_not_sent and never written to the
      *  Provider Failure Log. */
-    @Volatile
-    private var providerRequestDispatched: Boolean = false
+    private var providerRequestDispatched: Boolean
+        get() = replyRun.dispatched
+        set(value) { replyRun.dispatched = value }
 
     /** True only while the primary or tool-continuation Chat Completions call
      * is being serialized/dispatched. This keeps non-stream diagnostics
@@ -9665,389 +9686,52 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         currentLifecycleTurnId = "T" + System.currentTimeMillis().toString() + "-" + lifecycleTurnCounter
     }
 
-    /** Begin recording one generation request when Response Lifecycle logging is
-     *  on. A still-pending recorder (e.g. the §8 first attempt that is about to
-     *  be retried) is closed first so its record is never dropped. */
-    private suspend fun startLifecycle(phase: String, requestedMaxOutput: Int?) {
-        // A reply retired by a message deletion never starts another request
-        // phase, even if a setup step swallowed its cancellation.
-        if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
-        providerRequestDispatched = false
-        org.teslasoft.assistant.preferences.ChatHistoryWriteOrder.shared.awaitSaved(chatId)
-        if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
-        currentLifecycle?.let {
-            if (!it.finalized) finalizeLifecycleTerminal(
-                ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
-                ResponseLifecycle.Termination.STREAM_CLOSED, "superseded by a new request"
-            )
-        }
-        // Reset for THIS request (after any superseded entry above is written
-        // with its own result), so the send hook's actual outcome is recorded
-        // fresh and a hook that never runs never reports a stale attachment.
-        lastRoutingAttachment = null
-        lastReasoningAttachment = null
-        lastReasoningInbound = null
-        // Reset the dispatch boundary for THIS attempt regardless of whether
-        // lifecycle logging is on, because the Provider Failure Log gate also
-        // depends on it.
-        val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
-        currentProviderUsageAttempt = ProviderUsageAttempt(
-            requestedModel = usedModel,
-            fallbackProvider = fallbackServingProvider(),
-            apiEndpoint = apiEndpointObject?.host.orEmpty()
-        )
-        val pricingEndpoint = apiEndpointObject
-        currentPricingCatalogEndpointFingerprint = promptCachingEndpointFingerprint(pricingEndpoint)
-        val pricingCompletedAtElapsedMs = AtomicLong(-1L)
-        currentPricingCatalogCompletedAtElapsedMs = pricingCompletedAtElapsedMs
-        currentPricingCatalog = lifecycleScope.async(Dispatchers.IO) {
-            TokenPricingCatalogClient.load(pricingEndpoint, usedModel).also {
-                pricingCompletedAtElapsedMs.set(android.os.SystemClock.elapsedRealtime())
-            }
-        }
-        if (preferences?.getResponseLifecycleLogging() != true) {
-            currentLifecycle = null
-            return
-        }
-        if (currentLifecycleTurnId.isBlank()) beginLifecycleTurn()
-        val endpoint = apiEndpointObject
-        val apiProvider = endpoint?.provider?.trim()?.ifBlank { null }
-            ?: endpoint?.label?.trim()?.ifBlank { null }
-            ?: endpoint?.host?.trim().orEmpty()
-        currentLifecycle = ResponseLifecycleRecorder(
-            turnId = currentLifecycleTurnId,
-            phase = phase,
-            apiProvider = apiProvider,
-            apiEndpoint = endpoint?.host ?: "",
-            model = model,
-            requestedMaxOutput = requestedMaxOutput,
-            startUptimeMs = android.os.SystemClock.uptimeMillis()
-        )
-    }
+    private suspend fun startLifecycle(phase: String, requestedMaxOutput: Int?) =
+        replyRun.startLifecycle(phase = phase, requestedMaxOutput = requestedMaxOutput)
 
-    private fun noteLifecycleChunk(
-        finishReason: String?, id: String?, contentLength: Int,
-        promptTokens: Int?, completionTokens: Int?, totalTokens: Int?
-    ) {
-        val boundContext = generationRequestContext.get()
-        val attempt = boundContext?.usageAttempt ?: currentProviderUsageAttempt
-        attempt?.noteTypedUsage(promptTokens, completionTokens, totalTokens)
-        attempt?.noteTypedChunk(finishReason, id, contentLength)
-        (boundContext?.lifecycle ?: currentLifecycle)?.takeUnless { it.finalized }?.noteChunk(
-            finishReason, id, contentLength, promptTokens, completionTokens, totalTokens
-        )
+    private fun noteLifecycleChunk(finishReason: String?, id: String?, contentLength: Int, promptTokens: Int?, completionTokens: Int?, totalTokens: Int?) =
+        replyRun.noteLifecycleChunk(finishReason = finishReason, id = id, contentLength = contentLength, promptTokens = promptTokens, completionTokens = completionTokens, totalTokens = totalTokens)
 
-        // This gate is always active, independent of the optional Response
-        // Lifecycle toggle. The thrown exception carries the exact request
-        // owner; its raw SSE observer may finish a few scheduling ticks later,
-        // and the catch path awaits that same object's evidence.
-        val terminal = finishReason?.trim()?.lowercase()
-        if (terminal in setOf("error", "content_filter", "safety", "prohibited_content")) {
-            throw org.teslasoft.assistant.preferences.ProviderStreamTerminalException(
-                attempt = attempt,
-                providerFinishReason = terminal ?: "error"
-            )
-        }
-    }
+    private suspend fun finalizeLifecycleSuccess(): ProviderDiagnosticSnapshot? =
+        replyRun.finalizeLifecycleSuccess()
 
-    /** Finalize a response that ended on its own. Streaming uses the finish
-     *  reason/terminal evidence matrix; a successful completed-response call
-     *  has provider-completion evidence from the client return itself. */
-    private suspend fun finalizeLifecycleSuccess(): ProviderDiagnosticSnapshot? {
-        val usageAttempt = currentProviderUsageAttempt
-        val providerDiagnostics = usageAttempt?.diagnosticSnapshot()
-        usageAttempt?.let {
-            pendingProviderUsageSnapshot = it.snapshot()
-            pendingCompletedPricingCatalog = currentPricingCatalog
-            pendingCompletedPricingCatalogEndpointFingerprint =
-                currentPricingCatalogEndpointFingerprint
-            pendingCompletedPricingCatalogCompletedAtElapsedMs =
-                currentPricingCatalogCompletedAtElapsedMs
-        }
-        currentProviderUsageAttempt = null
-        currentPricingCatalog = null
-        currentPricingCatalogEndpointFingerprint = null
-        currentPricingCatalogCompletedAtElapsedMs = null
-        val r = currentLifecycle ?: return providerDiagnostics
-        if (r.finalized) return providerDiagnostics
-        val n = if (r.nonStreamingResponse) {
-            ResponseLifecycle.classifyNonStreamingCompletion(r.lastFinishReason, r.receivedCharacters)
-        } else {
-            ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason, r.receivedCharacters)
-        }
-        writeLifecycle(r, n.outcome, n.finishReasonDisplay, n.streamClosed, n.termination, null)
-        return providerDiagnostics
-    }
-
-    /** Finalize a response cut short by an error, a user stop, or an app cancel —
-     *  the terminal values are decided by the caller from what it caught. */
     private suspend fun finalizeLifecycleTerminal(
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
         streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?,
-        /** The turn ends here: a completed request whose usage was not
-         *  recorded yet is recorded now instead of being dropped. */
         keepCompletedUsage: Boolean = false
-    ) {
-        // A message deletion that retired this reply finalized it already.
-        if (turnFence.isStale()) return
-        val carrier = usageCarrier()
-        val attached = completeClaimedTerminal(
-            claimTerminalState(keepCompletedUsage), carrier,
-            outcome, finishReasonDisplay, streamClosed, termination, errorText
-        )
-        // Retired by a message deletion while the record was being completed:
-        // this reply's own save is skipped, so save the usage it added.
-        if (attached && turnFence.isStale() && messages.any { it === carrier }) saveSettingsInBackground()
-    }
-
-    /** One reply's usage and lifecycle state, taken off the screen's fields. */
-    private class ClaimedTerminal(
-        val attempt: ProviderUsageAttempt?,
-        val pricing: Deferred<TokenPricingCatalog>?,
-        val pendingPricing: Deferred<TokenPricingCatalog>?,
-        val lifecycle: ResponseLifecycleRecorder?,
-        /** A completed request whose usage was not recorded yet (deletion only). */
-        val completed: ProviderUsageSnapshot? = null,
-        val completedFingerprint: String? = null,
-        val completedAtElapsedMs: AtomicLong? = null,
-        val completedRows: List<Map<String, Any>>? = null
+    ) = replyRun.finalizeLifecycleTerminal(
+        outcome, finishReasonDisplay, streamClosed, termination, errorText, keepCompletedUsage
     )
 
-    /**
-     * Takes the running reply's usage and lifecycle state before anything can
-     * wait, so a reply started while this one finishes keeps its own state.
-     */
-    private fun claimTerminalState(keepCompletedUsage: Boolean = false): ClaimedTerminal {
-        val completed = if (keepCompletedUsage) pendingProviderUsageSnapshot else null
-        val claimed = ClaimedTerminal(
-            currentProviderUsageAttempt, currentPricingCatalog,
-            pendingCompletedPricingCatalog, currentLifecycle,
-            completed = completed,
-            completedFingerprint = if (completed != null) pendingCompletedPricingCatalogEndpointFingerprint else null,
-            completedAtElapsedMs = if (completed != null) pendingCompletedPricingCatalogCompletedAtElapsedMs else null,
-            completedRows = if (completed != null && !completed.counts.hasAnyValue()) messages.map { HashMap(it) } else null
-        )
-        currentProviderUsageAttempt = null
-        currentPricingCatalog = null
-        currentPricingCatalogEndpointFingerprint = null
-        currentPricingCatalogCompletedAtElapsedMs = null
-        pendingProviderUsageSnapshot = null
-        pendingCompletedPricingCatalog = null
-        pendingCompletedPricingCatalogEndpointFingerprint = null
-        pendingCompletedPricingCatalogCompletedAtElapsedMs = null
-        currentLifecycle = null
-        return claimed
-    }
+
+    private fun claimTerminalState(keepCompletedUsage: Boolean = false): ClaimedTerminal =
+        replyRun.claimTerminalState(keepCompletedUsage = keepCompletedUsage)
 
     /** The row a reply's usage is recorded on, chosen before anything waits. */
     private fun usageCarrier(): HashMap<String, Any>? =
         messages.lastOrNull { it["isBot"] == true }
             ?: messages.lastOrNull { it["isBot"] != true }
 
-    /**
-     * Records the claimed reply's usage on [carrier] and writes its lifecycle
-     * entry. A carrier deleted meanwhile still has its usage added to the
-     * chat's usage log (attachUsageRecords writes the log first).
-     */
-    private suspend fun completeClaimedTerminal(
-        claimed: ClaimedTerminal,
-        carrier: HashMap<String, Any>?,
-        outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
-        streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
-    ): Boolean = org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.finish {
-        val records = run {
-            // A completed request the deletion caught before its usage was
-            // recorded keeps its own price wait (it owns pendingPricing then).
-            val completedRecord = claimed.completed?.let {
-                completeUsageRecordFrom(
-                    it, claimed.pendingPricing, claimed.completedFingerprint,
-                    claimed.completedAtElapsedMs, claimed.completedRows, updateCachingEvidence = false
-                )
-            }
-            listOfNotNull(completedRecord, completeTerminalUsageRecord(claimed.attempt, claimed.pricing))
-        }
-        claimed.pricing?.cancel()
-        claimed.pendingPricing?.cancel()
-        var attached = false
-        if (records.isNotEmpty()) {
-            carrier?.let {
-                attachUsageRecords(it, records, it["isBot"] == true)
-                mirrorUsageRecordsToCanonicalVariant(it)
-                attached = true
-                // The append can fail even when the row survives. Retain the
-                // receipt independently of both the cancelled caller and disk.
-                keepUsageOfDeletedRows(listOf(HashMap(it)))
-            }
-        }
-        val r = claimed.lifecycle
-        if (r != null && !r.finalized) {
-            writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
-        }
-        attached
-    }
+    private suspend fun completeClaimedTerminal(claimed: ClaimedTerminal, carrier: HashMap<String, Any>?, outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String, streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?): Boolean =
+        replyRun.completeClaimedTerminal(claimed = claimed, carrier = carrier, outcome = outcome, finishReasonDisplay = finishReasonDisplay, streamClosed = streamClosed, termination = termination, errorText = errorText)
 
-    /** A reply with versions is totalled from its version list, and its
-     * top-level fields mirror the canonical version. A record added to the
-     * top level must therefore also be written into that version, or it would
-     * be left out of the totals and lost when another version is shown. */
-    private fun mirrorUsageRecordsToCanonicalVariant(message: HashMap<String, Any>) {
-        val variants = ChatAdapter.parseVariants(message[ChatAdapter.KEY_VARIANTS]?.toString())
-        if (variants.isEmpty()) return
-        val canonical = (message[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull()
-            ?: variants.lastIndex).coerceIn(0, variants.lastIndex)
-        val records = message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString() ?: return
-        variants[canonical][ChatAdapter.KEY_TOKEN_USAGE_RECORDS] = records
-        message[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(variants)
-    }
+    private fun mirrorUsageRecordsToCanonicalVariant(message: HashMap<String, Any>) =
+        replyRun.mirrorUsageRecordsToCanonicalVariant(message = message)
 
-    /** A stopped or failed request counts only when the serving API actually
-     * returned usage or charged-cost evidence. Never estimate an interrupted
-     * request, but never discard a charge merely because no final reply is
-     * visible in chat. */
-    private suspend fun completeTerminalUsageRecord(
-        attempt: ProviderUsageAttempt?,
-        pricingDeferred: Deferred<TokenPricingCatalog>?
-    ): TurnUsageRecord? {
-        val snapshot = attempt?.snapshot() ?: return null
-        if (!snapshot.counts.hasAnyValue() && !snapshot.providerCost.hasAnyValue()) return null
-        val catalog = org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.awaitPricing(pricingDeferred, 500L)
-        val pricing = catalog
-            ?.takeIf { it.model.equals(snapshot.model, ignoreCase = true) }
-            ?.pricingFor(snapshot.provider)
-            ?: TokenPricingSnapshot()
-        return TokenUsageAccounting.createRecord(
-            model = snapshot.model,
-            provider = snapshot.provider,
-            apiEndpoint = snapshot.apiEndpoint,
-            counts = snapshot.counts.withDerivedTotal(),
-            source = org.teslasoft.assistant.usage.TokenCountSource.PROVIDER_REPORTED,
-            pricing = pricing,
-            providerCost = snapshot.providerCost
-        ).copy(requestId = snapshot.attemptId)
-    }
+    private suspend fun completeTerminalUsageRecord(attempt: ProviderUsageAttempt?, pricingDeferred: Deferred<TokenPricingCatalog>?): TurnUsageRecord? =
+        replyRun.completeTerminalUsageRecord(attempt = attempt, pricingDeferred = pricingDeferred)
 
-    /** Surface non-fatal provider warnings without contaminating model text. */
-    private fun applyProviderWarnings(snapshot: ProviderDiagnosticSnapshot?) {
-        val warnings = snapshot?.warningMessages.orEmpty()
-        if (warnings.isEmpty() || messages.isEmpty()) return
-        val index = messages.lastIndex
-        if (messages[index]["isBot"] != true) return
-        val exact = warnings.joinToString("\n")
-        messages[index][MessageCompletionState.KEY_PROVIDER_WARNING_TEXT] = exact
-        try {
-            val body = StringBuilder("Non-fatal provider warning\n")
-            appendProviderEvidence(body, snapshot)
-            org.teslasoft.assistant.preferences.Logger.log(
-                this, "crash", "GenWarning", "warning", body.toString()
-            )
-        } catch (_: Throwable) { /* diagnostics must not alter generation */ }
-    }
+    private fun applyProviderWarnings(snapshot: ProviderDiagnosticSnapshot?) =
+        replyRun.applyProviderWarnings(snapshot = snapshot)
 
-    /** Request intent only; never substituted for the response-derived server. */
-    private fun requestedRoutedProviderForDiagnostics(modelId: String): String? {
-        if (apiEndpointObject?.isOpenRouterRouting() != true) return null
-        val favorite = favoriteForActiveEndpoint(modelId)
-        return when (favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC) {
-            FavoriteModelObject.ROUTING_ONLY -> favorite?.selectedProvider?.trim()?.ifBlank { null }
-            FavoriteModelObject.ROUTING_PREFERRED -> favorite?.providerOrder
-                ?.filter { it.isNotBlank() }?.joinToString(", ")?.ifBlank { null }
-            // Automatic routing requests no particular provider. Reporting a
-            // placeholder here would read like a provider name and would hide
-            // the fact that the response-derived serving provider is the only
-            // provider fact that exists for this attempt.
-            else -> null
-        }
-    }
+    private fun requestedRoutedProviderForDiagnostics(modelId: String): String? =
+        replyRun.requestedRoutedProviderForDiagnostics(modelId = modelId)
 
-    /** Rich technical facts shared by Error Log errors and warnings. */
-    private fun appendProviderEvidence(
-        out: StringBuilder,
-        snapshot: ProviderDiagnosticSnapshot?
-    ) {
-        val notReported = "Not Reported"
-        out.append("Attempt ID: ").append(snapshot?.attemptId ?: notReported).append('\n')
-        out.append("Configured API Provider: ")
-            .append(apiEndpointObject?.label?.trim()?.ifBlank { null }
-                ?: apiEndpointObject?.host?.trim()?.ifBlank { null } ?: notReported).append('\n')
-        // Only present when a provider was actually requested; automatic routing
-        // asks for none, and an absent line is truthful where a placeholder is not.
-        requestedRoutedProviderForDiagnostics(model)?.let {
-            out.append("Requested/Routed Model Provider: ").append(it).append('\n')
-        }
-        out.append("Actual Serving Model Provider: ")
-            .append(snapshot?.actualServingProvider ?: notReported).append('\n')
-        out.append("Outer HTTP Status: ").append(snapshot?.outerHttpStatus ?: notReported).append('\n')
-        out.append("Embedded Provider Status: ")
-            .append(snapshot?.embeddedHttpStatus ?: notReported).append('\n')
-        out.append("Provider Code: ").append(snapshot?.providerCode ?: notReported).append('\n')
-        out.append("Provider Type: ").append(snapshot?.providerType ?: notReported).append('\n')
-        out.append("Provider Error Type: ")
-            .append(snapshot?.providerErrorType ?: notReported).append('\n')
-        out.append("Content Filter Side: ")
-            .append(snapshot?.contentFilterSide?.wire ?: notReported).append('\n')
-        out.append("Finish Reason: ").append(snapshot?.finishReason ?: notReported).append('\n')
-        out.append("Generation ID: ").append(snapshot?.generationId ?: notReported).append('\n')
-        out.append("Partial Content Characters: ")
-            .append(snapshot?.partialContentCharacters ?: 0).append('\n')
-        out.append("Reasoning Characters Received: ")
-            .append(snapshot?.reasoningCharacters ?: 0).append('\n')
-        out.append("Prompt Tokens: ").append(snapshot?.promptTokens ?: notReported).append('\n')
-        out.append("Completion Tokens: ").append(snapshot?.completionTokens ?: notReported).append('\n')
-        out.append("Total Tokens: ").append(snapshot?.totalTokens ?: notReported).append('\n')
-        out.append("Malformed Provider Payloads: ")
-            .append(snapshot?.malformedPayloadCount ?: 0).append('\n')
-        // Field NAMES only. Paired with the provider's own rejection message,
-        // this is what identifies which parameter a request was refused over.
-        out.append("Outbound Request Fields: ")
-            .append(
-                snapshot?.outboundFieldNames?.takeIf { it.isNotEmpty() }?.joinToString(", ")
-                    ?: notReported
-            ).append('\n')
-        val messages = snapshot?.errorMessages.orEmpty()
-        out.append("Provider Message: ")
-            .append(messages.takeIf { it.isNotEmpty() }?.joinToString("\n") ?: notReported)
-        snapshot?.events?.mapNotNull { it.rawPayload }?.distinct()?.takeIf { it.isNotEmpty() }?.let {
-            out.append("\nRaw Provider Payload(s):\n").append(it.joinToString("\n---\n"))
-        }
-    }
+    private fun appendProviderEvidence(out: StringBuilder, snapshot: ProviderDiagnosticSnapshot?) =
+        replyRun.appendProviderEvidence(out = out, snapshot = snapshot)
 
-    private suspend fun writeLifecycle(
-        r: ResponseLifecycleRecorder, outcome: ResponseLifecycle.Outcome,
-        finishReasonDisplay: String, streamClosed: Boolean,
-        termination: ResponseLifecycle.Termination, errorText: String?
-    ) {
-        r.markFinalized()
-        val durationMs = android.os.SystemClock.uptimeMillis() - r.startUptimeMs
-        // The response observer usually records the provider from the first SSE
-        // chunk. This bounded wait only closes a scheduling race on extremely
-        // short replies, and applies solely while this opt-in log is active.
-        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            r.awaitProviderObservation(250L)
-            // Let this turn's reasoning observation finish draining so the entry
-            // can report inbound reasoning evidence, not just outbound intent.
-            // Bounded so a stalled observer never hangs finalization; skipped
-            // when no reasoning observation ran.
-            if (currentTurnReasoningObservationActive) {
-                kotlinx.coroutines.withTimeoutOrNull(250L) {
-                    currentTurnReasoningObserved?.await()
-                }
-            }
-        }
-        val body = ResponseLifecycle.format(
-            turnId = r.turnId, phase = r.phase, apiProvider = r.apiProvider,
-            apiEndpoint = r.apiEndpoint, actualModelProvider = r.actualModelProvider,
-            model = r.model,
-            outcome = outcome, finishReasonDisplay = finishReasonDisplay,
-            streamClosed = streamClosed, termination = termination,
-            requestedMaxOutput = r.requestedMaxOutput, promptTokens = r.promptTokens,
-            completionTokens = r.completionTokens, totalTokens = r.totalTokens,
-            receivedCharacters = r.receivedCharacters, durationMs = durationMs,
-            generationId = r.generationId, errorText = errorText,
-            attemptId = r.attemptId
-        ) + providerRoutingLogLine(r.model) + reasoningLogLine()
-        if (currentLifecycle === r) currentLifecycle = null
-        org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
-    }
+    private suspend fun writeLifecycle(r: ResponseLifecycleRecorder, outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String, streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?) =
+        replyRun.writeLifecycle(r = r, outcome = outcome, finishReasonDisplay = finishReasonDisplay, streamClosed = streamClosed, termination = termination, errorText = errorText)
 
     private fun startRecognition(freshTurn: Boolean = true) {
         // Re-checked on every arm (the tap entry point checks too, but the
@@ -11054,24 +10738,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /** Best non-response fallback for serving-provider attribution. An
-     * OpenRouter Only route cannot fall back, so a successful response came
-     * from that selected provider. Automatic/Preferred routing stays honestly
-     * Not Reported unless response metadata names the actual route. */
-    private fun fallbackServingProvider(): String {
-        val endpoint = apiEndpointObject
-        if (endpoint?.isOpenRouterRouting() == true) {
-            val favorite = favoriteForActiveEndpoint(model.ifBlank { preferences?.getModel().orEmpty() })
-            if (favorite?.routingType == FavoriteModelObject.ROUTING_ONLY) {
-                return favorite.selectedProvider.trim()
-                    .ifBlank { TokenUsageAccounting.PROVIDER_NOT_REPORTED }
-            }
-            return TokenUsageAccounting.PROVIDER_NOT_REPORTED
-        }
-        return endpoint?.provider?.trim()?.ifBlank { null }
-            ?: endpoint?.label?.trim()?.ifBlank { null }
-            ?: TokenUsageAccounting.PROVIDER_NOT_REPORTED
-    }
+    private fun fallbackServingProvider(): String =
+        replyRun.fallbackServingProvider()
 
     /** Locks a user message's label: the name that applies at send time,
      *  plus which identity supplied it so its style follows. */
@@ -11258,8 +10926,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  turns; read once the split stream drains to stamp the reply's Thinking
      *  content and to echo reasoning state on a tool-call continuation. Null
      *  between turns. */
-    @Volatile
-    private var currentTurnReasoning: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator? = null
+    private var currentTurnReasoning: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator?
+        get() = replyRun.turnReasoning
+        set(value) { replyRun.turnReasoning = value }
 
     /** True once the response observer has been asked to split this turn's
      *  stream for reasoning (display and/or continuation state), so the tool
@@ -11271,22 +10940,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Completes when the observer finishes draining this turn's split stream,
      *  so a tool-call continuation can await reasoning_details capture before
      *  building the follow-up. Null between turns. */
-    @Volatile
-    private var currentTurnReasoningObserved: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    private var currentTurnReasoningObserved: kotlinx.coroutines.CompletableDeferred<Unit>?
+        get() = replyRun.turnReasoningObserved
+        set(value) { replyRun.turnReasoningObserved = value }
 
     private var currentProviderUsageAttempt: ProviderUsageAttempt?
         get() = requestState.currentUsageAttempt
         set(value) { requestState.currentUsageAttempt = value }
-    private var currentPricingCatalog: Deferred<TokenPricingCatalog>? = null
-    private var currentPricingCatalogEndpointFingerprint: String? = null
-    private var currentPricingCatalogCompletedAtElapsedMs: AtomicLong? = null
+    private var currentPricingCatalog: Deferred<TokenPricingCatalog>?
+        get() = replyRun.pricingCatalog
+        set(value) { replyRun.pricingCatalog = value }
+    private var currentPricingCatalogEndpointFingerprint: String?
+        get() = replyRun.pricingCatalogEndpointFingerprint
+        set(value) { replyRun.pricingCatalogEndpointFingerprint = value }
+    private var currentPricingCatalogCompletedAtElapsedMs: AtomicLong?
+        get() = replyRun.pricingCatalogCompletedAtElapsedMs
+        set(value) { replyRun.pricingCatalogCompletedAtElapsedMs = value }
     private var lastPromptCachingCatalog: PromptCachingCatalogEvidence?
         get() = requestState.lastPromptCachingCatalog
         set(value) { requestState.lastPromptCachingCatalog = value }
-    private var pendingProviderUsageSnapshot: ProviderUsageSnapshot? = null
-    private var pendingCompletedPricingCatalog: Deferred<TokenPricingCatalog>? = null
-    private var pendingCompletedPricingCatalogEndpointFingerprint: String? = null
-    private var pendingCompletedPricingCatalogCompletedAtElapsedMs: AtomicLong? = null
+    private var pendingProviderUsageSnapshot: ProviderUsageSnapshot?
+        get() = replyRun.pendingUsageSnapshot
+        set(value) { replyRun.pendingUsageSnapshot = value }
+    private var pendingCompletedPricingCatalog: Deferred<TokenPricingCatalog>?
+        get() = replyRun.pendingPricingCatalog
+        set(value) { replyRun.pendingPricingCatalog = value }
+    private var pendingCompletedPricingCatalogEndpointFingerprint: String?
+        get() = replyRun.pendingPricingCatalogEndpointFingerprint
+        set(value) { replyRun.pendingPricingCatalogEndpointFingerprint = value }
+    private var pendingCompletedPricingCatalogCompletedAtElapsedMs: AtomicLong?
+        get() = replyRun.pendingPricingCatalogCompletedAtElapsedMs
+        set(value) { replyRun.pendingPricingCatalogCompletedAtElapsedMs = value }
 
     /** While a Retry is in flight, the versions the regenerated reply will be
      *  folded into: the prior turn's existing version list, or its single
@@ -11448,7 +11132,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             // Once taken, the completed request's usage is recorded even if a
             // message deletion cancels this reply while its price loads.
-            recordTakenUsageSafely(last) { listOfNotNull(completePendingUsageRecord()) }
+            replyRun.recordTakenUsageSafely(last) { listOfNotNull(replyRun.completePendingUsageRecord()) }
             // A regeneration folds this finished reply into the turn's version
             // list. Runs after the metadata above so the new version captures
             // the final model, tokens, and state.
@@ -11469,73 +11153,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val carrier = messages.dropLast(1).lastOrNull { it["isBot"] != true }
         if (carrier == null) {
             // As before: with no carrier the pending record is taken and not kept.
-            completePendingUsageRecord()
+            replyRun.completePendingUsageRecord()
             return
         }
-        recordTakenUsageSafely(carrier, mirrorCompactMetadata = false) {
-            listOfNotNull(completePendingUsageRecord())
+        replyRun.recordTakenUsageSafely(carrier, mirrorCompactMetadata = false) {
+            listOfNotNull(replyRun.completePendingUsageRecord())
         }
     }
 
-    /**
-     * Completes and attaches usage that [take] removes from the screen's
-     * pending state, without letting a cancellation drop it half-way. A
-     * carrier deleted meanwhile still has the usage kept in the usage log;
-     * a reply retired by a message deletion then stops here.
-     */
-    private suspend fun recordTakenUsageSafely(
-        carrier: HashMap<String, Any>,
-        mirrorCompactMetadata: Boolean = true,
-        take: suspend () -> List<TurnUsageRecord>
-    ) {
-        org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.finish {
-            val records = take()
-            attachUsageRecords(carrier, records, mirrorCompactMetadata)
-            if (records.isNotEmpty()) {
-                mirrorUsageRecordsToCanonicalVariant(carrier)
-                if (turnFence.isStale() || messages.none { it === carrier })
-                    keepUsageOfDeletedRows(listOf(HashMap(carrier)))
-                // Deletion already saved its earlier snapshot, and the stale
-                // completion will not reach its normal save below.
-                if (turnFence.isStale() && messages.any { it === carrier }) saveSettingsInBackground()
-            }
-        }
-        if (turnFence.isStale()) throw CancellationException("Retired by message deletion")
-    }
-
-    /** Attach only completed requests. Usage-only tool calls use the initiating
-     * user message as a durable carrier; visible completions use their assistant
-     * message and may mirror compact display metadata. */
     private suspend fun attachUsageRecords(
         message: HashMap<String, Any>,
         newRecords: List<TurnUsageRecord>,
         mirrorCompactMetadata: Boolean = true
-    ) {
-        if (newRecords.isEmpty()) return
-        // The chat's usage log is the lasting account: deleting or
-        // regenerating this message later never removes what was spent.
-        appendUsageLog(
-            UsageCategory.CHAT,
-            org.teslasoft.assistant.preferences.MessageIdentity.idOf(message),
-            newRecords
-        )
-        val records = TokenUsageAccounting.decodeRecords(
-            message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString()
-        ) + newRecords
-        message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS] =
-            TokenUsageAccounting.encodeRecords(records)
-        if (!mirrorCompactMetadata) return
-        // Mirror the final completed request's response-reported attribution
-        // into the compact metadata. Unknown remains absent.
-        records.last().model.takeIf { it != TokenUsageAccounting.MODEL_NOT_REPORTED }
-            ?.let { message[ChatAdapter.KEY_MESSAGE_MODEL] = it }
-        records.last().provider.takeIf { it != TokenUsageAccounting.PROVIDER_NOT_REPORTED }
-            ?.let { message[ChatAdapter.KEY_MESSAGE_PROVIDER] = it }
-        // Provider request accounting stays in tokenUsageRecords. The message
-        // UI estimates only this bubble's visible text and must not mirror a
-        // whole-request or provider-output count into responseTokens.
-        message.remove(ChatAdapter.KEY_MESSAGE_TOKENS)
-    }
+    ) =
+        replyRun.attachUsageRecords(message = message, newRecords = newRecords, mirrorCompactMetadata = mirrorCompactMetadata)
 
     /** Runs one attachment-processing request and attributes it to its owner. */
     private suspend fun <T> withAttachmentUsage(
@@ -11618,43 +11249,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /** Adds requests to this chat's usage log. Seeding first also repairs any
-     * older message-backed request that a previous append failed to persist. */
     private suspend fun appendUsageLog(
         category: UsageCategory,
         messageId: String?,
         records: List<TurnUsageRecord>,
         function: UsageFunction? = null
-    ) {
-        val prefs = preferences ?: return
-        if (records.isEmpty() || chatStorageUnavailable) return
-        val snapshot = messages.map { HashMap(it) }
-        withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
-            UsageLogStore.seed(prefs, snapshot)
-            UsageLogStore.append(
-                prefs,
-                records.map { UsageLog.entry(category, messageId?.ifBlank { null }, it, function = function) }
-            )
-        }
-    }
+    ) =
+        replyRun.appendUsageLog(category = category, messageId = messageId, records = records, function = function)
 
-    private suspend fun completePendingUsageRecord(): TurnUsageRecord? {
-        val snapshot = pendingProviderUsageSnapshot ?: return null
-        pendingProviderUsageSnapshot = null
-        val pricingDeferred = pendingCompletedPricingCatalog
-        pendingCompletedPricingCatalog = null
-        val pricingEndpointFingerprint = pendingCompletedPricingCatalogEndpointFingerprint
-        pendingCompletedPricingCatalogEndpointFingerprint = null
-        val pricingCompletedAtElapsedMs = pendingCompletedPricingCatalogCompletedAtElapsedMs
-        pendingCompletedPricingCatalogCompletedAtElapsedMs = null
-        val messageSnapshot = if (snapshot.counts.hasAnyValue()) null else messages.map { HashMap(it) }
-        return completeUsageRecordFrom(
-            snapshot, pricingDeferred, pricingEndpointFingerprint, pricingCompletedAtElapsedMs, messageSnapshot
-        )
-    }
-
-    /** A completed request's usage record from its saved snapshot. Rows are
-     *  needed only to estimate counts the provider did not report. */
     private suspend fun completeUsageRecordFrom(
         snapshot: ProviderUsageSnapshot,
         pricingDeferred: Deferred<TokenPricingCatalog>?,
@@ -11662,68 +11264,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pricingCompletedAtElapsedMs: AtomicLong?,
         messageSnapshot: List<Map<String, Any>>?,
         updateCachingEvidence: Boolean = true
-    ): TurnUsageRecord {
-        val pricingEndpoint = org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.pricingEndpoint(
-            apiEndpointObject?.takeIf {
-                pricingEndpointFingerprint == null || promptCachingEndpointFingerprint(it) == pricingEndpointFingerprint
-            }, snapshot.apiEndpoint
-        )
-        val estimate = if (snapshot.counts.hasAnyValue() || messageSnapshot == null) {
-            null
-        } else {
-            withContext(Dispatchers.Default) { estimateLastAssistantUsageCl100k(messageSnapshot) }
-        }
-        val (counts, source) = TokenUsageAccounting.chooseCounts(snapshot.counts) {
-            estimate ?: TokenCounts(null, null, null)
-        }
-        var catalog = org.teslasoft.assistant.ui.chat.ReplyUsageCompletion.awaitPricing(pricingDeferred, 2000L)
-        if (catalog == null) pricingDeferred?.cancel()
-        val promptCachingCatalog = catalog
-        if (catalog != null && !catalog.model.equals(snapshot.model, ignoreCase = true)) {
-            catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) {
-                TokenPricingCatalogClient.load(pricingEndpoint, snapshot.model)
-            }
-        }
-        val completedAtElapsedMs = pricingCompletedAtElapsedMs?.get()?.takeIf { it >= 0L }
-        if (updateCachingEvidence && !turnFence.isStale() && promptCachingCatalog != null && pricingEndpointFingerprint != null &&
-            completedAtElapsedMs != null
-        ) {
-            lastPromptCachingCatalog = PromptCachingCatalogEvidence(
-                pricingEndpointFingerprint,
-                promptCachingCatalog,
-                completedAtElapsedMs
-            )
-        }
-        val pricing = catalog?.pricingFor(snapshot.provider)
-            ?: TokenPricingSnapshot()
-        return TokenUsageAccounting.createRecord(
-            model = snapshot.model,
-            provider = snapshot.provider,
-            apiEndpoint = snapshot.apiEndpoint,
-            counts = counts,
-            source = source,
-            pricing = pricing,
-            providerCost = snapshot.providerCost
-        ).copy(requestId = snapshot.attemptId)
-    }
+    ): TurnUsageRecord = replyRun.completeUsageRecordFrom(
+        snapshot, pricingDeferred, pricingEndpointFingerprint, pricingCompletedAtElapsedMs,
+        messageSnapshot, updateCachingEvidence
+    )
 
-    private suspend fun estimateLastAssistantUsageCl100k(
-        messageSnapshot: List<Map<String, Any>>
-    ): TokenCounts {
-        val assistantIndex = messageSnapshot.indexOfLast { it["isBot"] == true }
-        if (assistantIndex < 0) return TokenCounts(null, null, null)
-        val tokenizer = Tokenizer.of(Encoding.CL100K_BASE)
-        var input = 0
-        messageSnapshot.forEachIndexed { index, message ->
-            if (index >= assistantIndex) return@forEachIndexed
-            val content = message["message"]?.toString().orEmpty()
-            if (!content.trim().startsWith("~file:")) input += tokenizer.encode(content).size
-        }
-        val outputText = messageSnapshot[assistantIndex]["message"]?.toString().orEmpty()
-        val output = if (outputText.trim().startsWith("~file:")) 0
-            else tokenizer.encode(outputText).size
-        return TokenCounts(input, output, input + output)
-    }
+    private suspend fun estimateLastAssistantUsageCl100k(messageSnapshot: List<Map<String, Any>>): TokenCounts =
+        replyRun.estimateLastAssistantUsageCl100k(messageSnapshot = messageSnapshot)
 
     private fun recordRecentChatModel(modelId: String) {
         val endpoint = apiEndpointObject ?: return
@@ -15087,25 +14634,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         restartSummarizerAfterDeletion()
     }
 
-    /**
-     * The usage of rows that are no longer in the chat can only live in the
-     * chat's usage log, so it is written there and retried until the write is
-     * committed. The existing usage-log repair adds or enriches each request
-     * by its request ID, so a retry never counts anything twice.
-     */
-    private fun keepUsageOfDeletedRows(rows: List<Map<String, Any>>) {
-        val prefs = preferences ?: return
-        if (rows.isEmpty()) return
-        CoroutineScope(Dispatchers.IO + kotlinx.coroutines.NonCancellable).launch {
-            var delayMs = 250L
-            while (true) {
-                val kept = try { UsageLogStore.seedChecked(prefs, rows) } catch (_: Exception) { false }
-                if (kept) break
-                kotlinx.coroutines.delay(delayMs)
-                delayMs = (delayMs * 2).coerceAtMost(30_000L)
-            }
-        }
-    }
+    private fun keepUsageOfDeletedRows(rows: List<Map<String, Any>>) =
+        replyRun.keepUsageOfDeletedRows(rows = rows)
 
     /** Resumes summary updates once the cancelled one has stopped. */
     private fun restartSummarizerAfterDeletion() {

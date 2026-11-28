@@ -27,6 +27,16 @@ class MessageDeletionWiringContractTest {
     }
 
     private val activity by lazy { source("src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt") }
+    /** A reply's usage and lifecycle bookkeeping lives in ReplyRun. */
+    private val run by lazy { source("src/main/java/org/teslasoft/assistant/conversation/reply/ReplyRun.kt") }
+
+    private fun runFunction(name: String): String {
+        val start = listOf("internal fun $name(", "internal suspend fun $name(")
+            .map { run.indexOf(it) }.filter { it >= 0 }.minOrNull() ?: -1
+        assertTrue("$name not found", start >= 0)
+        val next = Regex("\n    internal (suspend )?(fun|class) ").find(run, start + 1)?.range?.first
+        return run.substring(start, next ?: run.length)
+    }
 
     private fun function(name: String): String {
         val start = listOf("private fun $name(", "private suspend fun $name(")
@@ -143,31 +153,31 @@ class MessageDeletionWiringContractTest {
     }
 
     @Test fun usageIsClaimedBeforeAnyWaitAndAttachedToTheRowChosenThen() {
-        val finalize = activity.substringAfter("private suspend fun finalizeLifecycleTerminal(")
-            .substringBefore("private class ClaimedTerminal(")
-        assertTrue(finalize.contains("if (turnFence.isStale()) return"))
-        assertTrue(finalize.indexOf("usageCarrier()") < finalize.indexOf("completeClaimedTerminal("))
-        assertTrue(activity.contains("if (currentLifecycle === r) currentLifecycle = null"))
+        val finalize = run.substringAfter("internal suspend fun finalizeLifecycleTerminal(")
+            .substringBefore("internal class ClaimedTerminal(")
+        assertTrue(finalize.contains("if (fence.isStale()) return"))
+        assertTrue(finalize.indexOf("host.usageCarrier()") < finalize.indexOf("completeClaimedTerminal("))
+        assertTrue(run.contains("if (state.currentLifecycle === r) state.currentLifecycle = null"))
     }
 
     @Test fun aCompletedRequestsUnrecordedUsageIsKeptWhenTheTurnEnds() {
-        val claim = activity.substringAfter("private fun claimTerminalState(").substringBefore("currentProviderUsageAttempt = null")
+        val claim = run.substringAfter("internal fun claimTerminalState(").substringBefore("state.currentUsageAttempt = null")
         assertTrue(claim.contains("completed = completed"))
-        val complete = activity.substringAfter("private suspend fun completeClaimedTerminal(").substringBefore("val r = claimed.lifecycle")
+        val complete = run.substringAfter("internal suspend fun completeClaimedTerminal(").substringBefore("val r = claimed.lifecycle")
         assertTrue(complete.contains("completeUsageRecordFrom("))
         // Deletion and both terminal handlers keep it; mid-turn hand-offs do not.
         assertTrue(function("retireRunningWorkForDeletion").contains("claimTerminalState(keepCompletedUsage = true)"))
         assertTrue(activity.split("keepCompletedUsage = true\n").size - 1 >= 2)
-        val superseded = activity.substringAfter("private suspend fun startLifecycle(").substringBefore("currentPricingCatalog")
+        val superseded = run.substringAfter("internal suspend fun startLifecycle(").substringBefore("pricingCatalog")
         assertFalse(superseded.contains("keepCompletedUsage"))
     }
 
     @Test fun usageOfDeletedRowsIsRetriedUntilTheUsageLogCommits() {
-        val keep = function("keepUsageOfDeletedRows")
+        val keep = runFunction("keepUsageOfDeletedRows")
         assertTrue(keep.contains("UsageLogStore.seedChecked(prefs, rows)"))
         assertTrue(keep.contains("if (kept) break"))
         assertTrue(activity.contains("override fun deletedGroupSettled(row: HashMap<String, Any>) {\n            keepUsageOfDeletedRows(listOf(row))"))
-        val complete = activity.substringAfter("private suspend fun completeClaimedTerminal(").substringBefore("val r = claimed.lifecycle")
+        val complete = run.substringAfter("internal suspend fun completeClaimedTerminal(").substringBefore("val r = claimed.lifecycle")
         assertTrue(complete.contains("keepUsageOfDeletedRows("))
         // Both deletion paths keep the removed rows' recorded usage the same way.
         assertTrue(function("deleteMessageRange").contains("keepUsageOfDeletedRows("))
@@ -188,15 +198,15 @@ class MessageDeletionWiringContractTest {
 
     @Test fun usageTakenByTheCompletionPathIsRecordedEvenIfCancelled() {
         // Every taker of the pending completed usage goes through the safe recorder.
-        val takers = activity.split("completePendingUsageRecord()").size - 1
+        val takers = (activity + run).split("completePendingUsageRecord()").size - 1
         assertEquals(4, takers) // the definition, two safe callers, and the no-carrier drop
-        val safe = function("recordTakenUsageSafely")
+        val safe = runFunction("recordTakenUsageSafely")
         assertTrue(safe.contains("ReplyUsageCompletion.finish"))
-        assertTrue(function("completeClaimedTerminal").contains("ReplyUsageCompletion.finish"))
+        assertTrue(runFunction("completeClaimedTerminal").contains("ReplyUsageCompletion.finish"))
         assertTrue(safe.indexOf("val records = take()") < safe.indexOf("attachUsageRecords(carrier, records"))
         assertTrue(safe.contains("keepUsageOfDeletedRows("))
-        assertTrue(safe.contains("if (turnFence.isStale()) throw CancellationException("))
-        assertEquals(2, activity.split("recordTakenUsageSafely(").size - 2)
+        assertTrue(safe.contains("if (fence.isStale()) throw CancellationException("))
+        assertEquals(2, activity.split("replyRun.recordTakenUsageSafely(").size - 1)
     }
 
     @Test fun everyChatScreenSaveIsOrdered() {
