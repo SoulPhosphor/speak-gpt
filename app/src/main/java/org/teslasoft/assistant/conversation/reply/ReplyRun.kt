@@ -1225,7 +1225,7 @@ internal class ReplyRun(
         // lock. A late finalizer cannot recreate approval settings or start
         // a new paid image job after it has lost ownership.
         synchronized(org.teslasoft.assistant.preferences.ChatPreferences.CHAT_LIST_LOCK) {
-            if (retired || fence.isStale() || !ownsRow() ||
+            if (retired || userStopped || fence.isStale() || !ownsRow() ||
                 org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate.blocksCurrentProcess(app)) return
             val global = org.teslasoft.assistant.preferences.Preferences.getPreferences(app, "")
             if (global.getAskBeforeAiImages()) {

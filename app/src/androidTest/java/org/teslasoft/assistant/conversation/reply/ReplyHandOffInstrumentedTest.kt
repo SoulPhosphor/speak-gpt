@@ -377,6 +377,23 @@ class ReplyHandOffInstrumentedTest {
         assertEquals(null, org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.activeJob(f.chatId))
     }
 
+    @Test fun stoppingDuringToolAccountingKeepsItsUsageWithoutStartingAnImageOrApproval() = runBlocking {
+        val f = fixture()
+        val price = usage(f)
+        val finish = CompletableDeferred<Unit>()
+        readThenClose(f, flow {
+            emit(""); finish.await()
+            f.run.toolCalls.accept(0, "fixture-call", "create_image", "{\"prompt\":\"a lighthouse\"}")
+        }, "")
+        finish.complete(Unit)
+        withTimeout(5000) { price.waiting.await() }
+        withContext(Dispatchers.Main) { f.run.stopByUser(); price.release() }
+        awaitEnded(f.run)
+        assertEquals(13, receipt(stored(f.chatId).single()).single().totalTokens)
+        assertEquals("", f.run.state.chatPreferences!!.getPendingImageApproval())
+        assertEquals(null, org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry.activeJob(f.chatId))
+    }
+
     @Test fun aRetiredHostCannotApplyAQueuedSnapshotToTheNewerConversation() = runBlocking {
         val f = fixture()
         val host = DetachedReplyHost(context, { f.chatId }, "model-x", f.rows, f.rows.last(), "T-test", label)
